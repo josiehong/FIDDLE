@@ -6,7 +6,7 @@
 
 The source code for the training and evaluation of FIDDLE, as well as for the inference of FIDDLE using results from SIRIUS and BUDDY, is provided (see detailed commands in `./running_scripts/`). A PyPI package and a website-based service for FIDDLE will be available soon. 
 
-Preprint: https://doi.org/10.1101/2024.11.25.625316
+Paper: https://www.nature.com/articles/s41467-025-66060-9
 
 Command-line tool: https://pypi.org/project/msfiddle/
 
