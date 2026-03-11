@@ -89,12 +89,14 @@ python run_fiddle.py --test_data ./demo/input_msms.mgf \
 ## Citation
 
 ```
-@article{hong2024fiddle,
+@article{hong2025fiddle,
   title={FIDDLE: a deep learning method for chemical formulas prediction from tandem mass spectra},
   author={Hong, Yuhui and Li, Sujun and Ye, Yuzhen and Tang, Haixu},
-  journal={bioRxiv},
-  pages={2024--11},
-  year={2024},
-  publisher={Cold Spring Harbor Laboratory}
+  journal={Nature Communications},
+  volume={16},
+  number={1},
+  pages={11102},
+  year={2025},
+  publisher={Nature Publishing Group UK London}
 }
 ```
