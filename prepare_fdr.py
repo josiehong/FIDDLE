@@ -183,17 +183,27 @@ if __name__ == "__main__":
 		# 4. Post-processing
 		formula_redined = {'Refined Formula ({})'.format(str(k)): [] for k in range(config['post_processing']['top_k'])}
 		# Please note that here we use the experimental precursor m/z, rather than the theoretic precursor m/z. 
-		for pred_f, m in tqdm(zip(formula_pred, mass_true), total=len(mass_true), desc='Post'): 
+		for pred_f, m in tqdm(zip(formula_pred, mass_true), total=len(mass_true), desc='Post'):
 
-			# Use experimental precursor m/z and precursor type to calculate molmass
-			refined_results = formula_refinement([pred_f], m.item(), 
-												config['post_processing']['mass_tolerance'], 
-												config['post_processing']['ppm_mode'], 
-												config['post_processing']['top_k'], 
-												config['post_processing']['maxium_miss_atom_num'], 
-												config['post_processing']['time_out'], 
-												config['post_processing']['refine_atom_type'],
-												config['post_processing']['refine_atom_num'],
+			# Use true monoisotopic mass (not experimental precursor m/z) to calculate molmass
+			# Extend refine_atom_type with any atoms present in the predicted formula
+			# so the search space matches what run_fiddle.py uses at inference time.
+			refine_atom_type = list(config['post_processing']['refine_atom_type'])
+			refine_atom_num  = list(config['post_processing']['refine_atom_num'])
+			for atom, cnt in formula_to_dict(pred_f).items():
+				if atom == 'H' or atom in refine_atom_type:
+					continue
+				refine_atom_type.append(atom)
+				refine_atom_num.append(max(1, int(cnt)))
+
+			refined_results = formula_refinement([pred_f], m.item(),
+												config['post_processing']['mass_tolerance'],
+												config['post_processing']['ppm_mode'],
+												config['post_processing']['top_k'],
+												config['post_processing']['maxium_miss_atom_num'],
+												config['post_processing']['time_out'],
+												refine_atom_type,
+												refine_atom_num,
 												)
 
 			for i, (refined_f, refined_m) in enumerate(zip(refined_results['formula'], refined_results['mass'])): 

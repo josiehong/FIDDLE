@@ -48,9 +48,9 @@ mona_orbitrap:
   min_atom_num: 10
   ppm_tolerance: 5
 
-gnps_orbitrap: 
+gnps_orbitrap:
   instrument_type: ['hcd']
-  instrument: ['orbitrap']
+  instrument: ['orbitrap', 'ftms']
   atom_type: ['C', 'O', 'N', 'H', 'P', 'S', 'F', 'Cl', 'B', 'Br', 'I', 'Na', 'K']
   precursor_type: ['[M+H]+', '[M-H]-', '[M+H-H2O]+', '[M+Na]+', '[M+2H]2+', '[2M+H]+', '[2M-H]-', '[M-H2O+H]+', '[M-H2O-H]-']
   min_mz: 50
@@ -94,10 +94,10 @@ encoding:
     '[M+H-CH2O2]+': '+1'
     '[M+H-CH4O2]+': '+1'
 
-    '[M-H-CO2]-': '-1' 
-    '[M-CHO2]-': '-1' 
+    '[M-H-CO2]-': '-1'
+    '[M-CHO2]-': '-1'
     '[M-H-H2O]-': '-1'
-    '[M-H2O-H]+': '-1'
+    '[M-H2O-H]-': '-1'
 
 model: 
   resolution: 0.2

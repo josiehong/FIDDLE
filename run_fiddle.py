@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 
 from dataset import MGFDataset
 from model_tcn import MS2FNet_tcn, FDRNet
-from utils import formula_refinement, mass_calculator, vector_to_formula, formula_to_vector
+from utils import formula_refinement, mass_calculator, vector_to_formula, formula_to_vector, formula_to_dict
 
 
 
@@ -269,15 +269,25 @@ if __name__ == "__main__":
 			f0_list.extend(sirius_f)
 
 		f0_list = list(set(f0_list)) # deduplicates
+		# Extend refine_atom_type with any atoms present in the predicted formulas
+		# so rare atoms (e.g. F, S) are removable during search, not frozen.
+		refine_atom_type = list(config['post_processing']['refine_atom_type'])
+		refine_atom_num  = list(config['post_processing']['refine_atom_num'])
+		for f0 in f0_list:
+			for atom, cnt in formula_to_dict(f0).items():
+				if atom == 'H' or atom in refine_atom_type:
+					continue
+				refine_atom_type.append(atom)
+				refine_atom_num.append(max(1, int(cnt)))
 		start_time = time.time()
-		refined_results = formula_refinement(f0_list, m.item(), 
-											config['post_processing']['mass_tolerance'], 
-											config['post_processing']['ppm_mode'], 
-											config['post_processing']['top_k'], 
-											config['post_processing']['maxium_miss_atom_num'], 
-											config['post_processing']['time_out'], 
-											config['post_processing']['refine_atom_type'],
-											config['post_processing']['refine_atom_num'],
+		refined_results = formula_refinement(f0_list, m.item(),
+											config['post_processing']['mass_tolerance'],
+											config['post_processing']['ppm_mode'],
+											config['post_processing']['top_k'],
+											config['post_processing']['maxium_miss_atom_num'],
+											config['post_processing']['time_out'],
+											refine_atom_type,
+											refine_atom_num,
 											)
 
 		# Rerank the results by predicted FDR
