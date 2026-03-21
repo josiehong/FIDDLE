@@ -267,82 +267,78 @@ class MS2FNet_tcn(nn.Module):
         return encoded_x, f, mass, atomnum, hcnum
 
 
-class FDRNet(MS2FNet_tcn):
-    """MS2FNet_tcn extended with a false discovery rate (FDR) scoring head.
+class FormulaEncoder(nn.Module):
+    """Small MLP that maps a formula atom-count vector into the same L2-normalised
+    embedding space as the MS2FNet_tcn spectrum encoder.
 
-    Inherits the TCN encoder and formula decoders from MS2FNet_tcn and adds a
-    separate MLP that takes the spectrum embedding concatenated with a candidate
-    formula vector to produce a confidence score used for re-ranking.
+    Used by the Siamese FDR model: FormulaEncoder(formula_vector) is combined with
+    the spectrum embedding via element-wise product, then scored by SiameseFDRHead.
+
+    Architecture: input_dim → 64 → 256 → embedding_dim, each layer followed by
+    LayerNorm + ReLU except the final projection which is just linear + L2-norm.
 
     Args:
-            config: Same as MS2FNet_tcn, plus 'fdr_decoder_layers' for hidden widths
-                    of the FDR head.
+        config: model config dict; uses 'output_dim' (formula vector length) and
+                'embedding_dim' (target embedding size, matching the TCN encoder).
     """
 
     def __init__(self, config):
-        super(FDRNet, self).__init__(config)
-        self.decoder_fdr = self._build_fdr_decoder(config)
-        self.init_weights()
+        super(FormulaEncoder, self).__init__()
+        input_dim = config["output_dim"]  # 13 atom types
+        emb_dim = config["embedding_dim"]  # 512
 
-    def _build_fdr_decoder(self, config):
-        """Build the FDR scoring MLP.
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, 64),
+            nn.LayerNorm(64),
+            nn.ReLU(),
+            nn.Linear(64, 256),
+            nn.LayerNorm(256),
+            nn.ReLU(),
+            nn.Linear(256, emb_dim),
+        )
 
-        Input dimension is embedding_dim + output_dim (embedding concatenated with
-        the candidate formula vector). The final layer has no activation; sigmoid
-        is applied externally during re-ranking.
-
-        Args:
-                config: Model config dict with 'embedding_dim', 'output_dim', and
-                        'fdr_decoder_layers'.
-
+    def forward(self, f):
+        """Args:
+            f: Formula tensor (B, input_dim).
         Returns:
-                nn.Sequential: FDR decoder MLP with scalar output.
+            L2-normalised embedding (B, embedding_dim).
         """
-        layers = []
-        input_dim = config["embedding_dim"] + config["output_dim"]
-        for layer_dim in config["fdr_decoder_layers"]:
-            layers.append(weight_norm(nn.Linear(input_dim, layer_dim)))
-            layers.append(nn.LeakyReLU(negative_slope=0.2))
-            input_dim = layer_dim
-        # No activation at the final layer — sigmoid is applied externally in rerank_by_fdr
-        layers.append(nn.Linear(input_dim, 1))
-        return nn.Sequential(*layers)
+        z = self.net(f)
+        return F.normalize(z, dim=1)
 
-    def forward(self, x, env, f):
-        """Forward pass for FDR scoring.
 
-        Args:
-                x:   Spectrum tensor (B, L) or (B, L, C).
-                env: Metadata tensor (B, 3) — [precursor_mz, nce, adduct_index].
-                f:   Candidate formula vector (B, output_dim).
+class SiameseFDRHead(nn.Module):
+    """MLP scoring head for the Siamese FDR model.
 
+    Takes the element-wise product z_spec ⊙ z_form (both L2-normalised,
+    embedding_dim-dimensional) and maps it to a scalar logit.  Apply sigmoid
+    externally to obtain a probability.
+
+    Architecture: embedding_dim → 256 → 64 → 1, each hidden layer followed
+    by ReLU + Dropout(0.2).
+
+    Args:
+        config: model config dict; uses 'embedding_dim' (input dimension, e.g. 512).
+    """
+
+    def __init__(self, config):
+        super(SiameseFDRHead, self).__init__()
+        emb_dim = config["embedding_dim"]  # 512
+
+        self.net = nn.Sequential(
+            nn.Linear(emb_dim, 256),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(256, 64),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(64, 1),
+        )
+
+    def forward(self, interaction):
+        """Args:
+            interaction: Element-wise product z_spec ⊙ z_form (B, embedding_dim).
         Returns:
-                fdr: FDR score tensor (B,). Apply sigmoid externally to get probability.
+            Scalar logit tensor (B,). Apply sigmoid externally.
         """
-        # Adjust input tensors
-        x = x.unsqueeze(2) if len(x.size()) == 2 else x
-        x = torch.permute(x, (0, 2, 1))
-
-        # Spectra embedding
-        xs = []
-        for layer in self.encoder_ms:
-            x = layer(x)
-            if isinstance(layer, TemporalBlock):
-                xp = self.global_pool(x).squeeze(-1)
-                xs.append(xp)
-
-        # Metadata embedding
-        m = self.embedding_m(env[:, 0].unsqueeze(1))
-        ce = self.embedding_ce(env[:, 1].unsqueeze(1))
-        add = self.embedding_add(env[:, 2].int())
-        env = torch.cat([m, ce, add], dim=1)
-
-        # Feature fusion and projection
-        x = torch.cat(xs + [env], dim=1)
-        x = self.fc(x)
-
-        # Decoder for fdr prediction
-        x = torch.cat((x, f), dim=1)
-        fdr = self.decoder_fdr(x).squeeze(dim=1)
-
-        return fdr
+        return self.net(interaction).squeeze(1)

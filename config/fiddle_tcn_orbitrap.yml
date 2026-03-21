@@ -144,7 +144,7 @@ train_fdr:
   batch_size: 128
   num_workers: 8
   lr: 0.0001
-  early_stop_step: 10
+  early_stop_step: 5
   
 # ------------------------
 # postprocessing settings

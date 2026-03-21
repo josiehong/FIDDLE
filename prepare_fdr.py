@@ -101,28 +101,182 @@ def init_random_seed(seed):
     return
 
 
+def split_indices_by_compound(data, train_ratio, seed):
+    """Split dataset indices by compound (SMILES) so no compound appears in both splits.
+
+    Args:
+        data: list of data dicts, each with a 'smiles' key.
+        train_ratio: fraction of compounds to assign to the training split.
+        seed: random seed for reproducibility.
+
+    Returns:
+        train_indices, test_indices: lists of integer indices into data.
+    """
+    rng = np.random.default_rng(seed)
+
+    # Map each unique SMILES to its spectrum indices
+    smiles_to_indices = {}
+    for i, item in enumerate(data):
+        smiles = item["smiles"]
+        smiles_to_indices.setdefault(smiles, []).append(i)
+
+    unique_smiles = np.array(list(smiles_to_indices.keys()))
+    rng.shuffle(unique_smiles)
+
+    n_train = int(len(unique_smiles) * train_ratio)
+    train_smiles = set(unique_smiles[:n_train])
+
+    train_indices, test_indices = [], []
+    for smiles, indices in smiles_to_indices.items():
+        if smiles in train_smiles:
+            train_indices.extend(indices)
+        else:
+            test_indices.extend(indices)
+
+    print(
+        f"Compound split: {len(train_smiles)} train compounds ({len(train_indices)} spectra) / "
+        f"{len(unique_smiles) - len(train_smiles)} test compounds ({len(test_indices)} spectra)"
+    )
+    return train_indices, test_indices
+
+
+def prepare_fdr_split(data_path, indices, model, device, config, out_path, pkl_data):
+    """Run model inference and post-processing on a subset of data, then save FDR pkl.
+
+    Args:
+        data_path: path to the source pkl (used only to build the full dataset).
+        indices: integer indices of spectra to include in this split.
+        model: loaded MS2FNet_tcn model.
+        device: torch device.
+        config: parsed YAML config dict.
+        out_path: output path for the FDR pkl.
+        pkl_data: dict mapping title -> [spec, env] for fast lookup.
+    """
+    dataset = MS2FDataset(data_path)
+
+    sampler = SubsetRandomSampler(indices)
+    loader = DataLoader(
+        dataset,
+        batch_size=config["train"]["batch_size"],
+        sampler=sampler,
+        num_workers=config["train"]["num_workers"],
+        drop_last=False,
+    )
+
+    # Prediction
+    spec_ids, y_true, y_pred, mae, mass_true, mass_pred, mass_mae = eval_step(
+        model, loader, device
+    )
+
+    formula_pred = [vec2formula(y) for y in y_pred]
+    formula_true = [vec2formula(y) for y in y_true]
+
+    # Post-processing
+    formula_redined = {
+        "Refined Formula ({})".format(str(k)): []
+        for k in range(config["post_processing"]["top_k"])
+    }
+    for pred_f, m in tqdm(
+        zip(formula_pred, mass_true), total=len(mass_true), desc="Post"
+    ):
+        refine_atom_type = list(config["post_processing"]["refine_atom_type"])
+        refine_atom_num = list(config["post_processing"]["refine_atom_num"])
+        for atom, cnt in formula_to_dict(pred_f).items():
+            if atom == "H" or atom in refine_atom_type:
+                continue
+            refine_atom_type.append(atom)
+            refine_atom_num.append(max(1, int(cnt)))
+
+        refined_results = formula_refinement(
+            [pred_f],
+            m.item(),
+            config["post_processing"]["mass_tolerance"],
+            config["post_processing"]["ppm_mode"],
+            config["post_processing"]["top_k"],
+            config["post_processing"]["maxium_miss_atom_num"],
+            config["post_processing"]["time_out"],
+            refine_atom_type,
+            refine_atom_num,
+        )
+
+        for i, (refined_f, refined_m) in enumerate(
+            zip(refined_results["formula"], refined_results["mass"])
+        ):
+            formula_redined["Refined Formula ({})".format(str(i))].append(refined_f)
+
+    # Label FDR data
+    info_dict = {"ID": spec_ids, "Formula": formula_true}
+    res_df = pd.DataFrame({**info_dict, **formula_redined})
+
+    data = {"title": [], "pred_formula": [], "spec": [], "env": [], "label": []}
+    for k in range(config["post_processing"]["top_k"]):
+        res_df["Label ({})".format(str(k))] = res_df.apply(
+            lambda x: formula_to_dict(x["Formula"])
+            == formula_to_dict(x["Refined Formula ({})".format(str(k))]),
+            axis=1,
+        )
+
+        correct_df = res_df[res_df["Label ({})".format(str(k))] == True]
+        correct_df = correct_df.dropna(subset=["Refined Formula ({})".format(str(k))])
+        titles = correct_df["ID"].tolist()
+        data["title"].extend(titles)
+        data["pred_formula"].extend(
+            correct_df["Refined Formula ({})".format(str(k))].tolist()
+        )
+        data["label"].extend([1.0] * len(titles))
+        for title in titles:
+            spec, env = pkl_data[title]
+            data["spec"].append(spec)
+            data["env"].append(env)
+        print(k, "correct", len(titles))
+
+        incorrect_df = res_df[res_df["Label ({})".format(str(k))] == False]
+        incorrect_df = incorrect_df.dropna(
+            subset=["Refined Formula ({})".format(str(k))]
+        )
+        titles = incorrect_df["ID"].tolist()
+        data["title"].extend(titles)
+        data["pred_formula"].extend(
+            incorrect_df["Refined Formula ({})".format(str(k))].tolist()
+        )
+        data["label"].extend([0.0] * len(titles))
+        for title in titles:
+            spec, env = pkl_data[title]
+            data["spec"].append(spec)
+            data["env"].append(env)
+        print(k, "incorrect", len(titles))
+
+    print("\nSave the FDR dataset...")
+    with open(out_path, "wb") as f:
+        data = convert_to_list_of_dicts(data)
+        pickle.dump(data, f)
+        print("Save {} FDR data to {}".format(len(data), out_path))
+    print("Done!")
+
+
 if __name__ == "__main__":
     # Training settings
     parser = argparse.ArgumentParser(
         description="Preprocess the data for FDR prediction"
     )
     parser.add_argument(
-        "--train_data", type=str, required=True, help="Path to data (.pkl)"
-    )
-    parser.add_argument(
-        "--test_data", type=str, required=True, help="Path to data (.pkl)"
+        "--test_data", type=str, required=True, help="Path to test data (.pkl)"
     )
     parser.add_argument(
         "--config_path", type=str, required=True, help="Path to configuration (.yaml)"
     )
-
     parser.add_argument(
         "--resume_path", type=str, required=True, help="Path to pretrained model"
     )
     parser.add_argument(
         "--fdr_dir", type=str, required=True, help="Path to save FDR dataset"
     )
-
+    parser.add_argument(
+        "--train_ratio",
+        type=float,
+        default=0.8,
+        help="Fraction of compounds used for FDR training split (default: 0.8)",
+    )
     parser.add_argument(
         "--seed", type=int, default=42, help="Seed for random functions"
     )
@@ -153,157 +307,39 @@ if __name__ == "__main__":
     # 1. Model
     model = MS2FNet_tcn(config["model"]).to(device_1st)
     num_params = sum(p.numel() for p in model.parameters())
-    # print(f'{str(model)} #Params: {num_params}')
     print(f"# MS2FNet_tcn Params: {num_params}")
 
-    if len(args.device) > 1:  # Wrap the model with nn.DataParallel
+    if len(args.device) > 1:
         model = nn.DataParallel(model, device_ids=args.device)
-    # need to do something when using one GPU
 
     print("Loading the best model...")
     model.load_state_dict(
         torch.load(args.resume_path, map_location=device_1st)["model_state_dict"]
     )
 
-    for data_path, out_path in zip(
-        [args.test_data, args.train_data],
-        [
-            args.test_data.replace("_test.pkl", "_fdr_test.pkl"),
-            args.train_data.replace("_train.pkl", "_fdr_train.pkl"),
-        ],
-    ):
+    # 2. Load test data and split by compound (SMILES)
+    print(f"Loading test data from {args.test_data}")
+    with open(args.test_data, "rb") as f:
+        raw_data = pickle.load(f)
+    print(f"Loaded {len(raw_data)} data items")
 
-        # 2. Data
-        dataset = MS2FDataset(data_path)
+    train_indices, test_indices = split_indices_by_compound(
+        raw_data, args.train_ratio, args.seed
+    )
 
-        # If the dataset is larger than 10000, randomly sampling
-        if len(dataset) > 10000:
-            print("Sample 10000 samples for FDR prediction")
-            indices = np.arange(len(dataset))
-            np.random.shuffle(indices)
-            sample_indices = indices[:10000]
+    # Build title -> [spec, env] lookup for FDR labelling
+    pkl_data = {d["title"]: [d["spec"], d["env"]] for d in raw_data}
 
-            sampler = SubsetRandomSampler(
-                sample_indices
-            )  # Create a SubsetRandomSampler
-            loader = DataLoader(
-                dataset,
-                batch_size=config["train"]["batch_size"],
-                sampler=sampler,  # Use the sampler instead of shuffle
-                num_workers=config["train"]["num_workers"],
-                drop_last=True,
-            )
-        else:
-            loader = DataLoader(
-                dataset,
-                batch_size=config["train"]["batch_size"],
-                shuffle=True,
-                num_workers=config["train"]["num_workers"],
-                drop_last=True,
-            )
+    # 3. Output paths
+    fdr_train_path = args.test_data.replace("_test.pkl", "_fdr_train.pkl")
+    fdr_test_path = args.test_data.replace("_test.pkl", "_fdr_test.pkl")
 
-        # 3. Prediction
-        spec_ids, y_true, y_pred, mae, mass_true, mass_pred, mass_mae = eval_step(
-            model, loader, device_1st
+    # 4. Prepare FDR splits
+    for split_name, indices, out_path in [
+        ("train", train_indices, fdr_train_path),
+        ("test", test_indices, fdr_test_path),
+    ]:
+        print(f"\n===== FDR {split_name} split ({len(indices)} spectra) =====")
+        prepare_fdr_split(
+            args.test_data, indices, model, device_1st, config, out_path, pkl_data
         )
-
-        # calculate the formula string, which will be used in postprocessing
-        formula_pred = [vec2formula(y) for y in y_pred]
-        formula_true = [vec2formula(y) for y in y_true]
-
-        # 4. Post-processing
-        formula_redined = {
-            "Refined Formula ({})".format(str(k)): []
-            for k in range(config["post_processing"]["top_k"])
-        }
-        # Please note that here we use the experimental precursor m/z, rather than the theoretic precursor m/z.
-        for pred_f, m in tqdm(
-            zip(formula_pred, mass_true), total=len(mass_true), desc="Post"
-        ):
-
-            # Use true monoisotopic mass (not experimental precursor m/z) to calculate molmass
-            # Extend refine_atom_type with any atoms present in the predicted formula
-            # so the search space matches what run_fiddle.py uses at inference time.
-            refine_atom_type = list(config["post_processing"]["refine_atom_type"])
-            refine_atom_num = list(config["post_processing"]["refine_atom_num"])
-            for atom, cnt in formula_to_dict(pred_f).items():
-                if atom == "H" or atom in refine_atom_type:
-                    continue
-                refine_atom_type.append(atom)
-                refine_atom_num.append(max(1, int(cnt)))
-
-            refined_results = formula_refinement(
-                [pred_f],
-                m.item(),
-                config["post_processing"]["mass_tolerance"],
-                config["post_processing"]["ppm_mode"],
-                config["post_processing"]["top_k"],
-                config["post_processing"]["maxium_miss_atom_num"],
-                config["post_processing"]["time_out"],
-                refine_atom_type,
-                refine_atom_num,
-            )
-
-            for i, (refined_f, refined_m) in enumerate(
-                zip(refined_results["formula"], refined_results["mass"])
-            ):
-                formula_redined["Refined Formula ({})".format(str(i))].append(refined_f)
-
-        # 5. Check the correctness of refined results and label them for FDR prediction
-        info_dict = {"ID": spec_ids, "Formula": formula_true}
-        res_df = pd.DataFrame({**info_dict, **formula_redined})
-
-        # map title with spec & env
-        with open(data_path, "rb") as file:
-            data = pickle.load(file)
-            pkl_data = {}
-            for d in data:
-                pkl_data[d["title"]] = [d["spec"], d["env"]]
-
-        data = {"title": [], "pred_formula": [], "spec": [], "env": [], "label": []}
-        for k in range(config["post_processing"]["top_k"]):
-            res_df["Label ({})".format(str(k))] = res_df.apply(
-                lambda x: formula_to_dict(x["Formula"])
-                == formula_to_dict(x["Refined Formula ({})".format(str(k))]),
-                axis=1,
-            )
-
-            correct_df = res_df[res_df["Label ({})".format(str(k))] == True]
-            correct_df = correct_df.dropna(
-                subset=["Refined Formula ({})".format(str(k))]
-            )
-            titles = correct_df["ID"].tolist()
-            data["title"].extend(titles)
-            data["pred_formula"].extend(
-                correct_df["Refined Formula ({})".format(str(k))].tolist()
-            )
-            data["label"].extend([1.0] * len(correct_df))
-            for title in titles:
-                spec, env = pkl_data[title]
-                data["spec"].append(spec)
-                data["env"].append(env)
-            print(k, "correct", len(titles))
-
-            incorrect_df = res_df[res_df["Label ({})".format(str(k))] == False]
-            incorrect_df = incorrect_df.dropna(
-                subset=["Refined Formula ({})".format(str(k))]
-            )
-            titles = incorrect_df["ID"].tolist()
-            data["title"].extend(titles)
-            data["pred_formula"].extend(
-                incorrect_df["Refined Formula ({})".format(str(k))].tolist()
-            )
-            data["label"].extend([0.0] * len(incorrect_df))
-            for title in titles:
-                spec, env = pkl_data[title]
-                data["spec"].append(spec)
-                data["env"].append(env)
-            print(k, "incorrect", len(titles))
-
-        print("\nSave the FDR dataset...")
-        # out_path = os.path.join(args.fdr_dir, out_path)
-        with open(out_path, "wb") as f:
-            data = convert_to_list_of_dicts(data)
-            pickle.dump(data, f)
-            print("Save {} FDR data to {}".format(len(data), out_path))
-        print("Done!")

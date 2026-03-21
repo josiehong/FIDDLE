@@ -10,10 +10,11 @@ from collections import OrderedDict
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from dataset import MGFDataset
-from model_tcn import MS2FNet_tcn, FDRNet
+from model_tcn import MS2FNet_tcn, FormulaEncoder, SiameseFDRHead
 from utils import (
     formula_refinement,
     mass_calculator,
@@ -71,46 +72,54 @@ def test_step(model, loader, device):
     )
 
 
-def rerank_by_fdr(fdr_model, spec, env, refined_results, device, K):
-    fdr_model.eval()
+def rerank_by_siamese(
+    spec_encoder, formula_encoder, fdr_head, spec, env, refined_results, device, K
+):
+    """Rerank candidates using the Siamese interaction head.
 
-    refine_f = [f for f in refined_results["formula"] if f != None]
-    refine_m = [m for m in refined_results["mass"] if m != None]
-    if len(refine_f) == 0:
-        refined_results["fdr"] = [0.0] * K
+    Score = sigmoid(SiameseFDRHead(z_spec ⊙ FormulaEncoder(formula_vec))).
+    Candidates are ranked by siamese score directly.
+    """
+    formula_encoder.eval()
+    fdr_head.eval()
+    spec_encoder.eval()
+
+    refine_f = [f for f in refined_results["formula"] if f is not None]
+    refine_m = [m for m in refined_results["mass"] if m is not None]
+    if not refine_f:
+        refined_results["siamese"] = [0.0] * K
         return refined_results
 
-    # convert refine_f (formula strings) to f (formula vectors)
-    f = [formula_to_vector(f_str) for f_str in refine_f]
-    f = torch.from_numpy(np.array(f))
-
-    spec = spec.to(device, dtype=torch.float32).repeat(f.size(0), 1)
-    env = env.to(device, dtype=torch.float32).repeat(f.size(0), 1)
-    f = f.to(device, dtype=torch.float32)
+    f_vecs = torch.from_numpy(np.array([formula_to_vector(s) for s in refine_f]))
+    spec_t = spec.to(device, dtype=torch.float32)
+    env_t = env.to(device, dtype=torch.float32).clone()
+    env_t[:, 0] = 0.0  # zero out precursor_mz to match training
 
     with torch.no_grad():
-        fdr = fdr_model(spec, env, f)
-        fdr = torch.sigmoid(fdr).detach().cpu().numpy()
+        z_spec, _, _, _, _ = spec_encoder(spec_t, env_t)
+        z_spec = F.normalize(z_spec, dim=1)  # (1, D)
+        z_spec_rep = z_spec.expand(len(refine_f), -1)  # (K, D)
 
-    # Create a list of tuples with (fdr_value, refine_f_value, mass_value) pairs
-    combined_list = list(zip(fdr, refine_f, refine_m))
-    # Sort the combined list based on the fdr_value
-    sorted_combined_list = sorted(combined_list, key=lambda x: x[0], reverse=True)
-    # Unpack the sorted lists
-    sorted_fdr, sorted_refine_f, sorted_mass = zip(*sorted_combined_list)
-    sorted_fdr, sorted_refine_f, sorted_mass = (
-        list(sorted_fdr),
-        list(sorted_refine_f),
-        list(sorted_mass),
+        f_t = f_vecs.to(device, dtype=torch.float32)
+        z_form = formula_encoder(f_t)  # (K, D)
+
+        interaction = z_spec_rep * z_form  # (K, D)
+        logits = fdr_head(interaction)  # (K,)
+        siamese_scores = torch.sigmoid(logits).cpu().numpy()
+
+    ranked = sorted(
+        zip(siamese_scores, refine_f, refine_m),
+        key=lambda x: x[0],
+        reverse=True,
     )
+    sorted_siamese, sorted_f, sorted_m = map(list, zip(*ranked))
 
-    # Pad sorted_refine_f and sorted_fdr with None if necessary
-    if len(sorted_refine_f) < K:
-        sorted_refine_f += [None] * (K - len(sorted_refine_f))
-        sorted_fdr += [0.0] * (K - len(sorted_fdr))
-        sorted_mass += [None] * (K - len(sorted_mass))
+    while len(sorted_f) < K:
+        sorted_f.append(None)
+        sorted_siamese.append(0.0)
+        sorted_m.append(None)
 
-    return {"formula": sorted_refine_f, "mass": sorted_mass, "fdr": sorted_fdr}
+    return {"formula": sorted_f, "mass": sorted_m, "siamese": sorted_siamese}
 
 
 def init_random_seed(seed):
@@ -121,7 +130,6 @@ def init_random_seed(seed):
 
 
 if __name__ == "__main__":
-    # Training settings
     parser = argparse.ArgumentParser(description="Mass Spectra to formula (prediction)")
     parser.add_argument(
         "--test_data", type=str, required=True, help="Path to data (.mgf)"
@@ -129,12 +137,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_path", type=str, required=True, help="Path to configuration (.yaml)"
     )
-
     parser.add_argument(
-        "--resume_path", type=str, required=True, help="Path to pretrained model"
+        "--resume_path", type=str, required=True, help="Path to pretrained TCN model"
     )
     parser.add_argument(
-        "--fdr_resume_path", type=str, required=True, help="Path to pretrained model"
+        "--fdr_resume_path",
+        type=str,
+        required=True,
+        help="Path to pretrained Siamese FDR model",
     )
     parser.add_argument(
         "--buddy_path", type=str, default="", help="Path to saved BUDDY's results"
@@ -145,7 +155,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--result_path", type=str, required=True, help="Path to save predicted results"
     )
-
     parser.add_argument(
         "--seed", type=int, default=42, help="Seed for random functions"
     )
@@ -179,60 +188,42 @@ if __name__ == "__main__":
         valid_set, batch_size=1, shuffle=False, num_workers=0, drop_last=True
     )
 
-    # 2. Model
-    # 2.1 MS2F
+    # 2. Spectrum encoder (MS2FNet_tcn)
     model = MS2FNet_tcn(config["model"]).to(device_1st)
     num_params = sum(p.numel() for p in model.parameters())
-    # print(f'{str(model)} # Params: {num_params}')
     print(f"# MS2FNet_tcn Params: {num_params}")
-    if len(args.device) > 1:  # Wrap the model with nn.DataParallel
+    if len(args.device) > 1:
         model = nn.DataParallel(model, device_ids=args.device)
 
     print("Loading the best formula prediction model...")
-    # model.load_state_dict(torch.load(args.resume_path, map_location=device)['model_state_dict'])
     state_dict = torch.load(args.resume_path, map_location=device_1st)[
         "model_state_dict"
     ]
     is_multi_gpu = any(key.startswith("module.") for key in state_dict.keys())
-    if is_multi_gpu and len(args.device) == 1:  # Convert the model to single GPU
+    if is_multi_gpu and len(args.device) == 1:
         new_state_dict = OrderedDict()
         for key, value in state_dict.items():
-            if key.startswith("module."):
-                new_key = key[7:]  # Remove the 'module.' prefix
-                new_state_dict[new_key] = value
-            else:
-                new_state_dict[key] = value
+            new_state_dict[key[7:] if key.startswith("module.") else key] = value
         model.load_state_dict(new_state_dict)
     else:
         model.load_state_dict(state_dict)
 
-    # 2.2 FDR
-    fdr_model = FDRNet(config["model"]).to(device_1st)
-    num_params = sum(p.numel() for p in fdr_model.parameters())
-    # print(f'{str(model)} #Params: {num_params}')
-    print(f"# FDRNet Params: {num_params}")
-    if len(args.device) > 1:  # Wrap the model with nn.DataParallel
-        fdr_model = nn.DataParallel(fdr_model, device_ids=args.device)
+    # 3. Siamese FDR model (FormulaEncoder + SiameseFDRHead)
+    formula_encoder = FormulaEncoder(config["model"]).to(device_1st)
+    fdr_head = SiameseFDRHead(config["model"]).to(device_1st)
+    n_params = sum(p.numel() for p in formula_encoder.parameters()) + sum(
+        p.numel() for p in fdr_head.parameters()
+    )
+    print(f"# Siamese FDR Params: {n_params}")
 
-    print("Loading the best FDR prediction model...")
-    # fdr_model.load_state_dict(torch.load(args.fdr_resume_path, map_location=device)['model_state_dict'])
-    state_dict = torch.load(args.fdr_resume_path, map_location=device_1st)[
-        "model_state_dict"
-    ]
-    is_multi_gpu = any(key.startswith("module.") for key in state_dict.keys())
-    if is_multi_gpu and len(args.device) == 1:  # Convert the fdr_model to single GPU
-        new_state_dict = OrderedDict()
-        for key, value in state_dict.items():
-            if key.startswith("module."):
-                new_key = key[7:]  # Remove the 'module.' prefix
-                new_state_dict[new_key] = value
-            else:
-                new_state_dict[key] = value
-        fdr_model.load_state_dict(new_state_dict)
-    else:
-        fdr_model.load_state_dict(state_dict)
+    print("Loading the best Siamese FDR model...")
+    ckpt = torch.load(args.fdr_resume_path, map_location=device_1st)
+    formula_encoder.load_state_dict(ckpt["formula_encoder_state_dict"])
+    fdr_head.load_state_dict(ckpt["fdr_head_state_dict"])
+    formula_encoder.eval()
+    fdr_head.eval()
 
-    # 3. Formula Prediction
+    # 4. Formula Prediction
     (
         spec_ids,
         y_pred,
@@ -246,9 +237,7 @@ if __name__ == "__main__":
     prediction_time = time.time() - start_time
     prediction_time /= len(valid_set)
 
-    formula_pred = [
-        vector_to_formula(y) for y in y_pred
-    ]  # calculate the formula strings
+    formula_pred = [vector_to_formula(y) for y in y_pred]
     y_pred = [";".join(y) for y in y_pred.numpy().astype("str")]
 
     spectra = []
@@ -258,7 +247,7 @@ if __name__ == "__main__":
         spectra.append(spec)
         environments.append(env)
 
-    # 4. Post-processing
+    # 5. Post-processing
     if args.buddy_path != "":
         buddy_df = pd.read_csv(args.buddy_path)
     if args.sirius_path != "":
@@ -272,12 +261,13 @@ if __name__ == "__main__":
         "Refined Mass ({})".format(str(k)): []
         for k in range(config["post_processing"]["top_k"])
     }
-    fdr_refined = {
-        "FDR ({})".format(str(k)): [] for k in range(config["post_processing"]["top_k"])
+    siamese_refined = {
+        "Siamese ({})".format(str(k)): []
+        for k in range(config["post_processing"]["top_k"])
     }
     running_time = []
     exp_mass = []
-    # Please note that here we use the experimental precursor m/z, rather than the theoretic precursor m/z.
+
     for idx, pred_f, exp_pre_mz, exp_pre_type, spec, env in tqdm(
         zip(
             spec_ids,
@@ -290,9 +280,7 @@ if __name__ == "__main__":
         total=len(exp_precursor_mz),
         desc="Post",
     ):
-        m = mass_calculator(
-            exp_pre_type, exp_pre_mz
-        )  # Use experimental precursor m/z and precursor type to calculate molmass
+        m = mass_calculator(exp_pre_type, exp_pre_mz)
         exp_mass.append(m.item())
 
         f0_list = [pred_f]
@@ -364,9 +352,7 @@ if __name__ == "__main__":
             ]
             f0_list.extend(sirius_f)
 
-        f0_list = list(set(f0_list))  # deduplicates
-        # Extend refine_atom_type with any atoms present in the predicted formulas
-        # so rare atoms (e.g. F, S) are removable during search, not frozen.
+        f0_list = list(set(f0_list))
         refine_atom_type = list(config["post_processing"]["refine_atom_type"])
         refine_atom_num = list(config["post_processing"]["refine_atom_num"])
         for f0 in f0_list:
@@ -375,6 +361,7 @@ if __name__ == "__main__":
                     continue
                 refine_atom_type.append(atom)
                 refine_atom_num.append(max(1, int(cnt)))
+
         start_time = time.time()
         refined_results = formula_refinement(
             f0_list,
@@ -388,9 +375,10 @@ if __name__ == "__main__":
             refine_atom_num,
         )
 
-        # Rerank the results by predicted FDR
-        refined_results = rerank_by_fdr(
-            fdr_model,
+        refined_results = rerank_by_siamese(
+            model,
+            formula_encoder,
+            fdr_head,
             spec,
             env,
             refined_results,
@@ -398,20 +386,20 @@ if __name__ == "__main__":
             config["post_processing"]["top_k"],
         )
 
-        for i, (refined_f, refined_m, refined_fdr) in enumerate(
+        for i, (refined_f, refined_m, refined_s) in enumerate(
             zip(
                 refined_results["formula"],
                 refined_results["mass"],
-                refined_results["fdr"],
+                refined_results["siamese"],
             )
         ):
             formula_redined[f"Refined Formula ({i})"].append(refined_f)
             mass_redined[f"Refined Mass ({i})"].append(refined_m)
-            fdr_refined[f"FDR ({i})"].append(refined_fdr)
+            siamese_refined[f"Siamese ({i})"].append(refined_s)
         refinement_time = time.time() - start_time
         running_time.append(prediction_time + refinement_time)
 
-    # 5. Save the final results
+    # 6. Save the final results
     print("\nSave the predicted results...")
     out_dict = {
         "ID": spec_ids,
@@ -424,7 +412,7 @@ if __name__ == "__main__":
         "Running Time": running_time,
     }
     res_df = pd.DataFrame(
-        {**out_dict, **formula_redined, **mass_redined, **fdr_refined}
+        {**out_dict, **formula_redined, **mass_redined, **siamese_refined}
     )
     res_df.to_csv(args.result_path, index=False)
     print("Done!")
