@@ -16,8 +16,21 @@ from utils import ATOMS_INDEX, generate_ms, parse_collision_energy, unify_precur
 
 
 # Used for training and evaluation
-class MS2FDataset_CL(Dataset):  # for MLP and TCN
-	def __init__(self, path, noised_times=0, padding_dim=0):  
+class MS2FDataset_CL(Dataset):
+	"""Dataset for contrastive learning, yielding matched spectrum pairs with labels.
+
+	Loads a preprocessed pkl file of encoded spectra and a corresponding pairs pkl
+	(same path with '_train.pkl' replaced by '_train_pairs.pkl') that defines
+	positive (same SMILES) and negative (different SMILES) pairs.
+
+	Args:
+		path: Path to the training pkl file (e.g. 'orbitrap_maxmin_train.pkl').
+		noised_times: Number of noise-augmented copies to append per spectrum.
+		              Gaussian noise ~N(0, 0.1) is applied only to non-zero bins.
+		padding_dim: Number of zero rows to append to each spectrum array so that
+		             the length is divisible by pooling strides.
+	"""
+	def __init__(self, path, noised_times=0, padding_dim=0):
 		with open(path, 'rb') as file: 
 			self.data = pickle.load(file)
 			print(f'Loaded {len(self.data)} data items from {path}')
@@ -40,7 +53,22 @@ class MS2FDataset_CL(Dataset):  # for MLP and TCN
 			spec = data_item['spec']
 			data_item['spec'] = np.concatenate((spec, np.zeros((padding_dim, spec.shape[1]))), axis=0)
 		
-	def augment_with_noise(self, data, pairs, noised_times): 
+	def augment_with_noise(self, data, pairs, noised_times):
+		"""Append noise-augmented copies of each spectrum and extend the pairs index.
+
+		For each spectrum, creates noised_times copies by adding Gaussian noise
+		~N(0, 0.1) only to non-zero intensity bins (preserving the zero structure).
+		Pair indices are shifted accordingly so augmented copies are paired with
+		their corresponding augmented counterparts.
+
+		Args:
+			data: List of spectrum data dicts.
+			pairs: Dict with keys 'idx1', 'idx2', 'label'.
+			noised_times: Number of augmented copies per original spectrum.
+
+		Returns:
+			tuple: (augmented_data, augmented_pairs, new_length).
+		"""
 		original_length = len(data)
 		augmented_data = copy.deepcopy(data)
 		for data_item in tqdm(data, desc="Data Augmentation"): 
@@ -86,8 +114,18 @@ class MS2FDataset_CL(Dataset):  # for MLP and TCN
 
 
 # Used for training and evaluation
-class MS2FDataset(Dataset):  # for MLP and TCN
-	def __init__(self, path, noised_times=0, padding_dim=0): 
+class MS2FDataset(Dataset):
+	"""Dataset for single-spectrum training and evaluation (non-contrastive).
+
+	Loads a preprocessed pkl file of encoded spectra. Supports optional noise
+	augmentation and zero-padding for pooling layer divisibility.
+
+	Args:
+		path: Path to the pkl file of encoded spectra.
+		noised_times: Number of noise-augmented copies to append per spectrum.
+		padding_dim: Number of zero rows to append to each spectrum array.
+	"""
+	def __init__(self, path, noised_times=0, padding_dim=0):
 		with open(path, 'rb') as file: 
 			self.data = pickle.load(file)
 			print(f'Loaded {len(self.data)} data items from {path}')
@@ -138,7 +176,18 @@ class MS2FDataset(Dataset):  # for MLP and TCN
 
 # Used for testing
 class MGFDataset(Dataset):
-	def __init__(self, path, encoder): 
+	"""Dataset for inference from a raw MGF file.
+
+	Reads spectra directly from an MGF file, applies basic validity filters
+	(m/z range, minimum peak count, required metadata keys), encodes each
+	spectrum into an array, and resolves neutral losses from the precursor type.
+
+	Args:
+		path: Path to the input MGF file.
+		encoder: Dict with encoding parameters: 'resolution', 'max_mz',
+		         'type2charge', 'precursor_type', 'use_simulated_precursor_mz'.
+	"""
+	def __init__(self, path, encoder):
 		self.data = []
 		self.general_filter_config = {
 			'min_mz': 50, 
@@ -198,8 +247,19 @@ class MGFDataset(Dataset):
 				return False
 		return True
 	
-	def load_mgf_spectra(self, spectra, encoder):  
-		for spectrum in spectra: 
+	def load_mgf_spectra(self, spectra, encoder):
+		"""Encode a list of filtered spectra and append valid items to self.data.
+
+		For each spectrum: bins the m/z array into a fixed-length array via
+		generate_ms, resolves neutral losses from the precursor type, and parses
+		collision energy. Spectra that fail any of these steps are silently skipped.
+
+		Args:
+			spectra: List of spectra dicts (pyteomics MGF format).
+			encoder: Dict with 'resolution', 'max_mz', 'type2charge',
+			         'precursor_type', and 'use_simulated_precursor_mz'.
+		"""
+		for spectrum in spectra:
 			good_spec, _, _, spec_arr = generate_ms(x=spectrum['m/z array'], 
 													y=spectrum['intensity array'], 
 													precursor_mz=float(spectrum['params'][self.precursor_mz_key]), 
@@ -274,8 +334,18 @@ class MGFDataset(Dataset):
 
 
 
-class FDRDataset(Dataset): 
-	def __init__(self, path): 
+class FDRDataset(Dataset):
+	"""Dataset for FDR model training and evaluation.
+
+	Loads a pkl file produced by prepare_fdr.py, where each item contains a
+	spectrum array, environment vector, a predicted formula string, and a binary
+	label (1 = correct formula, 0 = decoy). The formula string is converted to a
+	fixed-length atom-count vector at load time.
+
+	Args:
+		path: Path to the FDR pkl file (e.g. 'orbitrap_maxmin_fdr_train.pkl').
+	"""
+	def __init__(self, path):
 		with open(path, 'rb') as file: 
 			self.data = pickle.load(file)
 		

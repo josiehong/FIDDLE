@@ -61,7 +61,19 @@ class TemporalBlock(nn.Module):
 		res = x if self.downsample is None else self.downsample(x)
 		return self.relu(out + res)
 
-class MS2FNet_tcn(nn.Module): 
+class MS2FNet_tcn(nn.Module):
+	"""TCN-based encoder for MS/MS spectra with multi-task formula prediction heads.
+
+	Encodes a binned MS/MS spectrum together with precursor metadata (m/z, NCE,
+	adduct type) into a fixed-size embedding, then decodes it into four targets:
+	atom-count formula vector, monoisotopic mass, total atom count, and H/C ratio.
+
+	Args:
+		config: Dict with keys: input_channels, tcn_channels, tcn_dilations,
+		        tcn_kernel_sizes, tcn_dropout, mass_embedding_dim, ce_embedding_dim,
+		        add_embedding_dim, num_add, embedding_dim, output_dim, and
+		        {formula,mass,atomnum,hcnum}_decoder_layers.
+	"""
 	def __init__(self, config):
 		super(MS2FNet_tcn, self).__init__()
 		self.env_embedding_dim = config['add_embedding_dim'] + config['ce_embedding_dim'] + config['mass_embedding_dim']
@@ -121,7 +133,18 @@ class MS2FNet_tcn(nn.Module):
 				# Initialize embeddings with a normal distribution
 				nn.init.normal_(m.weight, mean=0, std=0.01)
 
-	def _build_decoder(self, config, decoder_type): 
+	def _build_decoder(self, config, decoder_type):
+		"""Build an MLP decoder head for a given prediction target.
+
+		Args:
+			config: Model config dict. Uses key f'{decoder_type}_decoder_layers' for
+			        hidden layer widths and 'output_dim' for formula output size.
+			decoder_type: One of 'formula', 'mass', 'atomnum', or 'hcnum'.
+			              Non-formula heads produce a scalar output (dim=1).
+
+		Returns:
+			nn.Sequential: Decoder MLP ending with LeakyReLU.
+		"""
 		layers = []
 		decoder_layers = config[f'{decoder_type}_decoder_layers']
 		input_dim = config['embedding_dim']
@@ -137,6 +160,21 @@ class MS2FNet_tcn(nn.Module):
 		return nn.Sequential(*layers)
 
 	def forward(self, x, env):
+		"""Forward pass.
+
+		Args:
+			x: Spectrum tensor of shape (B, L) or (B, L, C) where L is the number
+			   of m/z bins and C is input_channels.
+			env: Metadata tensor of shape (B, 3) — [precursor_mz, nce, adduct_index].
+
+		Returns:
+			tuple: (encoded_x, f, mass, atomnum, hcnum)
+			    - encoded_x: Embedding tensor (B, embedding_dim).
+			    - f:         Formula prediction (B, output_dim).
+			    - mass:      Mass prediction (B,).
+			    - atomnum:   Total atom count prediction (B,).
+			    - hcnum:     H/C ratio prediction (B,).
+		"""
 		# Adjust input tensors
 		x = x.unsqueeze(2) if len(x.size()) == 2 else x
 		x = torch.permute(x, (0, 2, 1))
@@ -172,12 +210,35 @@ class MS2FNet_tcn(nn.Module):
 # false discovery rate prediction
 # ---------------------------------------------
 class FDRNet(MS2FNet_tcn):
+	"""MS2FNet_tcn extended with a false discovery rate (FDR) scoring head.
+
+	Inherits the TCN encoder and formula decoders from MS2FNet_tcn and adds a
+	separate MLP that takes the spectrum embedding concatenated with a candidate
+	formula vector to produce a confidence score used for re-ranking.
+
+	Args:
+		config: Same as MS2FNet_tcn, plus 'fdr_decoder_layers' for hidden widths
+		        of the FDR head.
+	"""
 	def __init__(self, config):
 		super(FDRNet, self).__init__(config)
 		self.decoder_fdr = self._build_fdr_decoder(config)
 		self.init_weights()
 
 	def _build_fdr_decoder(self, config):
+		"""Build the FDR scoring MLP.
+
+		Input dimension is embedding_dim + output_dim (embedding concatenated with
+		the candidate formula vector). The final layer has no activation; sigmoid
+		is applied externally during re-ranking.
+
+		Args:
+			config: Model config dict with 'embedding_dim', 'output_dim', and
+			        'fdr_decoder_layers'.
+
+		Returns:
+			nn.Sequential: FDR decoder MLP with scalar output.
+		"""
 		layers = []
 		input_dim = config['embedding_dim'] + config['output_dim']
 		for layer_dim in config['fdr_decoder_layers']:
@@ -188,7 +249,17 @@ class FDRNet(MS2FNet_tcn):
 		layers.append(nn.Linear(input_dim, 1))
 		return nn.Sequential(*layers)
 
-	def forward(self, x, env, f): 
+	def forward(self, x, env, f):
+		"""Forward pass for FDR scoring.
+
+		Args:
+			x:   Spectrum tensor (B, L) or (B, L, C).
+			env: Metadata tensor (B, 3) — [precursor_mz, nce, adduct_index].
+			f:   Candidate formula vector (B, output_dim).
+
+		Returns:
+			fdr: FDR score tensor (B,). Apply sigmoid externally to get probability.
+		"""
 		# Adjust input tensors
 		x = x.unsqueeze(2) if len(x.size()) == 2 else x
 		x = torch.permute(x, (0, 2, 1))

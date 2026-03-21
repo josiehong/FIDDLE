@@ -23,6 +23,19 @@ def format_formula(atom_counts):
 	return ''.join([atom + (str(count) if count > 1 else '') for atom, count in sorted(atom_counts.items())])
 
 def passes_senior_rule(formula):
+	"""Check whether a molecular formula satisfies the SENIOR valence rules.
+
+	The three SENIOR rules are:
+	  1. The sum of odd-valence atom counts must be even.
+	  2. Total valence >= 2 * max single-atom valence.
+	  3. Total valence >= 2 * (number of atoms - 1).
+
+	Args:
+		formula: Molecular formula string, e.g. 'C6H12O6'.
+
+	Returns:
+		bool: True if all three rules are satisfied.
+	"""
 	atom_counts = parse_formula(formula)
 	total_valence = 0
 	max_valence = 0
@@ -77,7 +90,25 @@ def remove_duplicates_preserve_order(seq):
 	seen = set()
 	return [x for x in seq if not (x in seen or seen.add(x))]
 
-def candidate_formulas_generation(f, M, f0_list, refine_atom_type, refine_atom_num): 
+def candidate_formulas_generation(f, M, f0_list, refine_atom_type, refine_atom_num):
+	"""Generate neighboring formula candidates by adding or removing one heavy atom.
+
+	For each non-H atom in refine_atom_type, produces two candidates: one with the
+	atom count incremented by 1 and one decremented by 1. After each change,
+	hydrogen count is adjusted to match the target mass M. Candidates that exceed
+	the per-atom refinement limits relative to any formula in f0_list are excluded.
+	Results are sorted by proximity to M.
+
+	Args:
+		f: Current formula string to expand neighbors from.
+		M: Target monoisotopic mass in Da.
+		f0_list: List of initial predicted formula strings (used for limit checking).
+		refine_atom_type: List of atom symbols to vary, e.g. ['C', 'N', 'O', ...].
+		refine_atom_num: Per-atom maximum deviation allowed; -1 means no limit.
+
+	Returns:
+		list[str]: Candidate formula strings sorted by |mass - M|.
+	"""
 	atom_counts = parse_formula(f)
 	formulas = []
 
@@ -106,7 +137,31 @@ def candidate_formulas_generation(f, M, f0_list, refine_atom_type, refine_atom_n
 
 	return formulas
 
-def formula_refinement(f0_list, M, delta_M, ppm_mode, K, D, T, refine_atom_type, refine_atom_num): 
+def formula_refinement(f0_list, M, delta_M, ppm_mode, K, D, T, refine_atom_type, refine_atom_num):
+	"""Refine predicted formulas via a best-first search around the target mass.
+
+	Starting from one or more predicted formulas (f0_list), performs a guided
+	search by iteratively expanding neighbors (±1 heavy atom, H adjusted to fit M).
+	Candidates are accepted when their monoisotopic mass falls within delta_M of M
+	and they pass the SENIOR valence rules. Search depth is bounded by D, and the
+	search exits early if K results are found or the timeout T is exceeded.
+
+	Args:
+		f0_list:         List of initial predicted formula strings.
+		M:               Target monoisotopic mass in Da.
+		delta_M:         Mass tolerance (Da if ppm_mode=False, ppm if ppm_mode=True).
+		ppm_mode:        If True, interpret delta_M as ppm and convert to Da using M.
+		K:               Maximum number of refined formulas to return.
+		D:               Maximum search depth (number of atom-change steps from f0).
+		T:               Timeout in seconds; set to 0 to disable.
+		refine_atom_type: List of atom symbols to vary during search.
+		refine_atom_num:  Per-atom maximum deviation from f0; -1 means no limit.
+
+	Returns:
+		dict: {'formula': list[str | None], 'mass': list[float | None]}, each of
+		      length K, padded with None if fewer than K formulas are found.
+		      Results are sorted by |mass - M|.
+	"""
 	start_time = time.time()
 	refine_f = []  # List of refined formulas
 	trace_f = set()  # Keep track of all formulas that have been focused on

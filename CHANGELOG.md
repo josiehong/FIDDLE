@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Docstrings added to commonly used functions and classes across `model_tcn.py`, `dataset.py`, `utils/mol_utils.py`, `utils/msms_utils.py`, `utils/pkl_utils.py`, and `utils/refine_utils.py`.
 - `environment_mac.yml` for macOS ARM64 (Apple Silicon) setup with CPU-only PyTorch and compatible package versions.
 - `test_caffine.py` debugging script that fetches caffeine spectra from GNPS and local filtered MGF files, runs the full FIDDLE inference pipeline, and compares FDR-ranked vs. combined (FDR × exp(−ppm/λ)) scoring across multiple sources and collision energies.
 

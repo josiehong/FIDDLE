@@ -197,6 +197,18 @@ def generate_ms(x, y, precursor_mz, resolution=1, max_mz=1500, charge=1):
     return True, x, y, stacked_ms
 
 def remove_precursor_isotopic_peaks(x, y, precursor_mz, charge, tolerance=0.1):
+    """Remove precursor and its isotopic peaks from an MS/MS spectrum.
+
+    Args:
+        x: m/z array of fragment peaks.
+        y: Intensity array of fragment peaks.
+        precursor_mz: Precursor ion m/z.
+        charge: Precursor charge state (determines isotope spacing = 1/|charge|).
+        tolerance: m/z window (Da) to match a peak to a theoretical isotope.
+
+    Returns:
+        tuple[list, list]: Filtered (x, y) with isotopic peaks removed.
+    """
     # Calculate the spacing between isotopic peaks
     spacing = 1 / abs(charge)
     
@@ -222,7 +234,21 @@ def remove_precursor_isotopic_peaks(x, y, precursor_mz, charge, tolerance=0.1):
     
     return filtered_x, filtered_y
 
-def parse_collision_energy(ce_str, precursor_mz, charge=1): 
+def parse_collision_energy(ce_str, precursor_mz, charge=1):
+    """Parse a free-text collision energy string into (ce, nce) values.
+
+    Handles a wide range of formats from NIST, MassBank, and CASMI.
+    If only one of ce/nce can be determined, the other is derived via the
+    charge-factor formula. Returns (None, None) if the string is unparseable.
+
+    Args:
+        ce_str: Raw collision energy string from spectrum metadata.
+        precursor_mz: Precursor m/z, used for ce↔nce conversion.
+        charge: Precursor charge state (default 1).
+
+    Returns:
+        tuple[float | None, float | None]: (ce in eV, nce dimensionless).
+    """
     # ratio constants for NCE
     # charge = int(charge.lstrip('+').lstrip('-'))
     charge_factor = {1: 1, 2: 0.9, 3: 0.85, 4: 0.8, 5: 0.75, 6: 0.75, 7: 0.75, 8: 0.75}
@@ -279,7 +305,20 @@ def parse_collision_energy(ce_str, precursor_mz, charge=1):
         return None, None
     return ce, nce
 
-def melt_neutral_precursor(formula, precursor_type): 
+def melt_neutral_precursor(formula, precursor_type):
+    """Fold neutral losses/adducts from the precursor type into the molecular formula.
+
+    For example, '[M+H-H2O]+' removes H2O from the formula and returns '[M+H]+'.
+    This normalizes the formula so it reflects the neutral molecule after accounting
+    for common in-source fragmentations.
+
+    Args:
+        formula: Molecular formula string of the neutral compound.
+        precursor_type: Adduct/loss string, e.g. '[M+H-H2O]+'.
+
+    Returns:
+        tuple[str, str]: (adjusted_formula, simplified_precursor_type).
+    """
     precursor_type = unify_precursor_type(precursor_type)
 
     neutrue_list = ['H2O', 'NH3', 'CO2', 'CH4O2', 'CH2O2']

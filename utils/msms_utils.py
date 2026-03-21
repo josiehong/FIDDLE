@@ -88,7 +88,22 @@ def sdf2mgf(path, prefix):
 		spectra.append(spectrum)
 	return spectra
 
-def filter_spec(spectra, config, type2charge): 
+def filter_spec(spectra, config, type2charge):
+	"""Filter and clean a list of spectra according to a configuration dict.
+
+	Applies sequential filters: instrument type/name, MS level, atom count/type,
+	precursor type, peak count, m/z range, and ppm mass error.
+
+	Args:
+		spectra: List of spectra dicts in MGF format.
+		config: Dict of filter thresholds (keys: 'instrument_type', 'ms_level',
+		        'atom_type', 'precursor_type', 'min_peak_num', 'min_mz', 'max_mz',
+		        'ppm_tolerance', etc.).
+		type2charge: Dict mapping precursor type string to charge int.
+
+	Returns:
+		tuple: (clean_spectra, smiles_list) — filtered spectra and their SMILES.
+	"""
 	clean_spectra = []
 	smiles_list = []
 
@@ -209,11 +224,33 @@ def simulate_experimental_mz(theoretical_mz, relative_mass_tolerance_ppm):
 	return experimental_mz
 
 def ce2nce(ce, precursor_mz, charge):
+	"""Convert absolute collision energy (eV) to normalized collision energy (NCE).
+
+	Args:
+		ce: Collision energy in eV.
+		precursor_mz: Precursor m/z value.
+		charge: Precursor charge state (int, 1–8).
+
+	Returns:
+		float: Normalized collision energy (dimensionless).
+	"""
 	charge_factor = {1: 1, 2: 0.9, 3: 0.85, 4: 0.8, 5: 0.75, 6: 0.75, 7: 0.75, 8: 0.75}
 	return ce * 500 * charge_factor[charge] / precursor_mz
 
-def precursor_mz_calculator(precursor_type, mass): 
-	if precursor_type == '[M+H]+': 
+def precursor_mz_calculator(precursor_type, mass):
+	"""Compute the expected precursor m/z from neutral monoisotopic mass.
+
+	Args:
+		precursor_type: Adduct string, e.g. '[M+H]+'.
+		mass: Neutral monoisotopic mass in Da.
+
+	Returns:
+		float: Theoretical precursor m/z.
+
+	Raises:
+		ValueError: If precursor_type is not supported.
+	"""
+	if precursor_type == '[M+H]+':
 		return mass + ATOMS_WEIGHT['H']
 	elif precursor_type == '[M+2H]2+':
 		return (mass + 2 * ATOMS_WEIGHT['H']) / 2
@@ -244,7 +281,21 @@ def precursor_mz_calculator(precursor_type, mass):
 	else: 
 		raise ValueError('Unsupported precursor type: {}'.format(precursor_type))
 
-def mass_calculator(precursor_type, precursor_mz): 
+def mass_calculator(precursor_type, precursor_mz):
+	"""Back-calculate neutral monoisotopic mass from observed precursor m/z.
+
+	The inverse of precursor_mz_calculator.
+
+	Args:
+		precursor_type: Adduct string, e.g. '[M+H]+'.
+		precursor_mz: Observed precursor m/z.
+
+	Returns:
+		float: Neutral monoisotopic mass in Da.
+
+	Raises:
+		ValueError: If precursor_type is not supported.
+	"""
 	if precursor_type == '[M+H]+':
 		return precursor_mz - ATOMS_WEIGHT['H']
 	elif precursor_type == '[M+2H]2+':
