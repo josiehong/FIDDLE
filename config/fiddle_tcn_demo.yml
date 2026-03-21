@@ -56,7 +56,7 @@ encoding:
     '[M-H-CO2]-': '-1' 
     '[M-CHO2]-': '-1' 
     '[M-H-H2O]-': '-1'
-    '[M-H2O-H]+': '-1'
+    '[M-H2O-H]-': '-1'
 
 model: 
   resolution: 0.2

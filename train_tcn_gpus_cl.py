@@ -31,24 +31,17 @@ class ContrastiveLoss(nn.Module):
 		return loss_contrastive
 
 class WarmUpScheduler(_LRScheduler):
-	def __init__(self, optimizer, warmup_steps, warmup_start_lr):
-		self.optimizer = optimizer
+	def __init__(self, optimizer, warmup_steps, warmup_start_lr, last_epoch=-1):
 		self.warmup_steps = warmup_steps
 		self.warmup_start_lr = warmup_start_lr
-		self.base_lrs = [group['lr'] for group in optimizer.param_groups]
-		self.step_count = 0
+		super().__init__(optimizer, last_epoch=last_epoch)
 
-	def get_lr(self): 
-		if self.step_count < self.warmup_steps:
-			progress = self.step_count / self.warmup_steps
-			return [self.warmup_start_lr + (base_lr - self.warmup_start_lr) * progress for base_lr in self.base_lrs]
-		else:
-			return self.base_lrs
-
-	def step(self):
-		self.step_count += 1
-		for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
-			param_group['lr'] = lr
+	def get_lr(self):
+		if self.last_epoch < self.warmup_steps:
+			progress = self.last_epoch / max(self.warmup_steps, 1)
+			return [self.warmup_start_lr + (base_lr - self.warmup_start_lr) * progress
+					for base_lr in self.base_lrs]
+		return self.base_lrs
 
 def get_lr(optimizer): 
 	return optimizer.param_groups[0]['lr']
@@ -89,14 +82,14 @@ def train_step(model, loader,
 			env = env.to(device, dtype=torch.float32)
 			mass = mass.to(device, dtype=torch.float32)
 			atomnum = torch.sum(y, dim=1)
-			hcnum = y[:, 1] / y[:, 0]
+			hcnum = y[:, 1] / y[:, 0].clamp(min=1)
 
 			x2 = x2.to(device, dtype=torch.float32)
 			y2 = y2.to(device, dtype=torch.float32)
 			env2 = env2.to(device, dtype=torch.float32)
 			mass2 = mass2.to(device, dtype=torch.float32)
 			atomnum2 = torch.sum(y2, dim=1)
-			hcnum2 = y2[:, 1] / y2[:, 0]
+			hcnum2 = y2[:, 1] / y2[:, 0].clamp(min=1)
 
 			label = label.to(device, dtype=torch.float32)
 
@@ -115,14 +108,15 @@ def train_step(model, loader,
 					mse_criterion(atomnum2, pred_atomnum2) + \
 					mse_criterion(hcnum2, pred_hcnum2) * 10 + \
 					formula_criterion(pred_f2, y2, weight) + \
-					cl_criterion(z1, z2, label)
+					cl_criterion(F.normalize(z1, dim=1), F.normalize(z2, dim=1), label)
 
 			loss.backward()
+			torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 			optimizer.step()
 
 			# Update the learning rate during warm-up phase
 			# After warm-up phase, the learning rate ctrled by warmup_scheduler is fixed and we won't use it
-			if warmup_scheduler.step_count < warmup_steps: 
+			if warmup_scheduler.last_epoch < warmup_steps: 
 				warmup_scheduler.step()
 				# print('Warmup lr: {:.6f}'.format(get_lr(optimizer))) # Josie: for debug
 
@@ -269,15 +263,14 @@ if __name__ == "__main__":
 	# load the checkpoints 
 	if args.resume_path != '' and not args.transfer: # start from a checkpoint
 		print("Load the checkpoints of the whole model")
-		model.load_state_dict(torch.load(args.resume_path, map_location=device_1st)['model_state_dict'])
-
-		optimizer.load_state_dict(torch.load(args.resume_path, map_location=device_1st)['optimizer_state_dict'])
-		scheduler.load_state_dict(torch.load(args.resume_path, map_location=device_1st)['scheduler_state_dict'])
-
-		epoch_start = torch.load(args.resume_path, map_location=device_1st)['epoch']
-		best_valid_mae = torch.load(args.resume_path, map_location=device_1st)['best_val_mae']
-		best_formula_acc = torch.load(args.resume_path, map_location=device_1st)['best_val_acc']
-		best_formula_wo_acc = torch.load(args.resume_path, map_location=device_1st)['best_val_wo_acc']
+		ckpt = torch.load(args.resume_path, map_location=device_1st)
+		model.load_state_dict(ckpt['model_state_dict'])
+		optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+		scheduler.load_state_dict(ckpt['scheduler_state_dict'])
+		epoch_start = ckpt['epoch']
+		best_valid_mae = ckpt['best_val_mae']
+		best_formula_acc = ckpt['best_val_acc']
+		best_formula_wo_acc = ckpt['best_val_wo_acc']
 		warmup_steps = 0 # do not use the warm-up scheduler when resuming
 
 	elif args.resume_path != '' and args.transfer: # transfer learning
@@ -338,8 +331,8 @@ if __name__ == "__main__":
 		formula_wo_acc = sum([1 for f1, f2 in zip(formula_wo_true, formula_wo_pred) if f1 == f2]) / len(formula_wo_pred)
 		print("formula w/o acc: {:.4f}".format(formula_wo_acc))
 
-		# experiments_ex_test (training on 90% of the data, validation on the rest 10%, testing on the external test sets)
-		if best_formula_acc < formula_acc or valid_mae < best_valid_mae or best_formula_wo_acc < formula_wo_acc: 
+		# Save checkpoint only when formula accuracy (with H) improves — single primary metric
+		if best_formula_acc < formula_acc:
 			best_formula_acc = formula_acc
 			best_valid_mae = valid_mae
 			best_formula_wo_acc = formula_wo_acc
@@ -381,9 +374,9 @@ if __name__ == "__main__":
 	
 
 	# 5. Output the prediction results
-	if args.result_path != '': 
+	if args.result_path != '':
 		print('Loading the best model...')
-		model.load_state_dict(torch.load(args.resume_path, map_location=device_1st)['model_state_dict'])
+		model.load_state_dict(torch.load(args.checkpoint_path, map_location=device_1st)['model_state_dict'])
 		spec_ids, y_true, y_pred, mae, mass_true, mass_pred, mass_mae = eval_step(model, valid_loader, device_1st)
 		valid_mae = np.mean(mae)
 		valid_mass_mae = np.mean(mass_mae)

@@ -132,7 +132,7 @@ train:
   epochs: 500
   batch_size: 512 # 128
   num_workers: 8
-  lr: 0.002 # 0.001
+  lr: 0.001
   weight_decay: 0.01
   warmup_ratio: 0.1
   early_stop_step: 10

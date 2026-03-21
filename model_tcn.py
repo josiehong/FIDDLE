@@ -143,9 +143,9 @@ class MS2FNet_tcn(nn.Module):
 
 		# Spectra embedding
 		xs = []
-		for i, layer in enumerate(self.encoder_ms):
+		for layer in self.encoder_ms:
 			x = layer(x)
-			if i % 2 == 0: # TemporalBlock layer
+			if isinstance(layer, TemporalBlock):
 				xp = self.global_pool(x).squeeze(-1)
 				xs.append(xp)
 				
@@ -171,25 +171,21 @@ class MS2FNet_tcn(nn.Module):
 # ---------------------------------------------
 # false discovery rate prediction
 # ---------------------------------------------
-class FDRNet(MS2FNet_tcn): 
-	def __init__(self, config): 
-		super(FDRNet, self).__init__(config) 
-		self.decoder_fdr = self._build_decoder(config, 'fdr')
+class FDRNet(MS2FNet_tcn):
+	def __init__(self, config):
+		super(FDRNet, self).__init__(config)
+		self.decoder_fdr = self._build_fdr_decoder(config)
 		self.init_weights()
 
-	def _build_decoder(self, config, decoder_type): 
+	def _build_fdr_decoder(self, config):
 		layers = []
-		decoder_layers = config[f'{decoder_type}_decoder_layers']
 		input_dim = config['embedding_dim'] + config['output_dim']
-		for layer_dim in decoder_layers:
+		for layer_dim in config['fdr_decoder_layers']:
 			layers.append(weight_norm(nn.Linear(input_dim, layer_dim)))
 			layers.append(nn.LeakyReLU(negative_slope=0.2))
 			input_dim = layer_dim
-
-		output_dim = config['output_dim'] if decoder_type == 'formula' else 1
-		layers.append(nn.Linear(input_dim, output_dim))
-		layers.append(nn.LeakyReLU(negative_slope=0.2))
-
+		# No activation at the final layer — sigmoid is applied externally in rerank_by_fdr
+		layers.append(nn.Linear(input_dim, 1))
 		return nn.Sequential(*layers)
 
 	def forward(self, x, env, f): 
@@ -199,9 +195,9 @@ class FDRNet(MS2FNet_tcn):
 
 		# Spectra embedding
 		xs = []
-		for i, layer in enumerate(self.encoder_ms):
+		for layer in self.encoder_ms:
 			x = layer(x)
-			if i % 2 == 0: # TemporalBlock layer
+			if isinstance(layer, TemporalBlock):
 				xp = self.global_pool(x).squeeze(-1)
 				xs.append(xp)
 
