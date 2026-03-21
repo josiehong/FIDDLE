@@ -33,24 +33,18 @@ mgf_key_order = [
 
 
 def sdf2mgf(path, prefix):
-    """mgf format
-    [{
-            'params': {
-                    'title': prefix_<index>,
-                    'precursor_type': <precursor_type (e.g. [M+NH4]+ and [M+H]+)>,
-                    'precursor_mz': <precursor m/z>,
-                    'molmass': <isotopic mass>,
-                    'ms_level': <ms_level>,
-                    'ionmode': <POSITIVE|NEGATIVE>,
-                    'source_instrument': <source_instrument>,
-                    'instrument_type': <instrument_type>,
-                    'collision_energy': <collision energe>,
-                    'smiles': <smiles>,
-                    'inchi_key': <inchi_key>,
-            },
-            'm/z array': mz_array,
-            'intensity array': intensity_array
-    }, ...]
+    """Read an SDF file and convert each record to an MGF-style spectrum dict.
+
+    Args:
+        path: Path to the SDF file.
+        prefix: String prefix for spectrum titles. Each spectrum is titled
+            ``<prefix>_<index>``.
+
+    Returns:
+        list[dict]: Each dict has keys ``params`` (metadata), ``m/z array``,
+            and ``intensity array``. Records missing required SDF properties
+            (MASS SPECTRAL PEAKS, PRECURSOR TYPE, PRECURSOR M/Z, SPECTRUM TYPE,
+            COLLISION ENERGY, ION MODE) are skipped.
     """
     supp = Chem.SDMolSupplier(path)
     print("Read {} data from {}".format(len(supp), path))

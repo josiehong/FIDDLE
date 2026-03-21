@@ -124,7 +124,7 @@ def candidate_formulas_generation(f, M, f0_list, refine_atom_type, refine_atom_n
             refine_atom_num: Per-atom maximum deviation allowed; -1 means no limit.
 
     Returns:
-            list[str]: Candidate formula strings sorted by |mass - M|.
+            list[str]: Candidate formula strings sorted by abs(mass - M).
     """
     atom_counts = parse_formula(f)
     formulas = []
@@ -191,7 +191,7 @@ def formula_refinement(
     Returns:
             dict: {'formula': list[str | None], 'mass': list[float | None]}, each of
                   length K, padded with None if fewer than K formulas are found.
-                  Results are sorted by |mass - M|.
+                  Results are sorted by abs(mass - M).
     """
     start_time = time.time()
     refine_f = []  # List of refined formulas
