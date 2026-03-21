@@ -1,0 +1,56 @@
+name: Sync shared files to msfiddle
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dataset.py'
+      - 'model_tcn.py'
+      - 'utils/mol_utils.py'
+      - 'utils/msms_utils.py'
+      - 'utils/refine_utils.py'
+      - 'config/*.yml'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout FIDDLE
+        uses: actions/checkout@v4
+
+      - name: Checkout msfiddle
+        uses: actions/checkout@v4
+        with:
+          repository: josiehong/msfiddle
+          token: ${{ secrets.MSFIDDLE_PAT }}
+          path: msfiddle-repo
+
+      - name: Copy shared files
+        run: |
+          cp dataset.py       msfiddle-repo/msfiddle/dataset.py
+          cp model_tcn.py     msfiddle-repo/msfiddle/model_tcn.py
+          cp utils/mol_utils.py   msfiddle-repo/msfiddle/utils/mol_utils.py
+          cp utils/msms_utils.py  msfiddle-repo/msfiddle/utils/msms_utils.py
+          cp utils/refine_utils.py msfiddle-repo/msfiddle/utils/refine_utils.py
+          cp config/*.yml     msfiddle-repo/msfiddle/config/
+
+      - name: Create Pull Request in msfiddle
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.MSFIDDLE_PAT }}
+          path: msfiddle-repo
+          commit-message: "sync: update shared files from FIDDLE"
+          branch: sync/fiddle-update
+          title: "sync: update shared files from FIDDLE"
+          body: |
+            Automated sync of shared files from [FIDDLE](https://github.com/JosieHong/FIDDLE).
+
+            **Files updated:**
+            - `dataset.py`
+            - `model_tcn.py`
+            - `utils/mol_utils.py`
+            - `utils/msms_utils.py`
+            - `utils/refine_utils.py`
+            - `config/*.yml`
+
+            > Please review before merging — msfiddle-specific adaptations may be needed.
