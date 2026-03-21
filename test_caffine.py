@@ -58,13 +58,18 @@ sys.path.insert(0, FIDDLE_DIR)
 
 from dataset import MGFDataset
 from model_tcn import MS2FNet_tcn, FDRNet
-from utils import formula_refinement, mass_calculator, vector_to_formula, formula_to_vector
+from utils import (
+    formula_refinement,
+    mass_calculator,
+    vector_to_formula,
+    formula_to_vector,
+)
 
 # ---------------------------------------------------------------------------
 # Model paths
 # ---------------------------------------------------------------------------
-CONFIG_PATH    = os.path.join(FIDDLE_DIR, "config", "fiddle_tcn_orbitrap.yml")
-MODEL_PATH     = os.path.join(FIDDLE_DIR, "check_point", "fiddle_tcn_orbitrap.pt")
+CONFIG_PATH = os.path.join(FIDDLE_DIR, "config", "fiddle_tcn_orbitrap.yml")
+MODEL_PATH = os.path.join(FIDDLE_DIR, "check_point", "fiddle_tcn_orbitrap.pt")
 FDR_MODEL_PATH = os.path.join(FIDDLE_DIR, "check_point", "fiddle_fdr_orbitrap.pt")
 
 # ---------------------------------------------------------------------------
@@ -102,9 +107,9 @@ PPM_LAMBDA = 5.0
 # Fetch caffeine spectra from GNPS via USI
 # ---------------------------------------------------------------------------
 
-USI_URL        = "https://metabolomics-usi.gnps2.org/json/"
-GNPS_META_URL  = "https://gnps.ucsd.edu/ProteoSAFe/SpectrumCommentServlet"
-DEFAULT_CE     = "40"
+USI_URL = "https://metabolomics-usi.gnps2.org/json/"
+GNPS_META_URL = "https://gnps.ucsd.edu/ProteoSAFe/SpectrumCommentServlet"
+DEFAULT_CE = "40"
 
 
 def fetch_gnps_spectrum(accession: str) -> dict | None:
@@ -127,10 +132,11 @@ def fetch_gnps_spectrum(accession: str) -> dict | None:
 
     adduct, ce_str, instrument = "[M+H]+", DEFAULT_CE, "unknown"
     try:
-        meta = requests.get(GNPS_META_URL, params={"SpectrumID": accession},
-                            timeout=15).json()
+        meta = requests.get(
+            GNPS_META_URL, params={"SpectrumID": accession}, timeout=15
+        ).json()
         ann = (meta.get("annotations") or [{}])[0]
-        adduct     = ann.get("Adduct") or adduct
+        adduct = ann.get("Adduct") or adduct
         instrument = ann.get("Instrument") or instrument
         if ann.get("Collision_Energy") not in ("", "N/A", None, ""):
             ce_str = str(ann["Collision_Energy"])
@@ -139,22 +145,25 @@ def fetch_gnps_spectrum(accession: str) -> dict | None:
     except Exception as e:
         print(f"  Metadata fetch failed: {e}")
 
-    print(f"  precursor_mz={precursor_mz}, adduct={adduct}, CE={ce_str}, "
-          f"instrument={instrument}, n_peaks={len(peaks)}")
+    print(
+        f"  precursor_mz={precursor_mz}, adduct={adduct}, CE={ce_str}, "
+        f"instrument={instrument}, n_peaks={len(peaks)}"
+    )
     return {
-        "title":            accession,
-        "source":           "GNPS",
-        "precursor_mz":     float(precursor_mz),
-        "precursor_type":   adduct,
+        "title": accession,
+        "source": "GNPS",
+        "precursor_mz": float(precursor_mz),
+        "precursor_type": adduct,
         "collision_energy": ce_str,
-        "instrument":       instrument,
-        "peaks":            peaks,
+        "instrument": instrument,
+        "peaks": peaks,
     }
 
 
 # ---------------------------------------------------------------------------
 # Load caffeine spectra from local filtered MGF files
 # ---------------------------------------------------------------------------
+
 
 def load_local_caffeine_spectra(mgf_path: str, titles: list[str]) -> list[dict]:
     """
@@ -180,15 +189,27 @@ def load_local_caffeine_spectra(mgf_path: str, titles: list[str]) -> list[dict]:
                     try:
                         mol = Chem.AddHs(Chem.MolFromSmiles(smi))
                         if mol and CalcMolFormula(mol) == "C8H10N4O2":
-                            results.append({
-                                "title":            current["title"],
-                                "source":           os.path.basename(mgf_path).replace("filtered_", "").replace(".mgf", ""),
-                                "precursor_mz":     float(current.get("precursor_mz", 0)),
-                                "precursor_type":   current.get("precursor_type", "[M+H]+"),
-                                "collision_energy": current.get("collision_energy", DEFAULT_CE),
-                                "instrument":       current.get("source_instrument", "unknown"),
-                                "peaks":            peaks,
-                            })
+                            results.append(
+                                {
+                                    "title": current["title"],
+                                    "source": os.path.basename(mgf_path)
+                                    .replace("filtered_", "")
+                                    .replace(".mgf", ""),
+                                    "precursor_mz": float(
+                                        current.get("precursor_mz", 0)
+                                    ),
+                                    "precursor_type": current.get(
+                                        "precursor_type", "[M+H]+"
+                                    ),
+                                    "collision_energy": current.get(
+                                        "collision_energy", DEFAULT_CE
+                                    ),
+                                    "instrument": current.get(
+                                        "source_instrument", "unknown"
+                                    ),
+                                    "peaks": peaks,
+                                }
+                            )
                     except Exception:
                         pass
                 in_block = False
@@ -210,6 +231,7 @@ def load_local_caffeine_spectra(mgf_path: str, titles: list[str]) -> list[dict]:
 # Write a single-spectrum MGF
 # ---------------------------------------------------------------------------
 
+
 def write_mgf(spectrum: dict, path: str) -> None:
     with open(path, "w") as f:
         f.write("BEGIN IONS\n")
@@ -227,18 +249,19 @@ def write_mgf(spectrum: dict, path: str) -> None:
 # FDR reranking (mirrors run_fiddle.py)
 # ---------------------------------------------------------------------------
 
+
 def rerank_by_fdr(spec_t, env_t, refined_results, K):
     fdr_model.eval()
     refine_f = [f for f in refined_results["formula"] if f is not None]
-    refine_m = [m for m in refined_results["mass"]   if m is not None]
+    refine_m = [m for m in refined_results["mass"] if m is not None]
     if not refine_f:
         refined_results["fdr"] = [0.0] * K
         return refined_results
 
-    f_vecs  = [formula_to_vector(s) for s in refine_f]
+    f_vecs = [formula_to_vector(s) for s in refine_f]
     f_tensor = torch.from_numpy(np.array(f_vecs)).to(DEVICE, dtype=torch.float32)
     spec_rep = spec_t.to(DEVICE, dtype=torch.float32).repeat(f_tensor.size(0), 1)
-    env_rep  = env_t.to(DEVICE, dtype=torch.float32).repeat(f_tensor.size(0), 1)
+    env_rep = env_t.to(DEVICE, dtype=torch.float32).repeat(f_tensor.size(0), 1)
 
     with torch.no_grad():
         fdr = fdr_model(spec_rep, env_rep, f_tensor)
@@ -259,6 +282,7 @@ def rerank_by_fdr(spec_t, env_t, refined_results, K):
 # Single-spectrum FIDDLE prediction
 # ---------------------------------------------------------------------------
 
+
 def predict(spectrum: dict) -> dict:
     """Run full FIDDLE pipeline on one spectrum dict. Returns results dict."""
     with tempfile.NamedTemporaryFile(suffix=".mgf", delete=False, mode="w") as tmp:
@@ -268,13 +292,27 @@ def predict(spectrum: dict) -> dict:
     try:
         dataset = MGFDataset(mgf_path, CONFIG["encoding"])
         if len(dataset) == 0:
-            return {"error": "Spectrum filtered out (need ≥5 peaks, precursor 50–1500 Da)."}
+            return {
+                "error": "Spectrum filtered out (need ≥5 peaks, precursor 50–1500 Da)."
+            }
 
         title, exp_pre_type, spec_arr, env_arr, neutral_add_arr = dataset[0]
 
-        spec_t = torch.from_numpy(np.array(spec_arr)).unsqueeze(0).to(DEVICE, dtype=torch.float32)
-        env_t  = torch.from_numpy(np.array(env_arr)).unsqueeze(0).to(DEVICE, dtype=torch.float32)
-        na_t   = torch.from_numpy(np.array(neutral_add_arr)).unsqueeze(0).to(DEVICE, dtype=torch.float32)
+        spec_t = (
+            torch.from_numpy(np.array(spec_arr))
+            .unsqueeze(0)
+            .to(DEVICE, dtype=torch.float32)
+        )
+        env_t = (
+            torch.from_numpy(np.array(env_arr))
+            .unsqueeze(0)
+            .to(DEVICE, dtype=torch.float32)
+        )
+        na_t = (
+            torch.from_numpy(np.array(neutral_add_arr))
+            .unsqueeze(0)
+            .to(DEVICE, dtype=torch.float32)
+        )
 
         t0 = time.time()
         with torch.no_grad():
@@ -283,17 +321,23 @@ def predict(spectrum: dict) -> dict:
         pred_time = time.time() - t0
 
         formula_init = vector_to_formula(pred_f[0])
-        exp_pre_mz   = env_t[0, 0].item()
-        m            = mass_calculator(exp_pre_type, exp_pre_mz)
+        exp_pre_mz = env_t[0, 0].item()
+        m = mass_calculator(exp_pre_type, exp_pre_mz)
 
         pp = CONFIG["post_processing"]
         refine_atom_type = list(pp["refine_atom_type"])
-        refine_atom_num  = list(pp["refine_atom_num"])
+        refine_atom_num = list(pp["refine_atom_num"])
 
         refined = formula_refinement(
-            [formula_init], m, pp["mass_tolerance"], pp["ppm_mode"],
-            pp["top_k"], pp["maxium_miss_atom_num"], pp["time_out"],
-            refine_atom_type, refine_atom_num,
+            [formula_init],
+            m,
+            pp["mass_tolerance"],
+            pp["ppm_mode"],
+            pp["top_k"],
+            pp["maxium_miss_atom_num"],
+            pp["time_out"],
+            refine_atom_type,
+            refine_atom_num,
         )
 
         t1 = time.time()
@@ -308,23 +352,25 @@ def predict(spectrum: dict) -> dict:
                 continue
             ppm_error = abs(float(mass_val) - float(m)) / float(m) * 1e6
             fdr_score = float(refined["fdr"][i])
-            combined  = fdr_score * np.exp(-ppm_error / PPM_LAMBDA)
-            predictions.append({
-                "formula":    f,
-                "mass":       round(float(mass_val), 5),
-                "ppm_error":  round(ppm_error, 2),
-                "confidence": round(fdr_score, 4),
-                "combined":   round(combined, 4),
-            })
+            combined = fdr_score * np.exp(-ppm_error / PPM_LAMBDA)
+            predictions.append(
+                {
+                    "formula": f,
+                    "mass": round(float(mass_val), 5),
+                    "ppm_error": round(ppm_error, 2),
+                    "confidence": round(fdr_score, 4),
+                    "combined": round(combined, 4),
+                }
+            )
 
         return {
-            "title":               title,
-            "precursor_mz":        spectrum["precursor_mz"],
-            "precursor_type":      spectrum["precursor_type"],
-            "experimental_mass":   round(float(m), 5),
-            "initial_prediction":  formula_init,
-            "predictions":         predictions,
-            "time_s":              round(total_time, 3),
+            "title": title,
+            "precursor_mz": spectrum["precursor_mz"],
+            "precursor_type": spectrum["precursor_type"],
+            "experimental_mass": round(float(m), 5),
+            "initial_prediction": formula_init,
+            "predictions": predictions,
+            "time_s": round(total_time, 3),
         }
     finally:
         os.unlink(mgf_path)
@@ -333,6 +379,7 @@ def predict(spectrum: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def _marker(formula):
     return " <-- caffeine" if formula == "C8H10N4O2" else ""
@@ -350,12 +397,16 @@ def print_result(result: dict) -> None:
 
     print(f"  FDR-ranked:")
     for i, p in enumerate(preds):
-        print(f"    {i+1}. {p['formula']:<20}  ppm={p['ppm_error']:5.2f}  fdr={p['confidence']:.4f}{_marker(p['formula'])}")
+        print(
+            f"    {i+1}. {p['formula']:<20}  ppm={p['ppm_error']:5.2f}  fdr={p['confidence']:.4f}{_marker(p['formula'])}"
+        )
 
     combined = sorted(preds, key=lambda p: p["combined"], reverse=True)
     print(f"  Combined (FDR × exp(−ppm/{PPM_LAMBDA})):")
     for i, p in enumerate(combined):
-        print(f"    {i+1}. {p['formula']:<20}  ppm={p['ppm_error']:5.2f}  combined={p['combined']:.4f}{_marker(p['formula'])}")
+        print(
+            f"    {i+1}. {p['formula']:<20}  ppm={p['ppm_error']:5.2f}  combined={p['combined']:.4f}{_marker(p['formula'])}"
+        )
 
 
 if __name__ == "__main__":
@@ -372,16 +423,19 @@ if __name__ == "__main__":
     # 2. NIST20 orbitrap — pick one [M+H]+ spectrum per CE level
     nist20_titles = ["nist20_739832", "nist20_739834", "nist20_739836"]  # NCE=40/50/75%
     all_spectra += load_local_caffeine_spectra(
-        os.path.join(MGF_DIR, "filtered_nist_orbitrap.mgf"), nist20_titles)
+        os.path.join(MGF_DIR, "filtered_nist_orbitrap.mgf"), nist20_titles
+    )
 
     # 3. NIST23 orbitrap — pick one [M+H]+ spectrum
     nist23_titles = ["nist23_731649", "nist23_731651", "nist23_731653"]  # NCE=40/50/75%
     all_spectra += load_local_caffeine_spectra(
-        os.path.join(MGF_DIR, "filtered_nist23_orbitrap.mgf"), nist23_titles)
+        os.path.join(MGF_DIR, "filtered_nist23_orbitrap.mgf"), nist23_titles
+    )
 
     # 4. MoNA orbitrap — the single caffeine spectrum (HCD NCE 40%)
     all_spectra += load_local_caffeine_spectra(
-        os.path.join(MGF_DIR, "filtered_mona_orbitrap.mgf"), ["mona_orbitrap_38541"])
+        os.path.join(MGF_DIR, "filtered_mona_orbitrap.mgf"), ["mona_orbitrap_38541"]
+    )
 
     if not all_spectra:
         print("No usable caffeine spectra found.")
