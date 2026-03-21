@@ -1,14 +1,16 @@
 # FIDDLE
 
 [![DOI](https://zenodo.org/badge/720138825.svg)](https://doi.org/10.5281/zenodo.17172711)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![PyPI](https://img.shields.io/pypi/v/msfiddle)](https://pypi.org/project/msfiddle/)
 
 **F**ormula **ID**entification from tandem mass spectra by **D**eep **LE**arning
 
-The source code for the training and evaluation of FIDDLE, as well as for the inference of FIDDLE using results from SIRIUS and BUDDY, is provided (see detailed commands in `./running_scripts/`). A PyPI package and a website-based service for FIDDLE will be available soon. 
+The source code for the training and evaluation of FIDDLE, as well as for the inference of FIDDLE using results from SIRIUS and BUDDY, is provided (see detailed commands in [Reproduce Paper Results](#reproduce-paper-results)).
 
 Paper: https://www.nature.com/articles/s41467-025-66060-9
 
-Command-line tool: https://pypi.org/project/msfiddle/
+> **Two repositories:** This repo contains the research codebase (model training, evaluation, and paper reproduction). For end-user inference, see the [msfiddle](https://github.com/josiehong/msfiddle) command-line tool (`pip install msfiddle`).
 
 ## Set up
 
@@ -85,6 +87,21 @@ python run_fiddle.py --test_data ./demo/input_msms.mgf \
                     --sirius_path ./demo/output_sirius.csv \
                     --result_path ./demo/output_fiddle_all.csv --device 0
 ```
+
+## Reproduce paper results
+
+All scripts should be run from the repository root (`FIDDLE/`).
+
+| Script | Description |
+|---|---|
+| `running_scripts/experiments_test_benchmark.sh` | Evaluate on external benchmarks (CASMI 2016, CASMI 2017, EMBL-MCF 2.0) |
+| `running_scripts/experiments_test_nist23.sh` | Evaluate on NIST23 |
+| `running_scripts/experiments_test_chimeric.sh` | Evaluate on chimeric spectra |
+| `running_scripts/experiments_test_noised.sh` | Evaluate under noise conditions |
+| `running_scripts/experiments_ablation_study.sh` | Run ablation study |
+| `running_scripts/experiments_demo.sh` | Run demo experiment |
+
+For training from scratch, see the train scripts (`train_tcn_gpus.py`, `train_tcn_gpus_cl.py`, `train_fdr.py`) and the corresponding config files in `./config/`.
 
 ## Citation
 
