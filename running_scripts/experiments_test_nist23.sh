@@ -35,16 +35,16 @@ python -u train_tcn_gpus_cl.py \
 --result_path ./result/fiddle_tcn_qtof_100724.csv --device 4 5 
 
 # FIDDLES (fdr model)
-python prepare_fdr.py \
+python prepare_rescore.py \
 --train_data ./data/cl_pkl_1007/qtof_train.pkl \
 --test_data ./data/cl_pkl_1007/qtof_test.pkl \
 --config_path ./config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
---fdr_dir ./data/cl_pkl_1007/ \
+--rescore_dir ./data/cl_pkl_1007/ \
 --device 4 5
-python train_fdr.py \
---train_data ./data/cl_pkl_1007/qtof_fdr_train.pkl \
---test_data ./data/cl_pkl_1007/qtof_fdr_test.pkl \
+python train_rescore.py \
+--train_data ./data/cl_pkl_1007/qtof_rescore_train.pkl \
+--test_data ./data/cl_pkl_1007/qtof_rescore_test.pkl \
 --config_path ./config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
 --transfer \
@@ -66,15 +66,15 @@ python -u train_tcn_gpus_cl.py \
 --result_path ./result/fiddle_tcn_orbitrap_100724.csv --device 4 7 
 
 # FIDDLES (fdr model)
-python prepare_fdr.py \
+python prepare_rescore.py \
 --train_data ./data/cl_pkl_1007/orbitrap_train.pkl \
 --test_data ./data/cl_pkl_1007/orbitrap_test.pkl \
 --config_path ./config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_100724.pt \
---fdr_dir ./data/cl_pkl_1007/ \
+--rescore_dir ./data/cl_pkl_1007/ \
 --device 4 5 
-python train_fdr.py --train_data ./data/cl_pkl_1007/orbitrap_fdr_train.pkl \
---test_data ./data/cl_pkl_1007/orbitrap_fdr_test.pkl \
+python train_rescore.py --train_data ./data/cl_pkl_1007/orbitrap_rescore_train.pkl \
+--test_data ./data/cl_pkl_1007/orbitrap_rescore_test.pkl \
 --config_path ./config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_100724.pt \
 --transfer \
@@ -90,14 +90,14 @@ python train_fdr.py --train_data ./data/cl_pkl_1007/orbitrap_fdr_train.pkl \
 python run_fiddle.py --test_data ./data/cl_pkl_1007/qtof_test.mgf \
 --config_path ./config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
---fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+--rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
 --result_path ./result/fiddle_qtof_100724.csv --device 5
 
 # FIDDLE + BUDDY
 python run_fiddle.py --test_data ./data/cl_pkl_1007/qtof_test.mgf \
 --config_path ./config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
---fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+--rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
 --buddy_path ./run_buddy_1007/buddy_qtof_test_1007.csv \
 --result_path ./result/two_qtof_test_100724.csv --device 5
 
@@ -110,14 +110,14 @@ python run_fiddle.py --test_data ./data/cl_pkl_1007/qtof_test.mgf \
 python run_fiddle.py --test_data ./data/cl_pkl_1007/orbitrap_test.mgf \
 --config_path ./config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_100724.pt \
---fdr_resume_path ./check_point/fiddle_fdr_orbitrap_100724.pt \
+--rescore_resume_path ./check_point/fiddle_fdr_orbitrap_100724.pt \
 --result_path ./result/fiddle_orbitrap_100724.csv --device 4
 
 # FIDDLE + BUDDY
 python run_fiddle.py --test_data ./data/cl_pkl_1007/orbitrap_test.mgf \
 --config_path ./config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_100724.pt \
---fdr_resume_path ./check_point/fiddle_fdr_orbitrap_100724.pt \
+--rescore_resume_path ./check_point/fiddle_fdr_orbitrap_100724.pt \
 --buddy_path ./run_buddy_1007/buddy_orbitrap_test_1007.csv \
 --result_path ./result/two_orbitrap_test_100724.csv --device 4
 
@@ -129,18 +129,18 @@ python run_fiddle.py --test_data ./data/cl_pkl_1007/orbitrap_test.mgf \
 python run_fiddle.py --test_data ./data/casmi2016.mgf \
                 --config_path ./config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
-                --fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+                --rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
                 --result_path ./result/fiddle_casmi16_exnist23.csv 
 python run_fiddle.py --test_data ./data/casmi2016.mgf \
                 --config_path ./config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
-                --fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+                --rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
                 --buddy_path ./run_buddy/buddy_casmi2016.csv \
                 --result_path ./result/two_casmi16_exnist23.csv 
 python run_fiddle.py --test_data ./data/casmi2016.mgf \
                 --config_path ./config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
-                --fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+                --rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
                 --buddy_path ./run_buddy/buddy_casmi2016.csv \
                 --sirius_path ./run_sirius/sirius_casmi2016.csv \
                 --result_path ./result/all_casmi16_exnist23.csv 
@@ -148,18 +148,18 @@ python run_fiddle.py --test_data ./data/casmi2016.mgf \
 python run_fiddle.py --test_data ./data/casmi2017.mgf \
                 --config_path ./config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
-                --fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+                --rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
                 --result_path ./result/fiddle_casmi17_exnist23.csv 
 python run_fiddle.py --test_data ./data/casmi2017.mgf \
                 --config_path ./config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
-                --fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+                --rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
                 --buddy_path ./run_buddy/buddy_casmi2017.csv \
                 --result_path ./result/two_casmi17_exnist23.csv 
 python run_fiddle.py --test_data ./data/casmi2017.mgf \
                 --config_path ./config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
-                --fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+                --rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
                 --buddy_path ./run_buddy/buddy_casmi2017.csv \
                 --sirius_path ./run_sirius/sirius_casmi2017.csv \
                 --result_path ./result/all_casmi17_exnist23.csv 
@@ -167,18 +167,18 @@ python run_fiddle.py --test_data ./data/casmi2017.mgf \
 python run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
                 --config_path ./config/fiddle_tcn_embl.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
-                --fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+                --rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
                 --result_path ./result/fiddle_embl_exnist23.csv 
 python run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
                 --config_path ./config/fiddle_tcn_embl.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
-                --fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+                --rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
                 --buddy_path ./run_buddy/buddy_embl.csv \
                 --result_path ./result/two_embl_exnist23.csv 
 python run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
                 --config_path ./config/fiddle_tcn_embl.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
-                --fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+                --rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
                 --buddy_path ./run_buddy/buddy_embl.csv \
                 --sirius_path ./run_sirius/sirius_embl.csv \
                 --result_path ./result/all_embl_exnist23.csv 

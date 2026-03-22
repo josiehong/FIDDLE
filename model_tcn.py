@@ -272,7 +272,7 @@ class FormulaEncoder(nn.Module):
     embedding space as the MS2FNet_tcn spectrum encoder.
 
     Used by the Siamese FDR model: FormulaEncoder(formula_vector) is combined with
-    the spectrum embedding via element-wise product, then scored by SiameseFDRHead.
+    the spectrum embedding via element-wise product, then scored by RescoreHead.
 
     Architecture: input_dim → 64 → 256 → embedding_dim, each layer followed by
     LayerNorm + ReLU except the final projection which is just linear + L2-norm.
@@ -307,7 +307,7 @@ class FormulaEncoder(nn.Module):
         return F.normalize(z, dim=1)
 
 
-class SiameseFDRHead(nn.Module):
+class RescoreHead(nn.Module):
     """MLP scoring head for the Siamese FDR model.
 
     Takes the element-wise product z_spec ⊙ z_form (both L2-normalised,
@@ -322,7 +322,7 @@ class SiameseFDRHead(nn.Module):
     """
 
     def __init__(self, config):
-        super(SiameseFDRHead, self).__init__()
+        super(RescoreHead, self).__init__()
         emb_dim = config["embedding_dim"]  # 512
 
         self.net = nn.Sequential(

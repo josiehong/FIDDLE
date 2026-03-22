@@ -10,7 +10,9 @@ The source code for the training and evaluation of FIDDLE, as well as for the in
 
 Paper: https://www.nature.com/articles/s41467-025-66060-9
 
-> **Two repositories:** This repo contains the research codebase (model training, evaluation, and paper reproduction). For end-user inference, see the [msfiddle](https://github.com/josiehong/msfiddle) command-line tool (`pip install msfiddle`).
+Command-line tool (`pip install msfiddle`): https://github.com/josiehong/msfiddle
+
+> **Breaking change (v2.0.0):** The rescore model has been redesigned (Siamese architecture), see details in [CHANGELOG.md](./CHANGELOG.md). 
 
 ## Set up
 
@@ -32,10 +34,10 @@ To use the pre-trained models, please use the following scripts to download the 
 
 - **Orbitrap models**:
   - `fiddle_tcn_orbitrap.pt`: formula prediction model on Orbitrap spectra
-  - `fiddle_fdr_orbitrap.pt`: confidence score prediction model on Orbitrap spectra
+  - `fiddle_rescore_orbitrap.pt`: rescore model on Orbitrap spectra
 - **Q-TOF models**:
   - `fiddle_tcn_qtof.pt`: formula prediction model on Q-TOF spectra
-  - `fiddle_fdr_qtof.pt`: confidence score prediction model on Q-TOF spectra
+  - `fiddle_rescore_qtof.pt`: rescore model on Q-TOF spectra
 
 ```bash
 bash ./running_scripts/download_models.sh
@@ -72,7 +74,7 @@ END IONS
 python run_fiddle.py --test_data ./demo/input_msms.mgf \
                     --config_path ./config/fiddle_tcn_orbitrap.yml \
                     --resume_path ./check_point/fiddle_tcn_orbitrap.pt \
-                    --fdr_resume_path ./check_point/fiddle_fdr_orbitrap.pt \
+                    --rescore_resume_path ./check_point/fiddle_rescore_orbitrap.pt \
                     --result_path ./demo/output_fiddle.csv --device 0
 ```
 
@@ -82,7 +84,7 @@ If you'd like to integrate the results from SIRIUS and BUDDY, please organize th
 python run_fiddle.py --test_data ./demo/input_msms.mgf \
                     --config_path ./config/fiddle_tcn_orbitrap.yml \
                     --resume_path ./check_point/fiddle_tcn_orbitrap.pt \
-                    --fdr_resume_path ./check_point/fiddle_fdr_orbitrap.pt \
+                    --rescore_resume_path ./check_point/fiddle_rescore_orbitrap.pt \
                     --buddy_path ./demo/output_buddy.csv \
                     --sirius_path ./demo/output_sirius.csv \
                     --result_path ./demo/output_fiddle_all.csv --device 0
@@ -101,7 +103,7 @@ All scripts should be run from the repository root (`FIDDLE/`).
 | `running_scripts/experiments_ablation_study.sh` | Run ablation study |
 | `running_scripts/experiments_demo.sh` | Run demo experiment |
 
-For training from scratch, see the train scripts (`train_tcn_gpus.py`, `train_tcn_gpus_cl.py`, `train_fdr.py`) and the corresponding config files in `./config/`.
+For training from scratch, see the train scripts (`train_tcn_gpus.py`, `train_tcn_gpus_cl.py`, `train_rescore.py`) and the corresponding config files in `./config/`.
 
 ## Citation
 

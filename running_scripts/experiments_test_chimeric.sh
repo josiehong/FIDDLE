@@ -39,38 +39,38 @@ python mgf_instances.py --input_path ./data/chimeric/orbitrap_test_chimeric50.mg
 python run_fiddle.py --test_data ./data/chimeric/qtof_test_chimeric90.mgf \
 --config_path ./config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
---fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+--rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
 --result_path ./result/fiddle_qtof_chimeric90_100724.csv --device 6 
 
 python run_fiddle.py --test_data ./data/chimeric/qtof_test_chimeric70.mgf \
 --config_path ./config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
---fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+--rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
 --result_path ./result/fiddle_qtof_chimeric70_100724.csv --device 6
 
 python run_fiddle.py --test_data ./data/chimeric/qtof_test_chimeric50.mgf \
 --config_path ./config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
---fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+--rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
 --result_path ./result/fiddle_qtof_chimeric50_100724.csv --device 6
 
 # For Orbitrap
 python run_fiddle.py --test_data ./data/chimeric/orbitrap_test_chimeric90.mgf \
 --config_path ./config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_100724.pt \
---fdr_resume_path ./check_point/fiddle_fdr_orbitrap_100724.pt \
+--rescore_resume_path ./check_point/fiddle_fdr_orbitrap_100724.pt \
 --result_path ./result/fiddle_orbitrap_chimeric90_100724.csv --device 6
 
 python run_fiddle.py --test_data ./data/chimeric/orbitrap_test_chimeric70.mgf \
 --config_path ./config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_100724.pt \
---fdr_resume_path ./check_point/fiddle_fdr_orbitrap_100724.pt \
+--rescore_resume_path ./check_point/fiddle_fdr_orbitrap_100724.pt \
 --result_path ./result/fiddle_orbitrap_chimeric70_100724.csv --device 6
 
 python run_fiddle.py --test_data ./data/chimeric/orbitrap_test_chimeric50.mgf \
 --config_path ./config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_100724.pt \
---fdr_resume_path ./check_point/fiddle_fdr_orbitrap_100724.pt \
+--rescore_resume_path ./check_point/fiddle_fdr_orbitrap_100724.pt \
 --result_path ./result/fiddle_orbitrap_chimeric50_100724.csv --device 6
 
 # --------------------------

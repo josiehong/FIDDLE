@@ -396,10 +396,10 @@ class MGFDataset(Dataset):
         return vector
 
 
-class FDRDataset(Dataset):
+class RescoreDataset(Dataset):
     """Dataset for FDR model training and evaluation.
 
-    Loads a pkl file produced by prepare_fdr.py, where each item contains a
+    Loads a pkl file produced by prepare_rescore.py, where each item contains a
     spectrum array, environment vector, a predicted formula string, and a binary
     label (1 = correct formula, 0 = decoy). The formula string is converted to a
     fixed-length atom-count vector at load time.

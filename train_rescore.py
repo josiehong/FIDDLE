@@ -1,22 +1,22 @@
-"""Train a Siamese FDR model (Option 2 — interaction head + BCE).
+"""Train a Siamese rescore model (interaction head + BCE).
 
 Architecture
 ------------
 1. Frozen spectrum encoder (MS2FNet_tcn) → z_spec  (L2-normalised, D-dim)
 2. Trainable FormulaEncoder              → z_form  (L2-normalised, D-dim)
 3. interaction = z_spec ⊙ z_form         (element-wise product, D-dim)
-4. SiameseFDRHead(interaction)           → scalar logit → sigmoid → BCE
+4. RescoreHead(interaction)              → scalar logit → sigmoid → BCE
 
-Only FormulaEncoder and SiameseFDRHead are trained.  The spectrum encoder
+Only FormulaEncoder and RescoreHead are trained.  The spectrum encoder
 weights are frozen at the pre-trained TCN checkpoint.
 
 Usage:
-    python train_fdr.py \\
-        --train_data ./data/cl_pkl_031826/qtof_maxmin_fdr_train.pkl \\
-        --test_data  ./data/cl_pkl_031826/qtof_maxmin_fdr_test.pkl \\
+    python train_rescore.py \\
+        --train_data ./data/cl_pkl_031826/qtof_maxmin_rescore_train.pkl \\
+        --test_data  ./data/cl_pkl_031826/qtof_maxmin_rescore_test.pkl \\
         --config_path ./config/fiddle_tcn_qtof.yml \\
         --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \\
-        --checkpoint_path ./check_point/fiddle_siamese_qtof_031826.pt \\
+        --checkpoint_path ./check_point/fiddle_rescore_qtof_031826.pt \\
         --device 2
 """
 
@@ -32,17 +32,17 @@ from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from dataset import FDRDataset
-from model_tcn import MS2FNet_tcn, FormulaEncoder, SiameseFDRHead
+from dataset import RescoreDataset
+from model_tcn import MS2FNet_tcn, FormulaEncoder, RescoreHead
 
 # ---------------------------------------------------------------------------
 # Train / eval
 # ---------------------------------------------------------------------------
 
 
-def train_step(spec_encoder, formula_encoder, fdr_head, loader, optimizer, device):
+def train_step(spec_encoder, formula_encoder, rescore_head, loader, optimizer, device):
     formula_encoder.train()
-    fdr_head.train()
+    rescore_head.train()
     spec_encoder.eval()
 
     criterion = nn.BCELoss()
@@ -60,7 +60,7 @@ def train_step(spec_encoder, formula_encoder, fdr_head, loader, optimizer, devic
             y = y.to(device, dtype=torch.float32)
 
             env = env.clone()
-            env[:, 0] = 0.0  # zero out precursor_mz to match FDR training
+            env[:, 0] = 0.0  # zero out precursor_mz to prevent mass-based shortcut
 
             optimizer.zero_grad()
 
@@ -70,7 +70,7 @@ def train_step(spec_encoder, formula_encoder, fdr_head, loader, optimizer, devic
 
             z_forms = formula_encoder(f)  # (B, D), L2-normed
             interaction = z_specs * z_forms  # element-wise product (B, D)
-            logits = fdr_head(interaction)  # (B,)
+            logits = rescore_head(interaction)  # (B,)
             y_hat = torch.sigmoid(logits)
 
             loss = criterion(y_hat, y)
@@ -94,9 +94,9 @@ def train_step(spec_encoder, formula_encoder, fdr_head, loader, optimizer, devic
     return total_loss / len(loader.dataset), total_acc / len(loader.dataset), auc
 
 
-def eval_step(spec_encoder, formula_encoder, fdr_head, loader, device):
+def eval_step(spec_encoder, formula_encoder, rescore_head, loader, device):
     formula_encoder.eval()
-    fdr_head.eval()
+    rescore_head.eval()
     spec_encoder.eval()
 
     criterion = nn.BCELoss()
@@ -121,7 +121,7 @@ def eval_step(spec_encoder, formula_encoder, fdr_head, loader, device):
 
             z_forms = formula_encoder(f)
             interaction = z_specs * z_forms
-            logits = fdr_head(interaction)
+            logits = rescore_head(interaction)
             y_hat = torch.sigmoid(logits)
 
             loss = criterion(y_hat, y)
@@ -140,7 +140,7 @@ def eval_step(spec_encoder, formula_encoder, fdr_head, loader, device):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Train Siamese FDR (interaction head + BCE)"
+        description="Train Siamese rescore model (interaction head + BCE)"
     )
     parser.add_argument("--train_data", type=str, required=True)
     parser.add_argument("--test_data", type=str, required=True)
@@ -169,20 +169,20 @@ if __name__ == "__main__":
     print(f"Device: {device}")
 
     # Data
-    train_set = FDRDataset(args.train_data)
+    train_set = RescoreDataset(args.train_data)
     train_loader = DataLoader(
         train_set,
-        batch_size=config["train_fdr"]["batch_size"],
+        batch_size=config["train_rescore"]["batch_size"],
         shuffle=True,
-        num_workers=config["train_fdr"]["num_workers"],
+        num_workers=config["train_rescore"]["num_workers"],
         drop_last=True,
     )
-    valid_set = FDRDataset(args.test_data)
+    valid_set = RescoreDataset(args.test_data)
     valid_loader = DataLoader(
         valid_set,
-        batch_size=config["train_fdr"]["batch_size"],
+        batch_size=config["train_rescore"]["batch_size"],
         shuffle=False,
-        num_workers=config["train_fdr"]["num_workers"],
+        num_workers=config["train_rescore"]["num_workers"],
         drop_last=True,
     )
 
@@ -196,36 +196,36 @@ if __name__ == "__main__":
     spec_encoder.eval()
     print(f"Loaded frozen spectrum encoder from {args.resume_path}")
 
-    # Trainable FormulaEncoder + SiameseFDRHead
+    # Trainable FormulaEncoder + RescoreHead
     formula_encoder = FormulaEncoder(config["model"]).to(device)
-    fdr_head = SiameseFDRHead(config["model"]).to(device)
+    rescore_head = RescoreHead(config["model"]).to(device)
 
     n_params = sum(p.numel() for p in formula_encoder.parameters()) + sum(
-        p.numel() for p in fdr_head.parameters()
+        p.numel() for p in rescore_head.parameters()
     )
-    print(f"# Trainable params (FormulaEncoder + SiameseFDRHead): {n_params}")
+    print(f"# Trainable params (FormulaEncoder + RescoreHead): {n_params}")
 
-    trainable = list(formula_encoder.parameters()) + list(fdr_head.parameters())
-    optimizer = optim.AdamW(trainable, lr=config["train_fdr"]["lr"])
+    trainable = list(formula_encoder.parameters()) + list(rescore_head.parameters())
+    optimizer = optim.AdamW(trainable, lr=config["train_rescore"]["lr"])
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="max", factor=0.5, patience=5
     )
 
     best_auc = 0.0
     early_stop_patience = 0
-    early_stop_step = config["train_fdr"]["early_stop_step"]
+    early_stop_step = config["train_rescore"]["early_stop_step"]
 
-    for epoch in range(1, config["train_fdr"]["epochs"] + 1):
+    for epoch in range(1, config["train_rescore"]["epochs"] + 1):
         print(f"\n=====Epoch {epoch}")
         train_loss, train_acc, train_auc = train_step(
-            spec_encoder, formula_encoder, fdr_head, train_loader, optimizer, device
+            spec_encoder, formula_encoder, rescore_head, train_loader, optimizer, device
         )
         print(
             f"Train loss: {train_loss:.4f}  acc: {train_acc:.4f}  auc: {train_auc:.4f}"
         )
 
         valid_loss, valid_acc, valid_auc = eval_step(
-            spec_encoder, formula_encoder, fdr_head, valid_loader, device
+            spec_encoder, formula_encoder, rescore_head, valid_loader, device
         )
         print(
             f"Validation loss: {valid_loss:.4f}  acc: {valid_acc:.4f}  auc: {valid_auc:.4f}"
@@ -237,7 +237,7 @@ if __name__ == "__main__":
                 {
                     "epoch": epoch,
                     "formula_encoder_state_dict": formula_encoder.state_dict(),
-                    "fdr_head_state_dict": fdr_head.state_dict(),
+                    "rescore_head_state_dict": rescore_head.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                     "best_val_auc": best_auc,
                 },

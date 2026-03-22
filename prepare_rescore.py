@@ -1,7 +1,7 @@
 """
-Dataset for FDR (false discovery rate) prediction
-- Correct predicted formula
-- Incorrect predicted formula
+Prepare rescore training data.
+- Correct predicted formula (label=1)
+- Incorrect predicted formula (label=0)
 """
 
 import os
@@ -140,8 +140,10 @@ def split_indices_by_compound(data, train_ratio, seed):
     return train_indices, test_indices
 
 
-def prepare_fdr_split(data_path, indices, model, device, config, out_path, pkl_data):
-    """Run model inference and post-processing on a subset of data, then save FDR pkl.
+def prepare_rescore_split(
+    data_path, indices, model, device, config, out_path, pkl_data
+):
+    """Run model inference and post-processing on a subset of data, then save rescore pkl.
 
     Args:
         data_path: path to the source pkl (used only to build the full dataset).
@@ -149,7 +151,7 @@ def prepare_fdr_split(data_path, indices, model, device, config, out_path, pkl_d
         model: loaded MS2FNet_tcn model.
         device: torch device.
         config: parsed YAML config dict.
-        out_path: output path for the FDR pkl.
+        out_path: output path for the rescore pkl.
         pkl_data: dict mapping title -> [spec, env] for fast lookup.
     """
     dataset = MS2FDataset(data_path)
@@ -204,7 +206,7 @@ def prepare_fdr_split(data_path, indices, model, device, config, out_path, pkl_d
         ):
             formula_redined["Refined Formula ({})".format(str(i))].append(refined_f)
 
-    # Label FDR data
+    # Label rescore data
     info_dict = {"ID": spec_ids, "Formula": formula_true}
     res_df = pd.DataFrame({**info_dict, **formula_redined})
 
@@ -246,18 +248,18 @@ def prepare_fdr_split(data_path, indices, model, device, config, out_path, pkl_d
             data["env"].append(env)
         print(k, "incorrect", len(titles))
 
-    print("\nSave the FDR dataset...")
+    print("\nSave the rescore dataset...")
     with open(out_path, "wb") as f:
         data = convert_to_list_of_dicts(data)
         pickle.dump(data, f)
-        print("Save {} FDR data to {}".format(len(data), out_path))
+        print("Save {} rescore data to {}".format(len(data), out_path))
     print("Done!")
 
 
 if __name__ == "__main__":
     # Training settings
     parser = argparse.ArgumentParser(
-        description="Preprocess the data for FDR prediction"
+        description="Preprocess the data for rescore model training"
     )
     parser.add_argument(
         "--test_data", type=str, required=True, help="Path to test data (.pkl)"
@@ -269,13 +271,13 @@ if __name__ == "__main__":
         "--resume_path", type=str, required=True, help="Path to pretrained model"
     )
     parser.add_argument(
-        "--fdr_dir", type=str, required=True, help="Path to save FDR dataset"
+        "--rescore_dir", type=str, required=True, help="Path to save rescore dataset"
     )
     parser.add_argument(
         "--train_ratio",
         type=float,
         default=0.8,
-        help="Fraction of compounds used for FDR training split (default: 0.8)",
+        help="Fraction of compounds used for rescore training split (default: 0.8)",
     )
     parser.add_argument(
         "--seed", type=int, default=42, help="Seed for random functions"
@@ -327,19 +329,19 @@ if __name__ == "__main__":
         raw_data, args.train_ratio, args.seed
     )
 
-    # Build title -> [spec, env] lookup for FDR labelling
+    # Build title -> [spec, env] lookup for rescore labelling
     pkl_data = {d["title"]: [d["spec"], d["env"]] for d in raw_data}
 
     # 3. Output paths
-    fdr_train_path = args.test_data.replace("_test.pkl", "_fdr_train.pkl")
-    fdr_test_path = args.test_data.replace("_test.pkl", "_fdr_test.pkl")
+    rescore_train_path = args.test_data.replace("_test.pkl", "_rescore_train.pkl")
+    rescore_test_path = args.test_data.replace("_test.pkl", "_rescore_test.pkl")
 
-    # 4. Prepare FDR splits
+    # 4. Prepare rescore splits
     for split_name, indices, out_path in [
-        ("train", train_indices, fdr_train_path),
-        ("test", test_indices, fdr_test_path),
+        ("train", train_indices, rescore_train_path),
+        ("test", test_indices, rescore_test_path),
     ]:
-        print(f"\n===== FDR {split_name} split ({len(indices)} spectra) =====")
-        prepare_fdr_split(
+        print(f"\n===== Rescore {split_name} split ({len(indices)} spectra) =====")
+        prepare_rescore_split(
             args.test_data, indices, model, device_1st, config, out_path, pkl_data
         )

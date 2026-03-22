@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from dataset import MGFDataset
-from model_tcn import MS2FNet_tcn, FormulaEncoder, SiameseFDRHead
+from model_tcn import MS2FNet_tcn, FormulaEncoder, RescoreHead
 from utils import (
     formula_refinement,
     mass_calculator,
@@ -72,22 +72,22 @@ def test_step(model, loader, device):
     )
 
 
-def rerank_by_siamese(
-    spec_encoder, formula_encoder, fdr_head, spec, env, refined_results, device, K
+def rescore_candidates(
+    spec_encoder, formula_encoder, rescore_head, spec, env, refined_results, device, K
 ):
-    """Rerank candidates using the Siamese interaction head.
+    """Rescore candidates using the Siamese interaction head.
 
-    Score = sigmoid(SiameseFDRHead(z_spec ⊙ FormulaEncoder(formula_vec))).
-    Candidates are ranked by siamese score directly.
+    Score = sigmoid(RescoreHead(z_spec ⊙ FormulaEncoder(formula_vec))).
+    Candidates are ranked by rescore score directly.
     """
     formula_encoder.eval()
-    fdr_head.eval()
+    rescore_head.eval()
     spec_encoder.eval()
 
     refine_f = [f for f in refined_results["formula"] if f is not None]
     refine_m = [m for m in refined_results["mass"] if m is not None]
     if not refine_f:
-        refined_results["siamese"] = [0.0] * K
+        refined_results["rescore"] = [0.0] * K
         return refined_results
 
     f_vecs = torch.from_numpy(np.array([formula_to_vector(s) for s in refine_f]))
@@ -104,22 +104,22 @@ def rerank_by_siamese(
         z_form = formula_encoder(f_t)  # (K, D)
 
         interaction = z_spec_rep * z_form  # (K, D)
-        logits = fdr_head(interaction)  # (K,)
-        siamese_scores = torch.sigmoid(logits).cpu().numpy()
+        logits = rescore_head(interaction)  # (K,)
+        rescore_scores = torch.sigmoid(logits).cpu().numpy()
 
     ranked = sorted(
-        zip(siamese_scores, refine_f, refine_m),
+        zip(rescore_scores, refine_f, refine_m),
         key=lambda x: x[0],
         reverse=True,
     )
-    sorted_siamese, sorted_f, sorted_m = map(list, zip(*ranked))
+    sorted_rescore, sorted_f, sorted_m = map(list, zip(*ranked))
 
     while len(sorted_f) < K:
         sorted_f.append(None)
-        sorted_siamese.append(0.0)
+        sorted_rescore.append(0.0)
         sorted_m.append(None)
 
-    return {"formula": sorted_f, "mass": sorted_m, "siamese": sorted_siamese}
+    return {"formula": sorted_f, "mass": sorted_m, "rescore": sorted_rescore}
 
 
 def init_random_seed(seed):
@@ -141,10 +141,10 @@ if __name__ == "__main__":
         "--resume_path", type=str, required=True, help="Path to pretrained TCN model"
     )
     parser.add_argument(
-        "--fdr_resume_path",
+        "--rescore_resume_path",
         type=str,
         required=True,
-        help="Path to pretrained Siamese FDR model",
+        help="Path to pretrained rescore model",
     )
     parser.add_argument(
         "--buddy_path", type=str, default="", help="Path to saved BUDDY's results"
@@ -208,20 +208,20 @@ if __name__ == "__main__":
     else:
         model.load_state_dict(state_dict)
 
-    # 3. Siamese FDR model (FormulaEncoder + SiameseFDRHead)
+    # 3. Rescore model (FormulaEncoder + RescoreHead)
     formula_encoder = FormulaEncoder(config["model"]).to(device_1st)
-    fdr_head = SiameseFDRHead(config["model"]).to(device_1st)
+    rescore_head = RescoreHead(config["model"]).to(device_1st)
     n_params = sum(p.numel() for p in formula_encoder.parameters()) + sum(
-        p.numel() for p in fdr_head.parameters()
+        p.numel() for p in rescore_head.parameters()
     )
-    print(f"# Siamese FDR Params: {n_params}")
+    print(f"# Rescore Params: {n_params}")
 
-    print("Loading the best Siamese FDR model...")
-    ckpt = torch.load(args.fdr_resume_path, map_location=device_1st)
+    print("Loading the best rescore model...")
+    ckpt = torch.load(args.rescore_resume_path, map_location=device_1st)
     formula_encoder.load_state_dict(ckpt["formula_encoder_state_dict"])
-    fdr_head.load_state_dict(ckpt["fdr_head_state_dict"])
+    rescore_head.load_state_dict(ckpt["rescore_head_state_dict"])
     formula_encoder.eval()
-    fdr_head.eval()
+    rescore_head.eval()
 
     # 4. Formula Prediction
     (
@@ -261,8 +261,8 @@ if __name__ == "__main__":
         "Refined Mass ({})".format(str(k)): []
         for k in range(config["post_processing"]["top_k"])
     }
-    siamese_refined = {
-        "Siamese ({})".format(str(k)): []
+    rescore_refined = {
+        "Rescore ({})".format(str(k)): []
         for k in range(config["post_processing"]["top_k"])
     }
     running_time = []
@@ -375,10 +375,10 @@ if __name__ == "__main__":
             refine_atom_num,
         )
 
-        refined_results = rerank_by_siamese(
+        refined_results = rescore_candidates(
             model,
             formula_encoder,
-            fdr_head,
+            rescore_head,
             spec,
             env,
             refined_results,
@@ -390,12 +390,12 @@ if __name__ == "__main__":
             zip(
                 refined_results["formula"],
                 refined_results["mass"],
-                refined_results["siamese"],
+                refined_results["rescore"],
             )
         ):
             formula_redined[f"Refined Formula ({i})"].append(refined_f)
             mass_redined[f"Refined Mass ({i})"].append(refined_m)
-            siamese_refined[f"Siamese ({i})"].append(refined_s)
+            rescore_refined[f"Rescore ({i})"].append(refined_s)
         refinement_time = time.time() - start_time
         running_time.append(prediction_time + refinement_time)
 
@@ -412,7 +412,7 @@ if __name__ == "__main__":
         "Running Time": running_time,
     }
     res_df = pd.DataFrame(
-        {**out_dict, **formula_redined, **mass_redined, **siamese_refined}
+        {**out_dict, **formula_redined, **mass_redined, **rescore_refined}
     )
     res_df.to_csv(args.result_path, index=False)
     print("Done!")

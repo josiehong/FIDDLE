@@ -98,7 +98,7 @@ train:
   patience: 5
   noised_times: 3
   
-train_fdr:
+train_rescore:
   epochs: 10
   batch_size: 128
   num_workers: 8

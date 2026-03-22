@@ -31,14 +31,14 @@ python mgf_instances.py --input_path ./data/noised/noised_orbitrap_test.mgf \
 python run_fiddle.py --test_data ./data/noised/noised_qtof_test.mgf \
 --config_path ./config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_100724.pt \
---fdr_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
+--rescore_resume_path ./check_point/fiddle_fdr_qtof_100724.pt \
 --result_path ./result/fiddle_qtof_noised_100724.csv --device 6
 
 # For Orbitrap
 python run_fiddle.py --test_data ./data/noised/noised_orbitrap_test.mgf \
 --config_path ./config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_100724.pt \
---fdr_resume_path ./check_point/fiddle_fdr_orbitrap_100724.pt \
+--rescore_resume_path ./check_point/fiddle_fdr_orbitrap_100724.pt \
 --result_path ./result/fiddle_orbitrap_noised_100724.csv --device 7
 
 # ----------------------------------------

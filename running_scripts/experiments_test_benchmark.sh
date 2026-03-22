@@ -60,16 +60,16 @@ nohup python -u train_tcn_gpus_cl.py \
 --device 6 7 >> fiddle_tcn_qtof_092724.out 
 
 # FIDDLES (fdr model)
-python prepare_fdr.py \
+python prepare_rescore.py \
 --train_data ./data/cl_pkl_0927/qtof_maxmin_train.pkl \
 --test_data ./data/cl_pkl_0927/qtof_maxmin_test.pkl \
 --config_path ./config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_092724.pt \
---fdr_dir ./data/cl_pkl_0927/ \
+--rescore_dir ./data/cl_pkl_0927/ \
 --device 4 5
-python train_fdr.py \
---train_data ./data/cl_pkl_0927/qtof_maxmin_fdr_train.pkl \
---test_data ./data/cl_pkl_0927/qtof_maxmin_fdr_test.pkl \
+python train_rescore.py \
+--train_data ./data/cl_pkl_0927/qtof_maxmin_rescore_train.pkl \
+--test_data ./data/cl_pkl_0927/qtof_maxmin_rescore_test.pkl \
 --config_path ./config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_092724.pt \
 --transfer \
@@ -91,16 +91,16 @@ python -u train_tcn_gpus_cl.py \
 --device 4 5 
 
 # FIDDLES (fdr model)
-python prepare_fdr.py \
+python prepare_rescore.py \
 --train_data ./data/cl_pkl_0927/orbitrap_maxmin_train.pkl \
 --test_data ./data/cl_pkl_0927/orbitrap_maxmin_test.pkl \
 --config_path ./config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_092724.pt \
---fdr_dir ./data/cl_pkl_0927/ \
+--rescore_dir ./data/cl_pkl_0927/ \
 --device 4 5 
-python train_fdr.py \
---train_data ./data/cl_pkl_0927/orbitrap_maxmin_fdr_train.pkl \
---test_data ./data/cl_pkl_0927/orbitrap_maxmin_fdr_test.pkl \
+python train_rescore.py \
+--train_data ./data/cl_pkl_0927/orbitrap_maxmin_rescore_train.pkl \
+--test_data ./data/cl_pkl_0927/orbitrap_maxmin_rescore_test.pkl \
 --config_path ./config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_092724.pt \
 --transfer \
@@ -116,27 +116,27 @@ python train_fdr.py \
 python run_fiddle.py --test_data ./data/casmi2016.mgf \
                 --config_path ./config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_092724.pt \
-                --fdr_resume_path ./check_point/fiddle_fdr_qtof_092724.pt \
+                --rescore_resume_path ./check_point/fiddle_fdr_qtof_092724.pt \
                 --result_path ./result/fiddle_casmi16.csv 
 
 python run_fiddle.py --test_data ./data/casmi2017.mgf \
                 --config_path ./config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_092724.pt \
-                --fdr_resume_path ./check_point/fiddle_fdr_qtof_092724.pt \
+                --rescore_resume_path ./check_point/fiddle_fdr_qtof_092724.pt \
                 --result_path ./result/fiddle_casmi17.csv 
 
 # FIDDLE + BUDDY
 python run_fiddle.py --test_data ./data/casmi2016.mgf \
                     --config_path ./config/fiddle_tcn_qtof.yml \
                     --resume_path ./check_point/fiddle_tcn_qtof_092724.pt \
-                    --fdr_resume_path ./check_point/fiddle_fdr_qtof_092724.pt \
+                    --rescore_resume_path ./check_point/fiddle_fdr_qtof_092724.pt \
                     --buddy_path ./run_buddy/buddy_casmi2016.csv \
                     --result_path ./result/two_casmi16.csv 
 
 python run_fiddle.py --test_data ./data/casmi2017.mgf \
                     --config_path ./config/fiddle_tcn_qtof.yml \
                     --resume_path ./check_point/fiddle_tcn_qtof_092724.pt \
-                    --fdr_resume_path ./check_point/fiddle_fdr_qtof_092724.pt \
+                    --rescore_resume_path ./check_point/fiddle_fdr_qtof_092724.pt \
                     --buddy_path ./run_buddy/buddy_casmi2017.csv \
                     --result_path ./result/two_casmi17.csv 
 
@@ -149,14 +149,14 @@ python run_fiddle.py --test_data ./data/casmi2017.mgf \
 python run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
                 --config_path ./config/fiddle_tcn_embl.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_092724.pt \
-                --fdr_resume_path ./check_point/fiddle_fdr_qtof_092724.pt \
+                --rescore_resume_path ./check_point/fiddle_fdr_qtof_092724.pt \
                 --result_path ./result/fiddle_embl.csv 
 
 # FIDDLE + BUDDY
 python run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
                 --config_path ./config/fiddle_tcn_embl.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_092724.pt \
-                --fdr_resume_path ./check_point/fiddle_fdr_qtof_092724.pt \
+                --rescore_resume_path ./check_point/fiddle_fdr_qtof_092724.pt \
                 --buddy_path ./run_buddy/buddy_embl.csv \
                 --result_path ./result/two_embl.csv 
 
