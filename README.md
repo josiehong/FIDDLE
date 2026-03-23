@@ -102,7 +102,7 @@ All scripts should be run from the repository root (`FIDDLE/`).
 | `running_scripts/experiments_test_noised.sh` | Evaluate under noise conditions |
 | `running_scripts/experiments_ablation_study.sh` | Run ablation study |
 | `running_scripts/experiments_demo.sh` | Run demo experiment |
-| `running_scripts/retrain_031826.sh` | Train TCN and rescore models for both Orbitrap and Q-TOF |
+| `running_scripts/train_released_models.sh` | Train TCN and rescore models for both Orbitrap and Q-TOF |
 
 For training from scratch, see the train scripts (`train_tcn_gpus.py`, `train_tcn_gpus_cl.py`, `train_rescore.py`) and the corresponding config files in `./config/`.
 
