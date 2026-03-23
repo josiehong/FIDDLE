@@ -1,14 +1,16 @@
 # FIDDLE
 
 [![DOI](https://zenodo.org/badge/720138825.svg)](https://doi.org/10.5281/zenodo.17172711)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 **F**ormula **ID**entification from tandem mass spectra by **D**eep **LE**arning
 
-The source code for the training and evaluation of FIDDLE, as well as for the inference of FIDDLE using results from SIRIUS and BUDDY, is provided (see detailed commands in `./running_scripts/`). A PyPI package and a website-based service for FIDDLE will be available soon. 
+FIDDLE is a deep learning method for predicting molecular formulas from MS/MS spectra. This repository contains the full research codebase for model training, evaluation, and paper reproduction.
 
-Paper: https://www.nature.com/articles/s41467-025-66060-9
+- **Paper:** [Nature Communications (2025)](https://www.nature.com/articles/s41467-025-66060-9)
+- **End-user CLI:** [msfiddle](https://github.com/josiehong/msfiddle)
 
-Command-line tool: https://pypi.org/project/msfiddle/
+> **Breaking change (v2.0.0):** The rescore model has been redesigned (Siamese architecture), see details in [CHANGELOG.md](./CHANGELOG.md).
 
 ## Set up
 
@@ -30,10 +32,10 @@ To use the pre-trained models, please use the following scripts to download the 
 
 - **Orbitrap models**:
   - `fiddle_tcn_orbitrap.pt`: formula prediction model on Orbitrap spectra
-  - `fiddle_fdr_orbitrap.pt`: confidence score prediction model on Orbitrap spectra
+  - `fiddle_rescore_orbitrap.pt`: rescore model on Orbitrap spectra
 - **Q-TOF models**:
   - `fiddle_tcn_qtof.pt`: formula prediction model on Q-TOF spectra
-  - `fiddle_fdr_qtof.pt`: confidence score prediction model on Q-TOF spectra
+  - `fiddle_rescore_qtof.pt`: rescore model on Q-TOF spectra
 
 ```bash
 bash ./running_scripts/download_models.sh
@@ -70,7 +72,7 @@ END IONS
 python run_fiddle.py --test_data ./demo/input_msms.mgf \
                     --config_path ./config/fiddle_tcn_orbitrap.yml \
                     --resume_path ./check_point/fiddle_tcn_orbitrap.pt \
-                    --fdr_resume_path ./check_point/fiddle_fdr_orbitrap.pt \
+                    --rescore_resume_path ./check_point/fiddle_rescore_orbitrap.pt \
                     --result_path ./demo/output_fiddle.csv --device 0
 ```
 
@@ -80,11 +82,29 @@ If you'd like to integrate the results from SIRIUS and BUDDY, please organize th
 python run_fiddle.py --test_data ./demo/input_msms.mgf \
                     --config_path ./config/fiddle_tcn_orbitrap.yml \
                     --resume_path ./check_point/fiddle_tcn_orbitrap.pt \
-                    --fdr_resume_path ./check_point/fiddle_fdr_orbitrap.pt \
+                    --rescore_resume_path ./check_point/fiddle_rescore_orbitrap.pt \
                     --buddy_path ./demo/output_buddy.csv \
                     --sirius_path ./demo/output_sirius.csv \
                     --result_path ./demo/output_fiddle_all.csv --device 0
 ```
+
+See [`test_caffeine.py`](./test_caffeine.py) for a worked example running FIDDLE on a caffeine Orbitrap spectrum fetched live from GNPS.
+
+## Reproduce paper results
+
+All scripts should be run from the repository root (`FIDDLE/`).
+
+| Script | Description |
+|---|---|
+| `running_scripts/experiments_test_benchmark.sh` | Evaluate on external benchmarks (CASMI 2016, CASMI 2017, EMBL-MCF 2.0) |
+| `running_scripts/experiments_test_nist23.sh` | Evaluate on NIST23 |
+| `running_scripts/experiments_test_chimeric.sh` | Evaluate on chimeric spectra |
+| `running_scripts/experiments_test_noised.sh` | Evaluate under noise conditions |
+| `running_scripts/experiments_ablation_study.sh` | Run ablation study |
+| `running_scripts/experiments_demo.sh` | Run demo experiment |
+| `running_scripts/train_released_models.sh` | Train TCN and rescore models for both Orbitrap and Q-TOF |
+
+For training from scratch, see the train scripts (`train_tcn_gpus.py`, `train_tcn_gpus_cl.py`, `train_rescore.py`) and the corresponding config files in `./config/`.
 
 ## Citation
 

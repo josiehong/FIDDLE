@@ -1,0 +1,20 @@
+name: fiddle
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pytorch::pytorch=2.2          # CPU build; no torchvision/torchaudio needed
+  - numpy<2
+  - pandas
+  - scipy
+  - scikit-learn
+  - rdkit
+  - pyyaml
+  - requests
+  - tqdm
+  - pip:
+      - pyteomics==4.7
+      - molmass
+      - pyopenms>=3.2.0           # optional — only needed for data-prep scripts (3.1.0 unavailable on arm64)

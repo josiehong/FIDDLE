@@ -56,7 +56,7 @@ encoding:
     '[M-H-CO2]-': '-1' 
     '[M-CHO2]-': '-1' 
     '[M-H-H2O]-': '-1'
-    '[M-H2O-H]+': '-1'
+    '[M-H2O-H]-': '-1'
 
 model: 
   resolution: 0.2
@@ -98,7 +98,7 @@ train:
   patience: 5
   noised_times: 3
   
-train_fdr:
+train_rescore:
   epochs: 10
   batch_size: 128
   num_workers: 8

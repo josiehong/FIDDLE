@@ -48,9 +48,9 @@ mona_orbitrap:
   min_atom_num: 10
   ppm_tolerance: 5
 
-gnps_orbitrap: 
+gnps_orbitrap:
   instrument_type: ['hcd']
-  instrument: ['orbitrap']
+  instrument: ['orbitrap', 'ftms']
   atom_type: ['C', 'O', 'N', 'H', 'P', 'S', 'F', 'Cl', 'B', 'Br', 'I', 'Na', 'K']
   precursor_type: ['[M+H]+', '[M-H]-', '[M+H-H2O]+', '[M+Na]+', '[M+2H]2+', '[2M+H]+', '[2M-H]-', '[M-H2O+H]+', '[M-H2O-H]-']
   min_mz: 50
@@ -94,10 +94,10 @@ encoding:
     '[M+H-CH2O2]+': '+1'
     '[M+H-CH4O2]+': '+1'
 
-    '[M-H-CO2]-': '-1' 
-    '[M-CHO2]-': '-1' 
+    '[M-H-CO2]-': '-1'
+    '[M-CHO2]-': '-1'
     '[M-H-H2O]-': '-1'
-    '[M-H2O-H]+': '-1'
+    '[M-H2O-H]-': '-1'
 
 model: 
   resolution: 0.2
@@ -116,7 +116,8 @@ model:
   ce_embedding_dim: 4
   mass_embedding_dim: 4
   embedding_dim: 512
-  
+  formula_dim: 64
+
   formula_decoder_layers: [416, 208, 104, 52, 26]
   mass_decoder_layers: [416, 208, 104, 26, 13]
   atomnum_decoder_layers: [416, 208, 104, 26, 13]
@@ -132,19 +133,19 @@ train:
   epochs: 500
   batch_size: 512 # 128
   num_workers: 8
-  lr: 0.002 # 0.001
+  lr: 0.001
   weight_decay: 0.01
   warmup_ratio: 0.1
   early_stop_step: 10
   patience: 5
   noised_times: 0
   
-train_fdr:
+train_rescore:
   epochs: 100
   batch_size: 128
   num_workers: 8
   lr: 0.0001
-  early_stop_step: 10
+  early_stop_step: 5
   
 # ------------------------
 # postprocessing settings

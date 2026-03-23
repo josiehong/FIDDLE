@@ -131,7 +131,7 @@ encoding:
     '[M-H-CO2]-': '-1' 
     '[M-CHO2]-': '-1' 
     '[M-H-H2O]-': '-1'
-    '[M-H2O-H]+': '-1'
+    '[M-H2O-H]-': '-1'
 
 model: 
   resolution: 0.2
@@ -150,7 +150,8 @@ model:
   ce_embedding_dim: 4
   mass_embedding_dim: 4
   embedding_dim: 512
-  
+  formula_dim: 64
+
   formula_decoder_layers: [416, 208, 104, 52, 26, 13]
   mass_decoder_layers: [416, 208, 104, 26, 13, 1]
   atomnum_decoder_layers: [416, 208, 104, 26, 13, 1]
@@ -173,12 +174,12 @@ train:
   patience: 5
   noised_times: 3
   
-train_fdr:
+train_rescore:
   epochs: 100
   batch_size: 128
   num_workers: 8
   lr: 0.0001
-  early_stop_step: 10
+  early_stop_step: 5
 
 # ------------------------
 # postprocessing settings
