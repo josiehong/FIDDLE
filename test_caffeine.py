@@ -47,13 +47,6 @@ MODELS = {
             FIDDLE_DIR, "check_point", "fiddle_rescore_orbitrap_031826.pt"
         ),
     },
-    "qtof": {
-        "config": os.path.join(FIDDLE_DIR, "config", "fiddle_tcn_qtof.yml"),
-        "tcn": os.path.join(FIDDLE_DIR, "check_point", "fiddle_tcn_qtof_031826.pt"),
-        "rescore": os.path.join(
-            FIDDLE_DIR, "check_point", "fiddle_rescore_qtof_031826.pt"
-        ),
-    },
 }
 
 # ---------------------------------------------------------------------------
@@ -376,9 +369,7 @@ if __name__ == "__main__":
     print(f"CE        : {spec['collision_energy']}")
     print(f"Peaks     : {len(spec['peaks'])}")
 
-    for instrument in ("orbitrap", "qtof"):
-        config, tcn_model, rescore_fe, rescore_hd = load_models(instrument)
-        print(f"\n{'='*60}")
-        print(f"Model: {instrument.upper()}")
-        result = predict(spec, config, tcn_model, rescore_fe, rescore_hd)
-        print_result(result)
+    config, tcn_model, rescore_fe, rescore_hd = load_models("orbitrap")
+    print(f"\n{'='*60}")
+    result = predict(spec, config, tcn_model, rescore_fe, rescore_hd)
+    print_result(result)

@@ -88,6 +88,8 @@ python run_fiddle.py --test_data ./demo/input_msms.mgf \
                     --result_path ./demo/output_fiddle_all.csv --device 0
 ```
 
+See [`test_caffeine.py`](./test_caffeine.py) for a worked example running FIDDLE on a caffeine Orbitrap spectrum fetched live from GNPS.
+
 ## Reproduce paper results
 
 All scripts should be run from the repository root (`FIDDLE/`).
