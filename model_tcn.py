@@ -280,7 +280,7 @@ class FormulaEncoder(nn.Module):
 
     def __init__(self, config):
         super(FormulaEncoder, self).__init__()
-        input_dim = config["output_dim"]       # 13 atom types
+        input_dim = config["output_dim"]  # 13 atom types
         embedding_dim = config["embedding_dim"]  # 512
 
         self.net = nn.Sequential(

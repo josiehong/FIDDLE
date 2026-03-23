@@ -48,7 +48,17 @@ from utils import ATOMS_INDEX_re, formula_to_dict, formula_refinement
 
 def _refine_worker(args):
     """Module-level worker for multiprocessing: runs formula_refinement for one spectrum."""
-    pred_f, m, mass_tolerance, ppm_mode, top_k, max_miss, time_out, atom_types_base, atom_nums_base = args
+    (
+        pred_f,
+        m,
+        mass_tolerance,
+        ppm_mode,
+        top_k,
+        max_miss,
+        time_out,
+        atom_types_base,
+        atom_nums_base,
+    ) = args
     refine_atom_type = list(atom_types_base)
     refine_atom_num = list(atom_nums_base)
     for atom, cnt in formula_to_dict(pred_f).items():
@@ -57,8 +67,15 @@ def _refine_worker(args):
         refine_atom_type.append(atom)
         refine_atom_num.append(max(1, int(cnt)))
     refined = formula_refinement(
-        [pred_f], m, mass_tolerance, ppm_mode, top_k, max_miss, time_out,
-        refine_atom_type, refine_atom_num,
+        [pred_f],
+        m,
+        mass_tolerance,
+        ppm_mode,
+        top_k,
+        max_miss,
+        time_out,
+        refine_atom_type,
+        refine_atom_num,
     )
     return refined["formula"]  # list of top_k formula strings (or None)
 
@@ -130,10 +147,15 @@ def prepare_rescore_records(data_path, model, device, config, pkl_data, num_work
 
     worker_args = [
         (
-            pred_f, m.item(),
-            pp["mass_tolerance"], pp["ppm_mode"], top_k,
-            pp["maxium_miss_atom_num"], pp["time_out"],
-            pp["refine_atom_type"], pp["refine_atom_num"],
+            pred_f,
+            m.item(),
+            pp["mass_tolerance"],
+            pp["ppm_mode"],
+            top_k,
+            pp["maxium_miss_atom_num"],
+            pp["time_out"],
+            pp["refine_atom_type"],
+            pp["refine_atom_num"],
         )
         for pred_f, m in zip(formula_pred, mass_true)
     ]
@@ -141,14 +163,16 @@ def prepare_rescore_records(data_path, model, device, config, pkl_data, num_work
     print(f"Post-processing {len(worker_args)} spectra with {num_workers} workers...")
     with Pool(num_workers) as pool:
         results = list(
-            tqdm(pool.imap(_refine_worker, worker_args, chunksize=32),
-                 total=len(worker_args), desc="Post-processing")
+            tqdm(
+                pool.imap(_refine_worker, worker_args, chunksize=32),
+                total=len(worker_args),
+                desc="Post-processing",
+            )
         )
 
     # results[i] is a list of top_k formula strings
     formula_refined = {
-        f"Refined Formula ({k})": [r[k] for r in results]
-        for k in range(top_k)
+        f"Refined Formula ({k})": [r[k] for r in results] for k in range(top_k)
     }
 
     # Label and collect records
@@ -288,24 +312,47 @@ def main():
     parser = argparse.ArgumentParser(
         description="Prepare and augment rescore data from TCN train/test sets"
     )
-    parser.add_argument("--train_data", type=str, required=True,
-                        help="TCN training pkl (e.g. qtof_maxmin_train.pkl)")
-    parser.add_argument("--test_data", type=str, required=True,
-                        help="TCN test pkl (e.g. qtof_maxmin_test.pkl)")
+    parser.add_argument(
+        "--train_data",
+        type=str,
+        required=True,
+        help="TCN training pkl (e.g. qtof_maxmin_train.pkl)",
+    )
+    parser.add_argument(
+        "--test_data",
+        type=str,
+        required=True,
+        help="TCN test pkl (e.g. qtof_maxmin_test.pkl)",
+    )
     parser.add_argument("--config_path", type=str, required=True)
-    parser.add_argument("--resume_path", type=str, required=True,
-                        help="Pretrained TCN checkpoint")
-    parser.add_argument("--rescore_dir", type=str, required=True,
-                        help="Directory to save rescore pkls")
-    parser.add_argument("--pos_cap", type=int, default=10,
-                        help="Max positives per formula (default 10)")
-    parser.add_argument("--neg_per_pos", type=int, default=8,
-                        help="Cross-spectrum negatives to generate per positive (default 8)")
-    parser.add_argument("--tolerance", type=float, default=None,
-                        help="Override mass tolerance from config (ppm or Da)")
+    parser.add_argument(
+        "--resume_path", type=str, required=True, help="Pretrained TCN checkpoint"
+    )
+    parser.add_argument(
+        "--rescore_dir", type=str, required=True, help="Directory to save rescore pkls"
+    )
+    parser.add_argument(
+        "--pos_cap", type=int, default=10, help="Max positives per formula (default 10)"
+    )
+    parser.add_argument(
+        "--neg_per_pos",
+        type=int,
+        default=8,
+        help="Cross-spectrum negatives to generate per positive (default 8)",
+    )
+    parser.add_argument(
+        "--tolerance",
+        type=float,
+        default=None,
+        help="Override mass tolerance from config (ppm or Da)",
+    )
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--num_workers", type=int, default=8,
-                        help="CPU workers for parallel post-processing (default 8)")
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=8,
+        help="CPU workers for parallel post-processing (default 8)",
+    )
     parser.add_argument("--device", type=int, nargs="+", default=[0])
     parser.add_argument("--no_cuda", action="store_true")
     args = parser.parse_args()
@@ -346,7 +393,9 @@ def main():
     # Derive output paths from input filenames
     train_stem = os.path.basename(args.train_data).replace("_train.pkl", "")
     test_stem = os.path.basename(args.test_data).replace("_test.pkl", "")
-    rescore_train_path = os.path.join(args.rescore_dir, f"{train_stem}_rescore_train.pkl")
+    rescore_train_path = os.path.join(
+        args.rescore_dir, f"{train_stem}_rescore_train.pkl"
+    )
     rescore_test_path = os.path.join(args.rescore_dir, f"{test_stem}_rescore_test.pkl")
 
     # ── Train split: inference + augmentation ────────────────────────────────

@@ -43,12 +43,16 @@ MODELS = {
     "orbitrap": {
         "config": os.path.join(FIDDLE_DIR, "config", "fiddle_tcn_orbitrap.yml"),
         "tcn": os.path.join(FIDDLE_DIR, "check_point", "fiddle_tcn_orbitrap_031826.pt"),
-        "rescore": os.path.join(FIDDLE_DIR, "check_point", "fiddle_rescore_orbitrap_031826.pt"),
+        "rescore": os.path.join(
+            FIDDLE_DIR, "check_point", "fiddle_rescore_orbitrap_031826.pt"
+        ),
     },
     "qtof": {
         "config": os.path.join(FIDDLE_DIR, "config", "fiddle_tcn_qtof.yml"),
         "tcn": os.path.join(FIDDLE_DIR, "check_point", "fiddle_tcn_qtof_031826.pt"),
-        "rescore": os.path.join(FIDDLE_DIR, "check_point", "fiddle_rescore_qtof_031826.pt"),
+        "rescore": os.path.join(
+            FIDDLE_DIR, "check_point", "fiddle_rescore_qtof_031826.pt"
+        ),
     },
 }
 
@@ -92,7 +96,9 @@ def load_models(instrument: str) -> tuple:
         rescore_head.eval()
         print(f"  Loaded rescore model from {paths['rescore']}")
     else:
-        print(f"  WARNING: Rescore model not found at {paths['rescore']}. Rescore scores will be 0.")
+        print(
+            f"  WARNING: Rescore model not found at {paths['rescore']}. Rescore scores will be 0."
+        )
 
     print(f"  {instrument} models ready.")
     return config, tcn_model, rescore_formula_encoder, rescore_head
@@ -178,7 +184,9 @@ def write_mgf(spectrum: dict, path: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def rescore_candidates(z_spec, refined_results, K, rescore_formula_encoder, rescore_head):
+def rescore_candidates(
+    z_spec, refined_results, K, rescore_formula_encoder, rescore_head
+):
     """Rescore candidates using the Siamese element-wise interaction head.
 
     Score = sigmoid(RescoreHead(z_spec ⊙ FormulaEncoder(formula_vec))).
@@ -220,7 +228,9 @@ def rescore_candidates(z_spec, refined_results, K, rescore_formula_encoder, resc
 # ---------------------------------------------------------------------------
 
 
-def predict(spectrum: dict, config, tcn_model, rescore_formula_encoder, rescore_head) -> dict:
+def predict(
+    spectrum: dict, config, tcn_model, rescore_formula_encoder, rescore_head
+) -> dict:
     """Run full FIDDLE pipeline on one spectrum dict. Returns results dict."""
     with tempfile.NamedTemporaryFile(suffix=".mgf", delete=False, mode="w") as tmp:
         mgf_path = tmp.name
@@ -289,7 +299,9 @@ def predict(spectrum: dict, config, tcn_model, rescore_formula_encoder, rescore_
             refine_atom_num,
         )
 
-        refined = rescore_candidates(z_spec, refined, pp["top_k"], rescore_formula_encoder, rescore_head)
+        refined = rescore_candidates(
+            z_spec, refined, pp["top_k"], rescore_formula_encoder, rescore_head
+        )
         total_time = time.time() - t0
 
         predictions = []

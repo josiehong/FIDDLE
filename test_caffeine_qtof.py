@@ -45,12 +45,20 @@ RESCORE_PATH = os.path.join(FIDDLE_DIR, "check_point", "fiddle_rescore_qtof_0318
 MGF_DIR = os.path.join(FIDDLE_DIR, "data", "mgf_debug")
 
 DEFAULT_CE = "40"
-PPM_LAMBDA = 5.0
 
 # Local caffeine spectrum titles per source
 NIST_QTOF_TITLES = ["nist20_20310", "nist20_20313", "nist20_20316"]
-MONA_QTOF_TITLES = ["mona_qtof_25485", "mona_qtof_25486", "mona_qtof_25487", "mona_qtof_33932"]
-AGILENT_TITLES = ["agilent_combine_16753", "agilent_combine_16754", "agilent_combine_16755"]
+MONA_QTOF_TITLES = [
+    "mona_qtof_25485",
+    "mona_qtof_25486",
+    "mona_qtof_25487",
+    "mona_qtof_33932",
+]
+AGILENT_TITLES = [
+    "agilent_combine_16753",
+    "agilent_combine_16754",
+    "agilent_combine_16755",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +94,9 @@ def load_models():
         rescore_head.eval()
         print(f"  Loaded rescore model from {RESCORE_PATH}")
     else:
-        print(f"  WARNING: Rescore model not found at {RESCORE_PATH}. Rescore scores will be 0.")
+        print(
+            f"  WARNING: Rescore model not found at {RESCORE_PATH}. Rescore scores will be 0."
+        )
 
     print("  Q-TOF models ready.")
     return config, tcn_model, rescore_formula_encoder, rescore_head
@@ -95,7 +105,6 @@ def load_models():
 # ---------------------------------------------------------------------------
 # Spectrum loading
 # ---------------------------------------------------------------------------
-
 
 
 def load_local_spectra(mgf_path, titles, source_name):
@@ -121,7 +130,9 @@ def load_local_spectra(mgf_path, titles, source_name):
                             "source": source_name,
                             "precursor_mz": float(current.get("precursor_mz", 0)),
                             "precursor_type": current.get("precursor_type", "[M+H]+"),
-                            "collision_energy": current.get("collision_energy", DEFAULT_CE),
+                            "collision_energy": current.get(
+                                "collision_energy", DEFAULT_CE
+                            ),
                             "instrument": current.get("source_instrument", "unknown"),
                             "peaks": peaks,
                         }
@@ -159,7 +170,9 @@ def write_mgf(spectrum, path):
         f.write("END IONS\n")
 
 
-def rescore_candidates(z_spec, refined_results, K, rescore_formula_encoder, rescore_head):
+def rescore_candidates(
+    z_spec, refined_results, K, rescore_formula_encoder, rescore_head
+):
     refine_f = [f for f in refined_results["formula"] if f is not None]
     refine_m = [m for m in refined_results["mass"] if m is not None]
     if not refine_f or rescore_formula_encoder is None:
@@ -199,13 +212,27 @@ def predict(spectrum, config, tcn_model, rescore_formula_encoder, rescore_head):
     try:
         dataset = MGFDataset(mgf_path, config["encoding"])
         if len(dataset) == 0:
-            return {"error": "Spectrum filtered out (need ≥5 peaks, precursor 50–1500 Da)."}
+            return {
+                "error": "Spectrum filtered out (need ≥5 peaks, precursor 50–1500 Da)."
+            }
 
         title, exp_pre_type, spec_arr, env_arr, neutral_add_arr = dataset[0]
 
-        spec_t = torch.from_numpy(np.array(spec_arr)).unsqueeze(0).to(DEVICE, dtype=torch.float32)
-        env_t = torch.from_numpy(np.array(env_arr)).unsqueeze(0).to(DEVICE, dtype=torch.float32)
-        na_t = torch.from_numpy(np.array(neutral_add_arr)).unsqueeze(0).to(DEVICE, dtype=torch.float32)
+        spec_t = (
+            torch.from_numpy(np.array(spec_arr))
+            .unsqueeze(0)
+            .to(DEVICE, dtype=torch.float32)
+        )
+        env_t = (
+            torch.from_numpy(np.array(env_arr))
+            .unsqueeze(0)
+            .to(DEVICE, dtype=torch.float32)
+        )
+        na_t = (
+            torch.from_numpy(np.array(neutral_add_arr))
+            .unsqueeze(0)
+            .to(DEVICE, dtype=torch.float32)
+        )
 
         t0 = time.time()
         with torch.no_grad():
@@ -257,14 +284,12 @@ def predict(spectrum, config, tcn_model, rescore_formula_encoder, rescore_head):
                 continue
             ppm_error = abs(float(mass_val) - float(m)) / float(m) * 1e6
             rescore_score = float(refined["rescore"][i])
-            combined = rescore_score * np.exp(-ppm_error / PPM_LAMBDA)
             predictions.append(
                 {
                     "formula": f,
                     "mass": round(float(mass_val), 5),
                     "ppm_error": round(ppm_error, 2),
                     "rescore": round(rescore_score, 4),
-                    "combined": round(float(combined), 4),
                 }
             )
 
@@ -306,14 +331,6 @@ def print_result(result):
             f"  rescore={p['rescore']:.4f}{_marker(p['formula'])}"
         )
 
-    combined = sorted(preds, key=lambda p: p["combined"], reverse=True)
-    print(f"  Combined (rescore × exp(−ppm/{PPM_LAMBDA})):")
-    for i, p in enumerate(combined):
-        print(
-            f"    {i+1}. {p['formula']:<20}  ppm={p['ppm_error']:5.2f}"
-            f"  combined={p['combined']:.4f}{_marker(p['formula'])}"
-        )
-
 
 # ---------------------------------------------------------------------------
 # Main
@@ -331,7 +348,9 @@ if __name__ == "__main__":
         os.path.join(MGF_DIR, "filtered_mona_qtof.mgf"), MONA_QTOF_TITLES, "mona_qtof"
     )
     all_spectra += load_local_spectra(
-        os.path.join(MGF_DIR, "filtered_agilent_qtof.mgf"), AGILENT_TITLES, "agilent_qtof"
+        os.path.join(MGF_DIR, "filtered_agilent_qtof.mgf"),
+        AGILENT_TITLES,
+        "agilent_qtof",
     )
 
     if not all_spectra:
