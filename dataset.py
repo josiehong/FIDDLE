@@ -396,6 +396,7 @@ class MGFDataset(Dataset):
         return vector
 
 
+
 class RescoreDataset(Dataset):
     """Dataset for FDR model training and evaluation.
 

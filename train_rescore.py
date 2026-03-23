@@ -1,11 +1,10 @@
-"""Train a Siamese rescore model (interaction head + BCE).
+"""Train a Siamese rescore model (element-wise interaction + BCE).
 
 Architecture
 ------------
-1. Frozen spectrum encoder (MS2FNet_tcn) → z_spec  (L2-normalised, D-dim)
-2. Trainable FormulaEncoder              → z_form  (L2-normalised, D-dim)
-3. interaction = z_spec ⊙ z_form         (element-wise product, D-dim)
-4. RescoreHead(interaction)              → scalar logit → sigmoid → BCE
+1. Frozen spectrum encoder (MS2FNet_tcn) → z_spec  (L2-normalised, 512-dim)
+2. Trainable FormulaEncoder              → z_form  (L2-normalised, 512-dim)
+3. score = sigmoid(RescoreHead(z_spec ⊙ z_form))
 
 Only FormulaEncoder and RescoreHead are trained.  The spectrum encoder
 weights are frozen at the pre-trained TCN checkpoint.
@@ -45,7 +44,7 @@ def train_step(spec_encoder, formula_encoder, rescore_head, loader, optimizer, d
     rescore_head.train()
     spec_encoder.eval()
 
-    criterion = nn.BCELoss()
+    criterion = nn.BCEWithLogitsLoss()
     total_loss = 0.0
     total_acc = 0
     y_true = []
@@ -68,12 +67,11 @@ def train_step(spec_encoder, formula_encoder, rescore_head, loader, optimizer, d
                 z_specs, _, _, _, _ = spec_encoder(x, env)
                 z_specs = F.normalize(z_specs, dim=1)
 
-            z_forms = formula_encoder(f)  # (B, D), L2-normed
-            interaction = z_specs * z_forms  # element-wise product (B, D)
-            logits = rescore_head(interaction)  # (B,)
+            z_forms = formula_encoder(f)              # (B, 512), L2-normalised
+            logits = rescore_head(z_specs * z_forms)  # (B,)
             y_hat = torch.sigmoid(logits)
 
-            loss = criterion(y_hat, y)
+            loss = criterion(logits, y)
             if torch.isnan(loss):
                 bar.update(1)
                 continue
@@ -99,7 +97,7 @@ def eval_step(spec_encoder, formula_encoder, rescore_head, loader, device):
     rescore_head.eval()
     spec_encoder.eval()
 
-    criterion = nn.BCELoss()
+    criterion = nn.BCEWithLogitsLoss()
     total_loss = 0.0
     total_acc = 0
     y_true = []
@@ -120,11 +118,10 @@ def eval_step(spec_encoder, formula_encoder, rescore_head, loader, device):
             z_specs = F.normalize(z_specs, dim=1)
 
             z_forms = formula_encoder(f)
-            interaction = z_specs * z_forms
-            logits = rescore_head(interaction)
+            logits = rescore_head(z_specs * z_forms)
             y_hat = torch.sigmoid(logits)
 
-            loss = criterion(y_hat, y)
+            loss = criterion(logits, y)
             total_loss += loss.item() * x.size(0)
             total_acc += torch.eq(y.round(), y_hat.round()).float().sum().item()
             y_true.extend(y.cpu().numpy())

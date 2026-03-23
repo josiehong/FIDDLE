@@ -116,7 +116,8 @@ model:
   ce_embedding_dim: 4
   mass_embedding_dim: 4
   embedding_dim: 512
-  
+  formula_dim: 64
+
   formula_decoder_layers: [416, 208, 104, 52, 26]
   mass_decoder_layers: [416, 208, 104, 26, 13]
   atomnum_decoder_layers: [416, 208, 104, 26, 13]

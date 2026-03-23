@@ -268,70 +268,56 @@ class MS2FNet_tcn(nn.Module):
 
 
 class FormulaEncoder(nn.Module):
-    """Small MLP that maps a formula atom-count vector into the same L2-normalised
-    embedding space as the MS2FNet_tcn spectrum encoder.
+    """MLP that maps a formula atom-count vector into a 512-dim L2-normalised
+    embedding matching z_spec for element-wise interaction.
 
-    Used by the Siamese FDR model: FormulaEncoder(formula_vector) is combined with
-    the spectrum embedding via element-wise product, then scored by RescoreHead.
-
-    Architecture: input_dim → 64 → 256 → embedding_dim, each layer followed by
-    LayerNorm + ReLU except the final projection which is just linear + L2-norm.
+    Architecture: input_dim → 128 → embedding_dim, L2-normalised output.
 
     Args:
-        config: model config dict; uses 'output_dim' (formula vector length) and
-                'embedding_dim' (target embedding size, matching the TCN encoder).
+        config: model config dict; uses 'output_dim' (formula vector length, 13)
+                and 'embedding_dim' (output size, 512).
     """
 
     def __init__(self, config):
         super(FormulaEncoder, self).__init__()
-        input_dim = config["output_dim"]  # 13 atom types
-        emb_dim = config["embedding_dim"]  # 512
+        input_dim = config["output_dim"]       # 13 atom types
+        embedding_dim = config["embedding_dim"]  # 512
 
         self.net = nn.Sequential(
-            nn.Linear(input_dim, 64),
-            nn.LayerNorm(64),
+            nn.Linear(input_dim, 128),
             nn.ReLU(),
-            nn.Linear(64, 256),
-            nn.LayerNorm(256),
-            nn.ReLU(),
-            nn.Linear(256, emb_dim),
+            nn.Linear(128, embedding_dim),
         )
 
     def forward(self, f):
         """Args:
             f: Formula tensor (B, input_dim).
         Returns:
-            L2-normalised embedding (B, embedding_dim).
+            L2-normalised formula embedding (B, embedding_dim).
         """
-        z = self.net(f)
-        return F.normalize(z, dim=1)
+        return F.normalize(self.net(f), dim=1)
 
 
 class RescoreHead(nn.Module):
-    """MLP scoring head for the Siamese FDR model.
+    """MLP scoring head for the Siamese rescore model.
 
-    Takes the element-wise product z_spec ⊙ z_form (both L2-normalised,
-    embedding_dim-dimensional) and maps it to a scalar logit.  Apply sigmoid
-    externally to obtain a probability.
+    Takes the element-wise product z_spec ⊙ z_form and maps it to a scalar logit.
 
-    Architecture: embedding_dim → 256 → 64 → 1, each hidden layer followed
-    by ReLU + Dropout(0.2).
+    Architecture: embedding_dim → 256 → 64 → 1.
 
     Args:
-        config: model config dict; uses 'embedding_dim' (input dimension, e.g. 512).
+        config: model config dict; uses 'embedding_dim' (512).
     """
 
     def __init__(self, config):
         super(RescoreHead, self).__init__()
-        emb_dim = config["embedding_dim"]  # 512
+        embedding_dim = config["embedding_dim"]  # 512
 
         self.net = nn.Sequential(
-            nn.Linear(emb_dim, 256),
+            nn.Linear(embedding_dim, 256),
             nn.ReLU(),
-            nn.Dropout(0.2),
             nn.Linear(256, 64),
             nn.ReLU(),
-            nn.Dropout(0.2),
             nn.Linear(64, 1),
         )
 
