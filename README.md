@@ -3,13 +3,18 @@
 [![DOI](https://zenodo.org/badge/720138825.svg)](https://doi.org/10.5281/zenodo.17172711)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-**F**ormula **ID**entification from tandem mass spectra by **D**eep **LE**arning
+<table><tr>
+<td>
 
 FIDDLE is a deep learning method for predicting molecular formulas from MS/MS spectra. This repository contains the full research codebase for model training, evaluation, and paper reproduction.
 
 - **Paper:** [Nature Communications (2025)](https://www.nature.com/articles/s41467-025-66060-9)
 - **End-user CLI:** [msfiddle](https://github.com/josiehong/msfiddle)
 - **Try this demo!** [FIDDLE on Hugging Face](https://huggingface.co/spaces/J0siee/FIDDLE)
+
+</td>
+<td align="right"><img src="img/fiddle_logo.png" width="320"/></td>
+</tr></table>
 
 > **Breaking change (v2.0.0):** The rescore model has been redesigned (Siamese architecture), see details in [CHANGELOG.md](./CHANGELOG.md).
 
