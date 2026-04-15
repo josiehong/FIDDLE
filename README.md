@@ -1,10 +1,10 @@
 # FIDDLE
 
-[![DOI](https://zenodo.org/badge/720138825.svg)](https://doi.org/10.5281/zenodo.17172711)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.19181279-blue)](https://doi.org/10.5281/zenodo.19181279)
+[![Release](https://img.shields.io/github/v/release/JosieHong/FIDDLE?label=Release)](https://github.com/JosieHong/FIDDLE/releases)
 
-<table><tr>
-<td>
+[<img src="img/fiddle_logo.png" align="right" width="220">](https://github.com/JosieHong/FIDDLE)
 
 FIDDLE is a deep learning method for predicting molecular formulas from MS/MS spectra. This repository contains the full research codebase for model training, evaluation, and paper reproduction.
 
@@ -12,9 +12,7 @@ FIDDLE is a deep learning method for predicting molecular formulas from MS/MS sp
 - **End-user CLI:** [msfiddle](https://github.com/josiehong/msfiddle)
 - **Try this demo!** [FIDDLE on Hugging Face](https://huggingface.co/spaces/J0siee/FIDDLE)
 
-</td>
-<td align="right"><img src="img/fiddle_logo.png" width="320"/></td>
-</tr></table>
+<br clear="right"/>
 
 > **Breaking change (v2.0.0):** The rescore model has been redesigned (Siamese architecture), see details in [CHANGELOG.md](./CHANGELOG.md).
 
