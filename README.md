@@ -9,7 +9,7 @@
 FIDDLE is a deep learning method for predicting molecular formulas from MS/MS spectra. This repository contains the full research codebase for model training, evaluation, and paper reproduction.
 
 - **Paper:** [Nature Communications (2025)](https://www.nature.com/articles/s41467-025-66060-9)
-- **End-user CLI:** [msfiddle](https://github.com/josiehong/msfiddle)
+- **CLI and Python API:** [msfiddle](https://github.com/josiehong/msfiddle)
 - **Try this demo!** [FIDDLE on Hugging Face](https://huggingface.co/spaces/J0siee/FIDDLE)
 
 <br clear="right"/>
