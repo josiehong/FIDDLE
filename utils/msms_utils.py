@@ -323,7 +323,7 @@ def precursor_mz_calculator(precursor_type, mass):
         )
     elif precursor_type == "[M-H-CO2]-" or precursor_type == "[M-CHO2]-":
         return mass - ATOMS_WEIGHT["H"] - (ATOMS_WEIGHT["C"] + ATOMS_WEIGHT["O"] * 2)
-    elif precursor_type == "[M-H-H2O]-":
+    elif precursor_type == "[M-H-H2O]-" or precursor_type == "[M-H2O-H]-":
         return mass - ATOMS_WEIGHT["H"] - (ATOMS_WEIGHT["H"] * 2 + ATOMS_WEIGHT["O"])
     else:
         raise ValueError("Unsupported precursor type: {}".format(precursor_type))
@@ -398,7 +398,7 @@ def mass_calculator(precursor_type, precursor_mz):
             + ATOMS_WEIGHT["H"]
             + (ATOMS_WEIGHT["C"] + ATOMS_WEIGHT["O"] * 2)
         )
-    elif precursor_type == "[M-H-H2O]-":
+    elif precursor_type == "[M-H-H2O]-" or precursor_type == "[M-H2O-H]-":
         return (
             precursor_mz
             + ATOMS_WEIGHT["H"]

@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-06-13
+
+### Added
+
+- `eval_topk.py`: top-1..top-K formula accuracy from a `run_fiddle` result CSV and a test set, reported both per spectrum (micro) and per compound (macro, each compound weighted equally — robust to replicate-rich compounds).
+- `tests/test_generate_ms.py`: first pytest in the repo; regression tests for the spectral-binning m/z channel.
+- `running_scripts/experiments_release_v2.1.sh`: end-to-end maxmin rebuild + evaluation of both release models (Q-TOF + Orbitrap) on the corrected pipeline.
+- `logs/experiment_v3.md`: experiment notes for this cycle (training-set composition, precursor-isotope feasibility, halogen reachability/rescoring, efficiency).
+
+### Changed
+
+- `config/fiddle_tcn_qtof.yml`, `config/fiddle_tcn_orbitrap.yml`: refinement search space extended with halogens (`refine_atom_type` now `C/O/N/H + Cl/Br/F/I`) and candidate budget widened (`top_k` 5 → 10), so halogenated formulas are reachable and not crowded out of the returned set. On the Q-TOF release split this raises chlorine top-1 from 3.4% to ~26% while preserving overall accuracy (~70%).
+- `utils/refine_utils.py`: monoisotopic mass in the refinement search now uses a memoised `fast_mass` (~19× faster), numerically identical to the previous implementation up to floating-point summation order (far below the ppm acceptance window).
+- `utils/pkl_utils.py` (`generate_ms`): the per-bin representative-m/z channel now records the m/z of the most intense peak in each bin (previously a dead branch left it identically zero). Not consumed by the current model.
+- Released Q-TOF and Orbitrap models retrained on the corrected pipeline.
+
+### Fixed
+
+- `prepare_msms.py`: replaced the O(n²) train/test partition (linear membership tests) with set lookups; made the train/test split reproducible by sorting the deduplicated compound list (hash-randomised set iteration previously made splits differ run-to-run even with a fixed seed).
+- `utils/msms_utils.py`: the `[M-H2O-H]-` adduct is now handled (treated as equivalent to `[M-H-H2O]-`); it was accepted by the data filter but unrecognised by the m/z calculator, which crashed preprocessing.
+- `train_tcn_gpus.py`, `train_tcn_gpus_cl.py`: early-stop best-metric initialisation changed from `0` to `-1` (`best_formula_acc`, `best_formula_wo_acc`), so a first epoch with 0 accuracy counts as an improvement instead of spuriously incrementing the early-stop counter at epoch 1.
+
 ## [2.0.0] - 2026-03-23
 
 ### Added

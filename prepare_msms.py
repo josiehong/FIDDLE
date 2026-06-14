@@ -230,7 +230,7 @@ if __name__ == "__main__":
 
             # mgf.write(origin_spectra[ds], './data/mgf_debug/original_{}.mgf'.format(config_name), file_mode="w") # save mgf for debug
             # mgf.write(filter_spectra, './data/mgf_debug/filtered_{}.mgf'.format(config_name), file_mode="w") # save mgf for debug
-            filter_smiles_list = list(set(filter_smiles_list))
+            filter_smiles_list = sorted(set(filter_smiles_list))
             spectra += filter_spectra
             smiles_list += filter_smiles_list
             print(
@@ -239,7 +239,7 @@ if __name__ == "__main__":
                 )
             )
             del filter_spectra, filter_smiles_list
-        smiles_list = list(set(smiles_list))
+        smiles_list = sorted(set(smiles_list))
         print(
             "Total # spectra: {} # compounds: {}".format(len(spectra), len(smiles_list))
         )
@@ -288,10 +288,12 @@ if __name__ == "__main__":
                     replace=False,
                 )
 
+            train_idx_set = {int(i) for i in train_indices}
             train_smiles_list = [
-                smiles_list[i] for i in range(len(smiles_list)) if i in train_indices
+                smiles_list[i] for i in range(len(smiles_list)) if i in train_idx_set
             ]
-            test_smiles_list = [s for s in smiles_list if s not in train_smiles_list]
+            train_smiles_set = set(train_smiles_list)
+            test_smiles_list = [s for s in smiles_list if s not in train_smiles_set]
             print(
                 "({}) Get {} training compounds and {} test compounds".format(
                     ins, len(train_smiles_list), len(test_smiles_list)
@@ -300,7 +302,7 @@ if __name__ == "__main__":
 
             for _, spectrum in enumerate(tqdm(spectra)):
                 smiles = spectrum["params"]["smiles"]
-                if smiles in train_smiles_list:
+                if smiles in train_smiles_set:
                     train_spectra.append(spectrum)
                 else:
                     test_spectra.append(spectrum)

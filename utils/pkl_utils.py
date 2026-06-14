@@ -214,14 +214,18 @@ def generate_ms(x, y, precursor_mz, resolution=1, max_mz=1500, charge=1):
     intensity_val = np.zeros(int(max_mz // resolution))
     mz_val = np.zeros(
         int(max_mz // resolution)
-    )  # Save the max delta m/z falling this bin
+    )  # Save the m/z of the strongest peak falling in this bin
+    bin_max_intensity = np.zeros(
+        int(max_mz // resolution)
+    )  # Track the per-bin max single-peak intensity
 
     # Convert x, y to indices and accumulate in the mass spectra vector
     for mz, intensity in zip(x, y):
         idx = int(round(Decimal(str(mz)) // resolution))
 
         intensity_val[idx] += intensity  # Accumulate the intensity in the bin
-        if intensity_val[idx] < intensity:  # Update the max delta m/z falling this bin
+        if intensity > bin_max_intensity[idx]:  # Record m/z of the strongest peak in the bin
+            bin_max_intensity[idx] = intensity
             mz_val[idx] = mz
 
     # Normalize to 0-1 range

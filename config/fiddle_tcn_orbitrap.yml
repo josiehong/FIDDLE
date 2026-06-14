@@ -150,15 +150,18 @@ train_rescore:
 # ------------------------
 # postprocessing settings
 # ------------------------
-post_processing: 
+post_processing:
   # Orbitrap
-  refine_atom_type: ['C', 'O', 'N', 'H']
-  refine_atom_num: [3, 3, 3, -1]
+  # D0c: halogens in the refinement search so a missed halogen can be introduced and
+  # H rebalanced to the exact precursor mass. (Orbitrap is halogen-rich, so the model
+  # usually predicts halogens already; this mainly helps the cases it misses.)
+  refine_atom_type: ['C', 'O', 'N', 'H', 'Cl', 'Br', 'F', 'I']
+  refine_atom_num: [3, 3, 3, -1, 2, 1, 2, 1]
 
   mass_tolerance: 20.0 # target space
   ppm_mode: True
   time_out: 300
   maxium_miss_atom_num: 20 # search space
-  top_k: 5
+  top_k: 10 # widened from 5 so the true formula isn't crowded out by halogen candidates
   buddy_fdr_thr: 0.6
   sirius_score_thr: -5

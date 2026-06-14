@@ -1,7 +1,7 @@
 # ----------------------------------------
 # Experiments on internal test datasets: 
 # unique compounds in NIST23
-# ID: 100724
+# ID: 031826
 # ----------------------------------------
 # I. Data preprocessing
 # ----------------------------------------
@@ -87,19 +87,19 @@ python train_rescore.py --train_data ./data/cl_pkl_031826/orbitrap_rescore_train
 # IV. Test on QTOF
 # --------------------------
 # FIDDLES
-python run_fiddle.py --test_data ./data/cl_pkl_031826/qtof_test.mgf \
+python run_fiddle.py --test_data ./data/cl_pkl_031826/qtof_maxmin_test.mgf \
 --config_path ./config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
---result_path ./result/fiddle_qtof_100724.csv --device 5
+--result_path ./result/fiddle_qtof_031826.csv --device 5
 
 # FIDDLE + BUDDY
-python run_fiddle.py --test_data ./data/cl_pkl_031826/qtof_test.mgf \
+python run_fiddle.py --test_data ./data/cl_pkl_031826/qtof_maxmin_test.mgf \
 --config_path ./config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
 --buddy_path ./run_buddy_031826/buddy_qtof_test_031826.csv \
---result_path ./result/two_qtof_test_100724.csv --device 5
+--result_path ./result/two_qtof_test_031826.csv --device 5
 
 
 
@@ -107,19 +107,19 @@ python run_fiddle.py --test_data ./data/cl_pkl_031826/qtof_test.mgf \
 # V. Test on Orbitrap
 # --------------------------
 # FIDDLES
-python run_fiddle.py --test_data ./data/cl_pkl_031826/orbitrap_test.mgf \
+python run_fiddle.py --test_data ./data/cl_pkl_031826/orbitrap_maxmin_test.mgf \
 --config_path ./config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_031826.pt \
---result_path ./result/fiddle_orbitrap_100724.csv --device 4
+--result_path ./result/fiddle_orbitrap_031826.csv --device 4
 
 # FIDDLE + BUDDY
-python run_fiddle.py --test_data ./data/cl_pkl_031826/orbitrap_test.mgf \
+python run_fiddle.py --test_data ./data/cl_pkl_031826/orbitrap_maxmin_test.mgf \
 --config_path ./config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_031826.pt \
 --buddy_path ./run_buddy_031826/buddy_orbitrap_test_031826.csv \
---result_path ./result/two_orbitrap_test_100724.csv --device 4
+--result_path ./result/two_orbitrap_test_031826.csv --device 4
 
 
 

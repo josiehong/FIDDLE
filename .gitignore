@@ -165,3 +165,6 @@ data/
 release/
 nplib_bak/
 notebook/
+result/
+check_point/
+.DS_Store

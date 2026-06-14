@@ -316,8 +316,8 @@ if __name__ == "__main__":
     else:
         epoch_start = 0
         best_valid_mae = 9999
-        best_formula_acc = 0
-        best_formula_wo_acc = 0
+        best_formula_acc = -1
+        best_formula_wo_acc = -1
         warmup_steps = int(
             len(train_set)
             / config["train"]["batch_size"]
