@@ -168,3 +168,10 @@ notebook/
 result/
 check_point/
 .DS_Store
+# msfiddle package
+.pypirc
+.ruff_cache/
+output_demo.csv
+msfiddle/check_point/
+logs/
+MERGE_PLAN.md

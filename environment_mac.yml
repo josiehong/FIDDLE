@@ -18,3 +18,4 @@ dependencies:
       - pyteomics==4.7
       - molmass
       - pyopenms>=3.2.0           # optional — only needed for data-prep scripts (3.1.0 unavailable on arm64)
+      - -e .                    # msfiddle package, importable from anywhere

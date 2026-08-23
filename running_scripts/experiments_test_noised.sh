@@ -5,8 +5,8 @@
 # I. Data preprocessing
 # ----------------------------------------
 # QTOF
-python prepare_msms_noised.py --mgf_data ./data/cl_pkl_031826/qtof_test.mgf \
---config_path ./config/fiddle_tcn_qtof.yml \
+python scripts/prepare_msms_noised.py --mgf_data ./data/cl_pkl_031826/qtof_test.mgf \
+--config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --out_path ./data/noised/noised_qtof_test.mgf --noise_times 1 2 3 4 5 --num_spectra 1000
 
 # BUDDY and SIRIUS QTOF
@@ -15,8 +15,8 @@ python mgf_instances.py --input_path ./data/noised/noised_qtof_test.mgf \
 --log ./data_instances/qtof_log_noised.csv
 
 # Orbitrap
-python prepare_msms_noised.py --mgf_data ./data/cl_pkl_031826/orbitrap_test.mgf \
---config_path ./config/fiddle_tcn_orbitrap.yml \
+python scripts/prepare_msms_noised.py --mgf_data ./data/cl_pkl_031826/orbitrap_test.mgf \
+--config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --out_path ./data/noised/noised_orbitrap_test.mgf --noise_times 1 2 3 4 5 --num_spectra 1000
 
 # BUDDY and SIRIUS Orbitrap
@@ -28,15 +28,15 @@ python mgf_instances.py --input_path ./data/noised/noised_orbitrap_test.mgf \
 # II. Test on noised spectra (FIDDLE)
 # ----------------------------------------
 # For QTOF
-python run_fiddle.py --test_data ./data/noised/noised_qtof_test.mgf \
---config_path ./config/fiddle_tcn_qtof.yml \
+python scripts/run_fiddle.py --test_data ./data/noised/noised_qtof_test.mgf \
+--config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
 --result_path ./result/fiddle_qtof_noised_100724.csv --device 6
 
 # For Orbitrap
-python run_fiddle.py --test_data ./data/noised/noised_orbitrap_test.mgf \
---config_path ./config/fiddle_tcn_orbitrap.yml \
+python scripts/run_fiddle.py --test_data ./data/noised/noised_orbitrap_test.mgf \
+--config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_031826.pt \
 --result_path ./result/fiddle_orbitrap_noised_100724.csv --device 7

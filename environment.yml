@@ -199,3 +199,4 @@ dependencies:
       - tensorboard-data-server==0.7.2
       - tqdm==4.66.2
       - werkzeug==3.0.1
+      - -e .

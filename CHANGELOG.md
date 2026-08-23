@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Merged the [msfiddle](https://pypi.org/project/msfiddle/) PyPI package repository into this repo. The `msfiddle/` package directory is now the single source of truth for the shared core (`model_tcn.py`, `dataset.py`, `utils/`, `config/`, `demo/`); the research scripts import from it and the former top-level copies are removed. Packaging (`setup.py`), docs (readthedocs), package tests, and the PyPI publish workflow now live here. Pre-merge package release history is appended at the bottom of this file.
+- The package picks up fixes that had only landed on the research side: `fast_mass` refinement speedup, the `generate_ms` per-bin m/z fix, the Python 3.11 `random.sample` fix, and the halogen-extended refinement configs.
+- Research scripts moved from the repo root into `scripts/` (shell drivers stay in `running_scripts/`, with paths updated). Each script bootstraps the repo root onto `sys.path` and the conda environments now install the package in editable mode, so `msfiddle` imports resolve regardless of working directory; scripts should still be run from the repo root so their relative default paths resolve.
+
 ## [2.1.0] - 2026-06-13
 
 ### Added
@@ -69,3 +77,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - Initial FIDDLE version.
+
+---
+
+# msfiddle package (pre-merge history)
+
+Releases of the `msfiddle` PyPI package while it lived in its own repository (`josiehong/msfiddle`, now merged here).
+
+## [2.1.0] - 2026-06-05
+
+### Added
+- Accept native/original BUDDY/msbuddy output for `--buddy_path` (and the Python API): an `msbuddy_result_summary.tsv` file, or the full output directory. When the directory contains per-query `formula_results.tsv` files (msbuddy `-d`), their per-candidate FDR scores are used for ranks 2–5.
+- Accept native/original SIRIUS formula summaries for `--sirius_path` (and the Python API): a `formula_identifications` file (TSV/CSV/XLSX) or a SIRIUS summary output directory.
+
+### Deprecated
+- The msfiddle-normalized BUDDY and SIRIUS CSV formats are deprecated and will be removed in 3.0.0. Pass native/original msbuddy or SIRIUS output instead. Loading a normalized CSV now emits a `DeprecationWarning`.
+
+## [2.0.1] - 2026-05-02
+
+### Added
+- Added `MsFiddlePredictor` for reusable Python inference with single-spectrum, batch, and MGF prediction methods.
+- Added `predict_from_spectrum`, `predict_batch_from_spectra`, and `predict_from_mgf` convenience APIs.
+- Added the optional `inference` extra for installing PyTorch with `pip install "msfiddle[inference]"`.
+
+### Changed
+- Refactored the CLI to use the shared predictor internals while preserving the existing command-line interface and CSV output shape.
+- Deferred checkpoint warnings/errors until prediction instead of warning during import.
+- Set package metadata to require Python 3.8+, matching the existing pandas 2 dependency.
+- Derived checkpoint downloads from the package major version, so all `2.*.*` releases use the FIDDLE `v2.0.0` checkpoint assets.
+
+## [2.0.0] - 2026-03-23
+
+### Changed
+- Replaced `FDRNet` with a Siamese-style rescoring architecture: new `FormulaEncoder` (MLP → L2-normalised embedding) and `RescoreHead` (element-wise product → scalar logit) classes in `model_tcn.py`
+- Renamed `FDRDataset` → `RescoreDataset` in `dataset.py` and updated references from `prepare_fdr.py` to `prepare_rescore.py`
+- Renamed `train_fdr` config section to `train_rescore` across all four config YAMLs
+- Reduced `early_stop_step` from 10 to 5 in Orbitrap and Q-TOF training configs
+
+### Added
+- `formula_dim: 64` parameter added to Orbitrap and Q-TOF model configs
+
+## [0.1.0] - 2025-03-20
+
+### Added
+- Initial release
+- Chemical formula prediction from tandem mass spectra (MS/MS) using pre-trained TCN models
+- Support for Orbitrap and Q-TOF instrument types
+- Formula refinement with confidence scoring (FDR)
+- Integration with BUDDY and SIRIUS results
+- `msfiddle` CLI for running predictions
+- `msfiddle-download-models` CLI for downloading pre-trained model weights
+- `msfiddle-checkpoint-paths` CLI for inspecting model locations
+- Demo data for quick testing (`--demo` flag)

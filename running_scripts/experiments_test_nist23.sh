@@ -7,17 +7,17 @@
 # ----------------------------------------
 
 # 1. QTOF --------------------------------
-python prepare_msms_nist23.py \
+python scripts/prepare_msms_nist23.py \
 --dataset agilent nist20 nist23 mona waters gnps \
 --instrument_type qtof \
---config_path ./config/fiddle_tcn_qtof.yml \
+--config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --pkl_dir ./data/cl_pkl_031826/
 
 # 2. Orbitrap -----------------------------
-python prepare_msms_nist23.py \
+python scripts/prepare_msms_nist23.py \
 --dataset nist20 nist23 mona gnps \
 --instrument_type orbitrap \
---config_path ./config/fiddle_tcn_orbitrap.yml \
+--config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --pkl_dir ./data/cl_pkl_031826/
 
 
@@ -30,7 +30,7 @@ python -u train_tcn_gpus_cl.py \
 --train_data ./data/cl_pkl_031826/qtof_train.pkl \
 --test_data ./data/cl_pkl_031826/qtof_test.pkl \
 --additional_f_data ./data/additional_formula.pkl \
---config_path ./config/fiddle_tcn_qtof.yml \
+--config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --checkpoint_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --result_path ./result/fiddle_tcn_qtof_031826.csv --device 4 5 
 
@@ -38,14 +38,14 @@ python -u train_tcn_gpus_cl.py \
 python prepare_rescore.py \
 --train_data ./data/cl_pkl_031826/qtof_train.pkl \
 --test_data ./data/cl_pkl_031826/qtof_test.pkl \
---config_path ./config/fiddle_tcn_qtof.yml \
+--config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --rescore_dir ./data/cl_pkl_031826/ \
 --device 4 5
-python train_rescore.py \
+python scripts/train_rescore.py \
 --train_data ./data/cl_pkl_031826/qtof_rescore_train.pkl \
 --test_data ./data/cl_pkl_031826/qtof_rescore_test.pkl \
---config_path ./config/fiddle_tcn_qtof.yml \
+--config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --transfer \
 --checkpoint_path ./check_point/fiddle_rescore_qtof_031826.pt \
@@ -61,7 +61,7 @@ python -u train_tcn_gpus_cl.py \
 --train_data ./data/cl_pkl_031826/orbitrap_train.pkl \
 --test_data ./data/cl_pkl_031826/orbitrap_test.pkl \
 --additional_f_data ./data/additional_formula.pkl \
---config_path ./config/fiddle_tcn_orbitrap.yml \
+--config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --checkpoint_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --result_path ./result/fiddle_tcn_orbitrap_031826.csv --device 4 7 
 
@@ -69,13 +69,13 @@ python -u train_tcn_gpus_cl.py \
 python prepare_rescore.py \
 --train_data ./data/cl_pkl_031826/orbitrap_train.pkl \
 --test_data ./data/cl_pkl_031826/orbitrap_test.pkl \
---config_path ./config/fiddle_tcn_orbitrap.yml \
+--config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --rescore_dir ./data/cl_pkl_031826/ \
 --device 4 5 
-python train_rescore.py --train_data ./data/cl_pkl_031826/orbitrap_rescore_train.pkl \
+python scripts/train_rescore.py --train_data ./data/cl_pkl_031826/orbitrap_rescore_train.pkl \
 --test_data ./data/cl_pkl_031826/orbitrap_rescore_test.pkl \
---config_path ./config/fiddle_tcn_orbitrap.yml \
+--config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --transfer \
 --checkpoint_path ./check_point/fiddle_rescore_orbitrap_031826.pt \
@@ -87,15 +87,15 @@ python train_rescore.py --train_data ./data/cl_pkl_031826/orbitrap_rescore_train
 # IV. Test on QTOF
 # --------------------------
 # FIDDLES
-python run_fiddle.py --test_data ./data/cl_pkl_031826/qtof_maxmin_test.mgf \
---config_path ./config/fiddle_tcn_qtof.yml \
+python scripts/run_fiddle.py --test_data ./data/cl_pkl_031826/qtof_maxmin_test.mgf \
+--config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
 --result_path ./result/fiddle_qtof_031826.csv --device 5
 
 # FIDDLE + BUDDY
-python run_fiddle.py --test_data ./data/cl_pkl_031826/qtof_maxmin_test.mgf \
---config_path ./config/fiddle_tcn_qtof.yml \
+python scripts/run_fiddle.py --test_data ./data/cl_pkl_031826/qtof_maxmin_test.mgf \
+--config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
 --buddy_path ./run_buddy_031826/buddy_qtof_test_031826.csv \
@@ -107,15 +107,15 @@ python run_fiddle.py --test_data ./data/cl_pkl_031826/qtof_maxmin_test.mgf \
 # V. Test on Orbitrap
 # --------------------------
 # FIDDLES
-python run_fiddle.py --test_data ./data/cl_pkl_031826/orbitrap_maxmin_test.mgf \
---config_path ./config/fiddle_tcn_orbitrap.yml \
+python scripts/run_fiddle.py --test_data ./data/cl_pkl_031826/orbitrap_maxmin_test.mgf \
+--config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_031826.pt \
 --result_path ./result/fiddle_orbitrap_031826.csv --device 4
 
 # FIDDLE + BUDDY
-python run_fiddle.py --test_data ./data/cl_pkl_031826/orbitrap_maxmin_test.mgf \
---config_path ./config/fiddle_tcn_orbitrap.yml \
+python scripts/run_fiddle.py --test_data ./data/cl_pkl_031826/orbitrap_maxmin_test.mgf \
+--config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_031826.pt \
 --buddy_path ./run_buddy_031826/buddy_orbitrap_test_031826.csv \
@@ -126,57 +126,57 @@ python run_fiddle.py --test_data ./data/cl_pkl_031826/orbitrap_maxmin_test.mgf \
 # --------------------------
 # VI. Test on CASMI and EMBL
 # --------------------------
-python run_fiddle.py --test_data ./data/casmi2016.mgf \
-                --config_path ./config/fiddle_tcn_casmi.yml \
+python scripts/run_fiddle.py --test_data ./data/casmi2016.mgf \
+                --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --result_path ./result/fiddle_casmi16_exnist23.csv 
-python run_fiddle.py --test_data ./data/casmi2016.mgf \
-                --config_path ./config/fiddle_tcn_casmi.yml \
+python scripts/run_fiddle.py --test_data ./data/casmi2016.mgf \
+                --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --buddy_path ./run_buddy/buddy_casmi2016.csv \
                 --result_path ./result/two_casmi16_exnist23.csv 
-python run_fiddle.py --test_data ./data/casmi2016.mgf \
-                --config_path ./config/fiddle_tcn_casmi.yml \
+python scripts/run_fiddle.py --test_data ./data/casmi2016.mgf \
+                --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --buddy_path ./run_buddy/buddy_casmi2016.csv \
                 --sirius_path ./run_sirius/sirius_casmi2016.csv \
                 --result_path ./result/all_casmi16_exnist23.csv 
 
-python run_fiddle.py --test_data ./data/casmi2017.mgf \
-                --config_path ./config/fiddle_tcn_casmi.yml \
+python scripts/run_fiddle.py --test_data ./data/casmi2017.mgf \
+                --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --result_path ./result/fiddle_casmi17_exnist23.csv 
-python run_fiddle.py --test_data ./data/casmi2017.mgf \
-                --config_path ./config/fiddle_tcn_casmi.yml \
+python scripts/run_fiddle.py --test_data ./data/casmi2017.mgf \
+                --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --buddy_path ./run_buddy/buddy_casmi2017.csv \
                 --result_path ./result/two_casmi17_exnist23.csv 
-python run_fiddle.py --test_data ./data/casmi2017.mgf \
-                --config_path ./config/fiddle_tcn_casmi.yml \
+python scripts/run_fiddle.py --test_data ./data/casmi2017.mgf \
+                --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --buddy_path ./run_buddy/buddy_casmi2017.csv \
                 --sirius_path ./run_sirius/sirius_casmi2017.csv \
                 --result_path ./result/all_casmi17_exnist23.csv 
 
-python run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
-                --config_path ./config/fiddle_tcn_embl.yml \
+python scripts/run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
+                --config_path ./msfiddle/config/fiddle_tcn_embl.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --result_path ./result/fiddle_embl_exnist23.csv 
-python run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
-                --config_path ./config/fiddle_tcn_embl.yml \
+python scripts/run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
+                --config_path ./msfiddle/config/fiddle_tcn_embl.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --buddy_path ./run_buddy/buddy_embl.csv \
                 --result_path ./result/two_embl_exnist23.csv 
-python run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
-                --config_path ./config/fiddle_tcn_embl.yml \
+python scripts/run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
+                --config_path ./msfiddle/config/fiddle_tcn_embl.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --buddy_path ./run_buddy/buddy_embl.csv \
