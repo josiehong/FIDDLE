@@ -21,6 +21,7 @@ The test .pkl is preferred: it stores the exact training target (`formula`
 vector, already neutral-loss-adjusted), whereas a .mgf derives the formula from
 SMILES, which is subtly wrong for neutral-loss adducts (e.g. [M+H-H2O]+).
 """
+
 import argparse
 import os
 import pickle
@@ -88,11 +89,13 @@ def load_truth(path):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--result", required=True, help="run_fiddle result CSV")
-    ap.add_argument("--test_data", required=True,
-                    help="test set .pkl (preferred) or .mgf")
+    ap.add_argument(
+        "--test_data", required=True, help="test set .pkl (preferred) or .mgf"
+    )
     ap.add_argument("--topk", type=int, default=5, help="max k to report (default 5)")
     args = ap.parse_args()
 
@@ -109,8 +112,8 @@ def main():
     used_cols = refined_cols[:topk]
 
     n_rows = len(df)
-    spectrum_hits = []          # per spectrum: list[topk] of 0/1 (cumulative top-k)
-    compound_hits = {}          # smiles -> list of those hit vectors
+    spectrum_hits = []  # per spectrum: list[topk] of 0/1 (cumulative top-k)
+    compound_hits = {}  # smiles -> list of those hit vectors
 
     for _, row in df.iterrows():
         key = str(row["ID"])
@@ -129,7 +132,9 @@ def main():
 
     n_joined = len(spectrum_hits)
     if n_joined == 0:
-        raise SystemExit("No rows joined — check that result 'ID' matches test 'title'.")
+        raise SystemExit(
+            "No rows joined — check that result 'ID' matches test 'title'."
+        )
 
     # per-spectrum (micro): every spectrum weighted equally
     spec_acc = [sum(h[k] for h in spectrum_hits) / n_joined for k in range(topk)]
@@ -142,8 +147,11 @@ def main():
     comp_acc = [sum(m[k] for m in comp_means) / n_comp for k in range(topk)]
 
     print("Eval: {}  vs  {}".format(args.result, args.test_data))
-    print("Joined: {} spectra / {} compounds  (matched {}/{} result rows)".format(
-        n_joined, n_comp, n_joined, n_rows))
+    print(
+        "Joined: {} spectra / {} compounds  (matched {}/{} result rows)".format(
+            n_joined, n_comp, n_joined, n_rows
+        )
+    )
     print("          " + "".join("  top-{:<2d}".format(k + 1) for k in range(topk)))
     print("spectra " + "".join("  {:5.1f}%".format(100 * a) for a in spec_acc))
     print("compound" + "".join("  {:5.1f}%".format(100 * a) for a in comp_acc))

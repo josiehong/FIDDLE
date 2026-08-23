@@ -25,6 +25,7 @@ Usage:
       --out        ./data/cl_pkl_060526/qtof_maxmin_cek8_train.pkl \
       --cap 8 --ce_bins 3 --seed 42
 """
+
 import argparse
 import os
 import pickle
@@ -55,7 +56,7 @@ def ce_stratified_pick(nce, cap, n_bins, rng):
     nb = int(min(n_bins, max(1, np.unique(finite).size)))
     edges = np.quantile(finite, np.linspace(0.0, 1.0, nb + 1))
     bins = np.digitize(nce, edges[1:-1])  # 0..nb-1
-    bins[~np.isfinite(nce)] = 0           # missing CE -> lowest bin
+    bins[~np.isfinite(nce)] = 0  # missing CE -> lowest bin
 
     buckets = defaultdict(list)
     for i in range(n):
@@ -79,7 +80,8 @@ def ce_stratified_pick(nce, cap, n_bins, rng):
 
 def main():
     ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--train_data", required=True, help="input train .pkl")
     ap.add_argument("--out", required=True, help="output capped train .pkl")
     ap.add_argument("--cap", type=int, required=True, help="max spectra per compound")
@@ -98,8 +100,11 @@ def main():
     sizes = np.array([len(v) for v in groups.values()])
     pct = np.percentile(sizes, [50, 90, 99])
     print("Compounds: {}  | spectra: {}".format(len(groups), len(data)))
-    print("Spectra/compound  median={:.0f}  p90={:.0f}  p99={:.0f}  max={}".format(
-        pct[0], pct[1], pct[2], sizes.max()))
+    print(
+        "Spectra/compound  median={:.0f}  p90={:.0f}  p99={:.0f}  max={}".format(
+            pct[0], pct[1], pct[2], sizes.max()
+        )
+    )
 
     rng = np.random.default_rng(args.seed)
     keep = []
@@ -117,14 +122,22 @@ def main():
     with open(args.out, "wb") as f:
         pickle.dump(capped, f)
 
-    print("Capped {} / {} compounds (>{} spectra).".format(
-        n_capped, len(groups), args.cap))
-    print("Spectra: {} -> {}  ({:.1%} kept).  Wrote {}".format(
-        len(data), len(capped), len(capped) / len(data), args.out))
+    print(
+        "Capped {} / {} compounds (>{} spectra).".format(
+            n_capped, len(groups), args.cap
+        )
+    )
+    print(
+        "Spectra: {} -> {}  ({:.1%} kept).  Wrote {}".format(
+            len(data), len(capped), len(capped) / len(data), args.out
+        )
+    )
 
     # Rebuild contrastive pairs for the capped subset (indices into `capped`).
     if not args.out.endswith("_train.pkl"):
-        raise SystemExit("--out must end with '_train.pkl' so the pairs file derives cleanly")
+        raise SystemExit(
+            "--out must end with '_train.pkl' so the pairs file derives cleanly"
+        )
     random.seed(args.seed)
     pairs = spec2pair(capped, set(), None)  # spec2pair ignores the encoder arg
     pairs_path = args.out.replace("_train.pkl", "_train_pairs.pkl")

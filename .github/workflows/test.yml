@@ -20,8 +20,7 @@ jobs:
         run: pip install black
 
       - name: Check formatting
-        # Scoped to the installable package and tests; research scripts are not black-formatted.
-        run: black --check msfiddle tests
+        run: black --check .
 
   test:
     runs-on: ${{ matrix.os }}

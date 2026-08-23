@@ -43,17 +43,19 @@ The utility and format tests do **not** require PyTorch or downloaded model weig
 
 ## Code Style
 
-The `msfiddle/` package and `tests/` use [Black](https://black.readthedocs.io/) for code formatting (the research scripts at the repo root are not Black-formatted). Before submitting a pull request that touches the package, format with:
+This repository uses [Black](https://black.readthedocs.io/) for code formatting. Before submitting a pull request, format with:
 
 ```bash
-black msfiddle tests
+black .
 ```
 
 To check formatting without making changes:
 
 ```bash
-black --check msfiddle tests
+black --check .
 ```
+
+Note: do not run an import sorter (isort etc.) on `scripts/` — the scripts insert the repo root onto `sys.path` before importing `msfiddle`, and reordering those imports breaks them.
 
 ## What to Contribute
 
@@ -70,7 +72,7 @@ Please open an issue before starting work on larger changes.
 
 1. Fork the repository and create a branch from `main`
 2. Make your changes and add tests if applicable
-3. Format package code: `black msfiddle tests`
+3. Format your code: `black .`
 4. Ensure all tests pass: `pytest tests/ -v`
 5. Open a pull request against `main` with a clear description of what was changed and why
 

@@ -41,7 +41,9 @@ DEVICE = torch.device("cpu")
 # ---------------------------------------------------------------------------
 MODELS = {
     "orbitrap": {
-        "config": os.path.join(FIDDLE_DIR, "msfiddle", "config", "fiddle_tcn_orbitrap.yml"),
+        "config": os.path.join(
+            FIDDLE_DIR, "msfiddle", "config", "fiddle_tcn_orbitrap.yml"
+        ),
         "tcn": os.path.join(FIDDLE_DIR, "check_point", "fiddle_tcn_orbitrap_031826.pt"),
         "rescore": os.path.join(
             FIDDLE_DIR, "check_point", "fiddle_rescore_orbitrap_031826.pt"

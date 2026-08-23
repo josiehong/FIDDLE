@@ -73,7 +73,7 @@ def train_step(spec_encoder, formula_encoder, rescore_head, loader, optimizer, d
                 z_specs, _, _, _, _ = spec_encoder(x, env)
                 z_specs = F.normalize(z_specs, dim=1)
 
-            z_forms = formula_encoder(f)              # (B, 512), L2-normalised
+            z_forms = formula_encoder(f)  # (B, 512), L2-normalised
             logits = rescore_head(z_specs * z_forms)  # (B,)
             y_hat = torch.sigmoid(logits)
 
