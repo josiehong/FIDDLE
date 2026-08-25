@@ -20,7 +20,8 @@
 #       Orbitrap mass_tolerance: 5.0 only if the measured-mass check passes
 #       (PPM-field distribution of the orbitrap test MGF; keep 10.0 if >~1%
 #       of spectra exceed 5 ppm).
-#   (b) FORMULA_LOSS set from the Track 1 verdict (default mse).
+#   (b) FORMULA_LOSS defaults to poisson (per decision 08/24/26); override
+#       with FORMULA_LOSS=mse to train the incumbent-loss arm.
 #
 # Env overrides: DATA_TAG (pkl generation), TAG (model tag), FORMULA_LOSS,
 #   DEVICE_QTOF / DEVICE_ORBITRAP (space-separated lists allowed, e.g. "6 7").
@@ -28,23 +29,66 @@
 
 DATA_TAG=${DATA_TAG:-082426}
 TAG=${TAG:-$DATA_TAG}
-FORMULA_LOSS=${FORMULA_LOSS:-mse}
+FORMULA_LOSS=${FORMULA_LOSS:-poisson}
 DEVICE_QTOF=${DEVICE_QTOF:-"0 1"}
 DEVICE_ORBITRAP=${DEVICE_ORBITRAP:-"3 4"}
 PKL_DIR=./data/cl_pkl_$DATA_TAG
+
+# Refuse to stack on an existing run: repeated launches (e.g. retried
+# commands from a frozen terminal) would train duplicate processes into the
+# same checkpoint paths and exhaust RAM.
+if pgrep -f "train_tcn_gpus_cl.py" > /dev/null; then
+    echo "A train_tcn_gpus_cl.py process is already running — refusing to launch."
+    echo "Inspect with: ps aux | grep train_tcn   (kill it first if intended)"
+    exit 1
+fi
+
+# Each CL training holds its noise-augmented dataset in RAM (~77GB Q-TOF,
+# ~200GB Orbitrap with the current x3 augmentation). Refuse to start without
+# headroom rather than push the node into swap.
+avail_ram_gb=$(free -g | awk '/^Mem:/ {print $7}')
+if [ "$avail_ram_gb" -lt 320 ]; then
+    echo "Only ${avail_ram_gb}GB RAM available — need ~320GB for both trainings."
+    echo "Free memory (or run one instrument at a time) before launching."
+    exit 1
+fi
+
+# Workaround for the degraded GPU driver on carnot (since 08/14): NCCL cannot
+# initialize its default transports in multi-GPU jobs ("NCCL Error 3: internal
+# error" in broadcast_coalesced, then glibc heap corruption). Disabling the
+# P2P/SHM transports and fencing each job to its own GPU pair via
+# CUDA_VISIBLE_DEVICES lets DataParallel run. Safe to remove after the node
+# reboot restores GPU6/NVML; costs some broadcast bandwidth on healthy nodes.
+export NCCL_P2P_DISABLE=1
+export NCCL_SHM_DISABLE=1
+
+# Fenced jobs see only their own GPUs, so the in-process device indices are
+# always 0..n-1 regardless of the physical indices in DEVICE_*.
+DEVICE_QTOF_CSV=${DEVICE_QTOF// /,}
+DEVICE_ORBITRAP_CSV=${DEVICE_ORBITRAP// /,}
+DEVICE_QTOF_LOCAL=$(seq -s' ' 0 $(($(echo $DEVICE_QTOF | wc -w) - 1)))
+DEVICE_ORBITRAP_LOCAL=$(seq -s' ' 0 $(($(echo $DEVICE_ORBITRAP | wc -w) - 1)))
 
 # ============================================================================
 # PART 1 — Rebuild the pkl data (CPU-only; skipped if $PKL_DIR is complete)
 # ============================================================================
 
-REBUILD_OUTPUTS="$PKL_DIR/qtof_maxmin_train.pkl $PKL_DIR/qtof_maxmin_train_pairs.pkl \
-$PKL_DIR/qtof_maxmin_test.pkl $PKL_DIR/orbitrap_maxmin_train.pkl \
+NUM_WORKERS=${NUM_WORKERS:-8}
+
+QTOF_OUTPUTS="$PKL_DIR/qtof_maxmin_train.pkl $PKL_DIR/qtof_maxmin_train_pairs.pkl \
+$PKL_DIR/qtof_maxmin_test.pkl"
+ORBITRAP_OUTPUTS="$PKL_DIR/orbitrap_maxmin_train.pkl \
 $PKL_DIR/orbitrap_maxmin_train_pairs.pkl $PKL_DIR/orbitrap_maxmin_test.pkl"
 
-rebuild_done=true
-for f in $REBUILD_OUTPUTS; do [ -s "$f" ] || rebuild_done=false; done
+# Per-instrument skip: an instrument with all its outputs present is not
+# rebuilt (delete an instrument's files to force its rebuild — partial files
+# count as missing only if you remove them, so clean up interrupted runs).
+qtof_done=true
+for f in $QTOF_OUTPUTS; do [ -s "$f" ] || qtof_done=false; done
+orbitrap_done=true
+for f in $ORBITRAP_OUTPUTS; do [ -s "$f" ] || orbitrap_done=false; done
 
-if [ "$rebuild_done" = true ]; then
+if [ "$qtof_done" = true ] && [ "$orbitrap_done" = true ]; then
     echo "Rebuilt data already present at $PKL_DIR — skipping PART 1"
 else
     # Refuse to run on a stale checkout: the whole point is the fixed encoders.
@@ -66,24 +110,34 @@ PY
 
     mkdir -p $PKL_DIR
 
-    python -u scripts/prepare_msms.py \
-    --dataset agilent nist20 nist23 mona waters gnps \
-    --instrument_type qtof \
-    --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
-    --pkl_dir $PKL_DIR/ --maxmin_pick > prep_qtof_$DATA_TAG.log 2>&1 &
+    if [ "$qtof_done" = true ]; then
+        echo "Q-TOF pkls already present — skipping"
+    else
+        python -u scripts/prepare_msms.py \
+        --dataset agilent nist20 nist23 mona waters gnps \
+        --instrument_type qtof \
+        --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
+        --num_workers $NUM_WORKERS \
+        --pkl_dir $PKL_DIR/ --maxmin_pick > prep_qtof_$DATA_TAG.log 2>&1 &
+    fi
 
-    python -u scripts/prepare_msms.py \
-    --dataset nist20 nist23 mona gnps \
-    --instrument_type orbitrap \
-    --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
-    --pkl_dir $PKL_DIR/ --maxmin_pick > prep_orbitrap_$DATA_TAG.log 2>&1 &
+    if [ "$orbitrap_done" = true ]; then
+        echo "Orbitrap pkls already present — skipping"
+    else
+        python -u scripts/prepare_msms.py \
+        --dataset nist20 nist23 mona gnps \
+        --instrument_type orbitrap \
+        --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
+        --num_workers $NUM_WORKERS \
+        --pkl_dir $PKL_DIR/ --maxmin_pick > prep_orbitrap_$DATA_TAG.log 2>&1 &
+    fi
 
-    wait  # both preprocessing runs done (hours; NIST23 dominates)
+    wait  # remaining preprocessing runs done
 
     for log in prep_qtof_$DATA_TAG.log prep_orbitrap_$DATA_TAG.log; do
-        echo "=== tail of $log ==="; tail -8 "$log"
+        [ -f "$log" ] && { echo "=== tail of $log ==="; tail -8 "$log"; }
     done
-    for f in $REBUILD_OUTPUTS; do
+    for f in $QTOF_OUTPUTS $ORBITRAP_OUTPUTS; do
         [ -s "$f" ] || { echo "MISSING: $f — check the logs above"; exit 1; }
     done
     echo "rebuild complete: $PKL_DIR"
@@ -93,23 +147,23 @@ fi
 # PART 2 — TCN training from scratch (both instruments in parallel)
 # ============================================================================
 
-python -u scripts/train_tcn_gpus_cl.py \
+CUDA_VISIBLE_DEVICES=$DEVICE_QTOF_CSV python -u scripts/train_tcn_gpus_cl.py \
 --train_data $PKL_DIR/qtof_maxmin_train.pkl \
 --test_data $PKL_DIR/qtof_maxmin_test.pkl \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --formula_loss $FORMULA_LOSS \
 --checkpoint_path ./check_point/fiddle_tcn_qtof_$TAG.pt \
 --result_path ./result/fiddle_tcn_qtof_$TAG.csv \
---device $DEVICE_QTOF > tcn_qtof_$TAG.log 2>&1 &
+--device $DEVICE_QTOF_LOCAL > tcn_qtof_$TAG.log 2>&1 &
 
-python -u scripts/train_tcn_gpus_cl.py \
+CUDA_VISIBLE_DEVICES=$DEVICE_ORBITRAP_CSV python -u scripts/train_tcn_gpus_cl.py \
 --train_data $PKL_DIR/orbitrap_maxmin_train.pkl \
 --test_data $PKL_DIR/orbitrap_maxmin_test.pkl \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --formula_loss $FORMULA_LOSS \
 --checkpoint_path ./check_point/fiddle_tcn_orbitrap_$TAG.pt \
 --result_path ./result/fiddle_tcn_orbitrap_$TAG.csv \
---device $DEVICE_ORBITRAP > tcn_orbitrap_$TAG.log 2>&1 &
+--device $DEVICE_ORBITRAP_LOCAL > tcn_orbitrap_$TAG.log 2>&1 &
 
 wait
 
