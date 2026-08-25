@@ -77,16 +77,26 @@ def sdf2mgf(path, prefix):
         instrument = (
             "Unknown" if not mol.HasProp("INSTRUMENT") else mol.GetProp("INSTRUMENT")
         )
+        # These two are also optional in real MoNA exports — default like the
+        # fields above instead of letting GetProp raise KeyError mid-run.
+        molmass = (
+            "Unknown" if not mol.HasProp("EXACT MASS") else mol.GetProp("EXACT MASS")
+        )
+        instrument_type = (
+            "Unknown"
+            if not mol.HasProp("INSTRUMENT TYPE")
+            else mol.GetProp("INSTRUMENT TYPE")
+        )
         spectrum = {
             "params": {
                 "title": prefix + "_" + str(idx),
                 "precursor_type": mol.GetProp("PRECURSOR TYPE"),
                 "precursor_mz": mol.GetProp("PRECURSOR M/Z"),
-                "molmass": mol.GetProp("EXACT MASS"),
+                "molmass": molmass,
                 "ms_level": mol.GetProp("SPECTRUM TYPE"),
                 "ionmode": mol.GetProp("ION MODE"),
                 "source_instrument": instrument,
-                "instrument_type": mol.GetProp("INSTRUMENT TYPE"),
+                "instrument_type": instrument_type,
                 "collision_energy": mol.GetProp("COLLISION ENERGY"),
                 "smiles": Chem.MolToSmiles(mol, isomericSmiles=True),
                 "inchi_key": inchi_key,
@@ -131,9 +141,12 @@ def filter_spec(spectra, config, type2charge):
     }
     for idx, spectrum in enumerate(tqdm(spectra)):
         smiles = spectrum["params"]["smiles"]
-        mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
+        # Guard before AddHs: AddHs(None) raises instead of returning None,
+        # so one malformed SMILES would abort the whole run.
+        mol = Chem.MolFromSmiles(smiles)
         if mol == None:
             continue
+        mol = Chem.AddHs(mol)
 
         # Unify the smiles format
         smiles = Chem.MolToSmiles(mol, isomericSmiles=False, canonical=True)
@@ -194,25 +207,18 @@ def filter_spec(spectra, config, type2charge):
             records["max_mz"].append(spectrum["params"]["title"])
             continue
 
-        # Filter by ppm (mass error)
-        if "ppm_tolerance" in config.keys():
-            f = CalcMolFormula(mol)
-            # try:
-            # 	f = Formula(f)
-            # except: # invalud formula
-            # 	records['invalud_formula'].append(spectrum['params']['title'])
-            # 	continue
-            molmass = monoisotopic_mass_calculator(f, "f")
-            theo_mz = precursor_mz_calculator(precursor_type, molmass)
-            ppm = (
-                abs(theo_mz - float(spectrum["params"]["precursor_mz"]))
-                / theo_mz
-                * 10**6
-            )
+        # Theoretical precursor m/z and mass error are always computed (they
+        # are stamped on every surviving spectrum for downstream encoders);
+        # the ppm cut itself only applies when the config sets a tolerance.
+        f = CalcMolFormula(mol)
+        molmass = monoisotopic_mass_calculator(f, "f")
+        theo_mz = precursor_mz_calculator(precursor_type, molmass)
+        ppm = abs(theo_mz - float(spectrum["params"]["precursor_mz"])) / theo_mz * 10**6
 
-            if ppm > config["ppm_tolerance"]:
-                records["ppm_tolerance"].append(spectrum["params"]["title"])
-                continue
+        # Filter by ppm (mass error)
+        if "ppm_tolerance" in config.keys() and ppm > config["ppm_tolerance"]:
+            records["ppm_tolerance"].append(spectrum["params"]["title"])
+            continue
 
         # Remove the invalid spectra
         if spectrum["intensity array"].max() == spectrum["intensity array"].min():
@@ -221,8 +227,10 @@ def filter_spec(spectra, config, type2charge):
 
         spectrum["params"]["theoretical_precursor_mz"] = theo_mz
         spectrum["params"]["ppm"] = ppm
-        spectrum["params"]["simulated_precursor_mz"] = simulate_experimental_mz(
-            theo_mz, config["ppm_tolerance"]
+        spectrum["params"]["simulated_precursor_mz"] = (
+            simulate_experimental_mz(theo_mz, config["ppm_tolerance"])
+            if "ppm_tolerance" in config.keys()
+            else theo_mz
         )
         spectrum["params"]["charge"] = type2charge[precursor_type]  # add charge
         clean_spectra.append(spectrum)

@@ -170,7 +170,14 @@ if __name__ == "__main__":
             "Unknown"
         )
         all_metadata = all_metadata.dropna()
-        all_metadata["Adduct"] = all_metadata["Adduct"].apply(lambda x: x[:-2] + x[-1:])
+        # GNPS writes singly-charged adducts as '[M+H]1+' — strip only that
+        # explicit charge 1 (']1+' -> ']+'). Blindly deleting the second-to-
+        # last character corrupted already-normalized adducts ('[M+H]+' ->
+        # '[M+H+') and rewrote 2+ adducts into forms the precursor_type
+        # filter silently dropped.
+        all_metadata["Adduct"] = all_metadata["Adduct"].apply(
+            lambda x: re.sub(r"\]1([+-])$", r"]\1", x)
+        )
         all_metadata["collision_energy"] = all_metadata["collision_energy"].astype(str)
         all_metadata["Ion_Mode"] = all_metadata["Ion_Mode"].apply(lambda x: x.upper())
         all_metadata = (

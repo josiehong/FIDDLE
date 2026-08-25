@@ -76,11 +76,16 @@ class MS2FDataset_CL(Dataset):
         """
         original_length = len(data)
         augmented_data = copy.deepcopy(data)
-        for data_item in tqdm(data, desc="Data Augmentation"):
-            spec = data_item["spec"][:, 0]
-            spec_mask = np.where(spec > 0, 1.0, 0.0)
+        # Copies are appended in whole-dataset blocks (round t of every
+        # spectrum, then round t+1, ...) so that augmented copy t of item j
+        # sits at index original_length * (t + 1) + j — the layout the pair
+        # index shift below assumes. Interleaving copies per spectrum instead
+        # silently pairs unrelated molecules once noised_times >= 2.
+        for _ in range(noised_times):
+            for data_item in tqdm(data, desc="Data Augmentation"):
+                spec = data_item["spec"][:, 0]
+                spec_mask = np.where(spec > 0, 1.0, 0.0)
 
-            for _ in range(noised_times):
                 noise = np.random.normal(0, 0.1, len(spec))
                 new_spec = spec + noise * spec_mask
 
@@ -293,6 +298,18 @@ class MGFDataset(Dataset):
                          'precursor_type', and 'use_simulated_precursor_mz'.
         """
         for spectrum in spectra:
+            # Skip (not crash on) adducts the encoder does not support: user
+            # MGFs routinely contain a few, and one unsupported PRECURSOR_TYPE
+            # must not abort the whole run with a KeyError.
+            precursor_type = spectrum["params"]["precursor_type"]
+            if precursor_type not in encoder["type2charge"]:
+                print(
+                    "Skip {}: unsupported precursor type {}".format(
+                        spectrum["params"].get("title", "?"), precursor_type
+                    )
+                )
+                continue
+
             good_spec, _, _, spec_arr = generate_ms(
                 x=spectrum["m/z array"],
                 y=spectrum["intensity array"],
@@ -309,6 +326,15 @@ class MGFDataset(Dataset):
             adjust_neutral_add_vec, adjust_precursor_type = self.melt_neutral_precursor(
                 spectrum["params"]["precursor_type"]
             )
+            if adjust_precursor_type not in encoder["precursor_type"]:
+                print(
+                    "Skip {}: unsupported precursor type {} (from {})".format(
+                        spectrum["params"].get("title", "?"),
+                        adjust_precursor_type,
+                        precursor_type,
+                    )
+                )
+                continue
 
             ce, nce = parse_collision_energy(
                 ce_str=spectrum["params"]["collision_energy"],

@@ -112,6 +112,10 @@ def generate_pairs(df):
 def spec2arr_single(spectrum, encoder):
     # convert molecular object to formula string
     mol = Chem.MolFromSmiles(spectrum["params"]["smiles"])
+    if mol is None:
+        # AddHs(None) raises instead of returning None — skip the record
+        print("Failed to parse smiles: {}".format(spectrum["params"]["smiles"]))
+        return None
     mol = Chem.AddHs(mol)
     try:
         formula = CalcMolFormula(mol)  # formula string
@@ -224,6 +228,10 @@ def generate_ms(x, y, precursor_mz, resolution=1, max_mz=1500, charge=1):
     # Convert x, y to indices and accumulate in the mass spectra vector
     for mz, intensity in zip(x, y):
         idx = int(round(Decimal(str(mz)) // resolution))
+        if idx >= len(intensity_val):
+            # A peak at exactly max_mz bins one past the end (filters admit
+            # m/z == max_mz); drop it rather than crash mid-run.
+            continue
 
         intensity_val[idx] += intensity  # Accumulate the intensity in the bin
         if (
@@ -259,12 +267,15 @@ def remove_precursor_isotopic_peaks(x, y, precursor_mz, charge, tolerance=0.1):
     # Calculate the spacing between isotopic peaks
     spacing = 1 / abs(charge)
 
-    # Generate theoretical isotopic peaks
+    # Generate theoretical isotopic peaks. Isotopologues carry EXTRA neutrons,
+    # so they sit ABOVE the monoisotopic precursor m/z (M, M+1/z, M+2/z, ...);
+    # a downward ladder would instead delete genuine neutral-loss fragments
+    # just below the precursor while leaving the real isotope peaks in place.
     max_isotopes = (
         5  # Typically, we consider up to 5 isotopic peaks for large molecules
     )
     theoretical_isotopic_peaks = [
-        precursor_mz - i * spacing for i in range(max_isotopes)
+        precursor_mz + i * spacing for i in range(max_isotopes)
     ]
 
     # Identify isotopic peaks
@@ -353,7 +364,12 @@ def parse_collision_energy(ce_str, precursor_mz, charge=1):
     }
     for k, v in matches_nce.items():
         if re.match(k, ce_str):
-            nce = v(ce_str) * 0.01
+            # Keep NCE on the percent scale (e.g. 35.0, not 0.35): the
+            # eV branch below derives nce = ce*500*cf/precursor_mz, which is
+            # percent-scaled, and the ce inverse assumes the same units. A
+            # 0.01 factor here put directly-parsed NCE ~100x below eV-derived
+            # NCE in the env features and made the derived ce ~100x too small.
+            nce = v(ce_str)
             break
 
     # unknown collision energy
@@ -386,13 +402,17 @@ def melt_neutral_precursor(formula, precursor_type):
     """
     precursor_type = unify_precursor_type(precursor_type)
 
-    neutrue_list = ["H2O", "NH3", "CO2", "CH4O2", "CH2O2"]
+    # Larger formulas first so e.g. 'H2O' never matches inside 'CH2O2'; no \b
+    # word boundaries — '\d*\bH2O' can never match multi-count losses like
+    # '-2H2O' (no boundary between '2' and 'H'), which left the formula
+    # unadjusted while step 2 still rewrote the precursor type.
+    neutrue_list = ["CH4O2", "CH2O2", "H2O", "NH3", "CO2"]
     neutrue_counts = {}
 
     # Step 1: Get the count of neutral losses/adducts
     for neutrue in neutrue_list:
         if neutrue in precursor_type:
-            pattern = r"([-+]?\d*)\b" + neutrue + r"\b"
+            pattern = r"([-+]?\d*)" + neutrue
             matches = re.findall(pattern, precursor_type)
             if matches:
                 count = matches[0]
@@ -410,7 +430,7 @@ def melt_neutral_precursor(formula, precursor_type):
                 break  # only one neutral adduct is allowed
 
     # Step 2: Remove neutral losses/adducts from the precursor type string
-    pattern = r"([-+]?\d*)(?:" + "|".join(neutrue_list) + ")" + r"\b"
+    pattern = r"([-+]?\d*)(?:" + "|".join(neutrue_list) + ")"
     adjust_precursor_type = re.sub(pattern, "", precursor_type)
 
     # Step 3: Add neutral losses/adducts to formula
