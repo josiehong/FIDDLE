@@ -165,7 +165,7 @@ model:
 # ------------------------
 train: 
   epochs: 200
-  batch_size: 512 # 128
+  batch_size: 512 # 128 fits 11GB GPUs (CL training holds 2 forward graphs, memory ~ 2x batch)
   num_workers: 8
   lr: 0.002 # 0.001
   weight_decay: 0.01

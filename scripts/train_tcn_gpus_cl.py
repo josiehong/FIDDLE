@@ -74,6 +74,46 @@ def mse_criterion(outputs, targets):
     return loss.to(torch.float32)
 
 
+def poisson_formula_criterion(outputs, targets):
+    """Poisson NLL on element counts (count-likelihood alternative to MSE).
+
+    rate = softplus(raw output): positive as Poisson requires, and ~identity
+    for raw > 2, so a checkpoint trained under MSE (raw ≈ counts) fine-tunes
+    continuously. The point prediction for a Poisson rate is its mode,
+    floor(rate) — see decode_formula_counts.
+    """
+    rates = F.softplus(outputs.float())
+    t = nn.PoissonNLLLoss(log_input=False, full=False)
+    return t(rates, targets.float()).to(torch.float32)
+
+
+def decode_formula_counts(y_pred, formula_loss):
+    """Model output -> count vector for formula decoding.
+
+    mse: raw outputs (vector_to_formula rounds). poisson: floor(softplus),
+    the Poisson mode — a committed integer prediction.
+    """
+    if formula_loss == "poisson":
+        return torch.floor(F.softplus(y_pred))
+    return y_pred
+
+
+def load_model_state(model, state_dict):
+    """Load model weights regardless of DataParallel wrapping on either side.
+
+    Checkpoints saved from a DataParallel model prefix every key with
+    "module."; loading them into a bare model (e.g. a single-GPU fine-tune)
+    fails on the key mismatch. Normalise the keys and load into the underlying
+    module.
+    """
+    target = model.module if isinstance(model, nn.DataParallel) else model
+    state_dict = {
+        (k[len("module.") :] if k.startswith("module.") else k): v
+        for k, v in state_dict.items()
+    }
+    target.load_state_dict(state_dict)
+
+
 def train_step(
     model,
     loader,
@@ -83,7 +123,12 @@ def train_step(
     device,
     batch_size,
     weight,
+    formula_loss="mse",
 ):
+    if formula_loss == "poisson":
+        f_criterion = lambda pred, y: poisson_formula_criterion(pred, y)
+    else:
+        f_criterion = lambda pred, y: formula_criterion(pred, y, weight)
 
     mae = []
     mass_mae = []
@@ -122,11 +167,11 @@ def train_step(
                 mse_criterion(mass, pred_mass) * 0.01
                 + mse_criterion(atomnum, pred_atomnum)
                 + mse_criterion(hcnum, pred_hcnum) * 10
-                + formula_criterion(pred_f, y, weight)
+                + f_criterion(pred_f, y)
                 + mse_criterion(mass2, pred_mass2) * 0.01
                 + mse_criterion(atomnum2, pred_atomnum2)
                 + mse_criterion(hcnum2, pred_hcnum2) * 10
-                + formula_criterion(pred_f2, y2, weight)
+                + f_criterion(pred_f2, y2)
                 + cl_criterion(F.normalize(z1, dim=1), F.normalize(z2, dim=1), label)
             )
 
@@ -238,6 +283,14 @@ if __name__ == "__main__":
         "--resume_path", type=str, default="", help="Path to pretrained model"
     )
     parser.add_argument("--transfer", action="store_true", default=False)
+    parser.add_argument(
+        "--formula_loss",
+        type=str,
+        default="mse",
+        choices=["mse", "poisson"],
+        help="Loss for the formula count head: mse (mass-weighted, default) "
+        "or poisson (count likelihood; predictions decode as floor(softplus))",
+    )
 
     parser.add_argument(
         "--ex_model_path",
@@ -332,7 +385,7 @@ if __name__ == "__main__":
     if args.resume_path != "" and not args.transfer:  # start from a checkpoint
         print("Load the checkpoints of the whole model")
         ckpt = torch.load(args.resume_path, map_location=device_1st)
-        model.load_state_dict(ckpt["model_state_dict"])
+        load_model_state(model, ckpt["model_state_dict"])
         optimizer.load_state_dict(ckpt["optimizer_state_dict"])
         scheduler.load_state_dict(ckpt["scheduler_state_dict"])
         epoch_start = ckpt["epoch"]
@@ -343,8 +396,9 @@ if __name__ == "__main__":
 
     elif args.resume_path != "" and args.transfer:  # transfer learning
         print("Transfer learning from the pretrained model")
-        model.load_state_dict(
-            torch.load(args.resume_path, map_location=device_1st)["model_state_dict"]
+        load_model_state(
+            model,
+            torch.load(args.resume_path, map_location=device_1st)["model_state_dict"],
         )
 
         epoch_start = 0
@@ -394,6 +448,7 @@ if __name__ == "__main__":
                 device_1st,
                 batch_size=config["train"]["batch_size"],
                 weight=weight,
+                formula_loss=args.formula_loss,
             )
         )
         print(
@@ -418,8 +473,9 @@ if __name__ == "__main__":
         )
 
         # calculate the formula (tmp)
+        y_pred_dec = decode_formula_counts(y_pred, args.formula_loss)
         formula_true = [vector_to_formula(y) for y in y_true]
-        formula_pred = [vector_to_formula(y) for y in y_pred]
+        formula_pred = [vector_to_formula(y) for y in y_pred_dec]
         print("Exp samples: {}, \nmass: {}".format(formula_true[:5], mass_true[:5]))
         print("Pred samples: {}, \nmass: {}".format(formula_pred[:5], mass_pred[:5]))
         formula_acc = sum(
@@ -428,7 +484,7 @@ if __name__ == "__main__":
         print("formula w acc: {:.4f}".format(formula_acc))
         # calculate the formula without H (tmp)
         formula_wo_true = [vector_to_formula(y, withH=False) for y in y_true]
-        formula_wo_pred = [vector_to_formula(y, withH=False) for y in y_pred]
+        formula_wo_pred = [vector_to_formula(y, withH=False) for y in y_pred_dec]
         formula_wo_acc = sum(
             [1 for f1, f2 in zip(formula_wo_true, formula_wo_pred) if f1 == f2]
         ) / len(formula_wo_pred)
@@ -488,10 +544,11 @@ if __name__ == "__main__":
     # 5. Output the prediction results
     if args.result_path != "":
         print("Loading the best model...")
-        model.load_state_dict(
+        load_model_state(
+            model,
             torch.load(args.checkpoint_path, map_location=device_1st)[
                 "model_state_dict"
-            ]
+            ],
         )
         spec_ids, y_true, y_pred, mae, mass_true, mass_pred, mass_mae = eval_step(
             model, valid_loader, device_1st
@@ -504,9 +561,14 @@ if __name__ == "__main__":
             )
         )
         # calculate the formula
+        y_pred_dec = decode_formula_counts(y_pred, args.formula_loss)
         formula_true = [vector_to_formula(y) for y in y_true]
-        formula_pred = [vector_to_formula(y) for y in y_pred]
+        formula_pred = [vector_to_formula(y) for y in y_pred_dec]
 
+        # Y Pred keeps the continuous outputs (softplus rates for poisson) so
+        # downstream ambiguity analyses see the model's raw uncertainty.
+        if args.formula_loss == "poisson":
+            y_pred = F.softplus(y_pred)
         # y_true = [','.join(y) for y in y_true.numpy().astype('str')]
         y_pred = [",".join(y) for y in y_pred.numpy().astype("str")]
 
