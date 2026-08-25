@@ -170,7 +170,8 @@ train:
   lr: 0.002 # 0.001
   weight_decay: 0.01
   warmup_ratio: 0.1
-  early_stop_step: 10
+  early_stop_step: 15 # ~3x plateau patience so >=2 LR halvings get a chance
+  early_stop_min_epochs: 5 # patience does not count before this epoch
   patience: 5
   noised_times: 3
   

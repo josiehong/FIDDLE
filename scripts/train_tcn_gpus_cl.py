@@ -507,16 +507,22 @@ if __name__ == "__main__":
         spec_ids, y_true, y_pred, mae, mass_true, mass_pred, mass_mae = eval_step(
             model, valid_loader, device_1st
         )
-        valid_mae = np.mean(mae)
         valid_mass_mae = np.mean(mass_mae)
+
+        # calculate the formula (tmp)
+        y_pred_dec = decode_formula_counts(y_pred, args.formula_loss)
+        # Validation MAE on DECODED counts, not raw outputs: for the poisson
+        # loss the raw values are pre-softplus scores that go strongly
+        # negative as zero-count rates improve, so raw-space MAE rises while
+        # the model gets better — driving patience/LR off it stalls or kills
+        # healthy runs. Count-space MAE is meaningful for every loss (and
+        # identical to the raw metric for mse).
+        valid_mae = torch.mean(torch.abs(y_true - y_pred_dec)).item()
         print(
             "Validation error: {:.4f} mass error: {:.4f}".format(
                 valid_mae, valid_mass_mae
             )
         )
-
-        # calculate the formula (tmp)
-        y_pred_dec = decode_formula_counts(y_pred, args.formula_loss)
         formula_true = [vector_to_formula(y) for y in y_true]
         formula_pred = [vector_to_formula(y) for y in y_pred_dec]
         print("Exp samples: {}, \nmass: {}".format(formula_true[:5], mass_true[:5]))
@@ -533,12 +539,22 @@ if __name__ == "__main__":
         ) / len(formula_wo_pred)
         print("formula w/o acc: {:.4f}".format(formula_wo_acc))
 
-        # Early stopping & LR schedule are driven by validation mass error (smooth);
-        # the with-H formula accuracy is too noisy/low to drive stopping reliably.
+        # Early stopping & LR schedule are driven by count-space validation MAE
+        # (smooth); the with-H formula accuracy is too noisy/low to drive
+        # stopping reliably. Patience only counts after the min-epoch floor —
+        # from-scratch early dynamics are noisy, and an epoch-1 "best" that
+        # epochs 2..patience must beat is how good runs die young.
+        early_stop_min_epochs = config["train"].get("early_stop_min_epochs", 5)
         if valid_mae < best_valid_mae:
             best_valid_mae = valid_mae
             early_stop_patience = 0
             print("Early stop patience reset (valid_mae improved)")
+        elif epoch <= early_stop_min_epochs:
+            print(
+                "Early stop count held (epoch <= {} floor)".format(
+                    early_stop_min_epochs
+                )
+            )
         else:
             early_stop_patience += 1
             print(
@@ -547,11 +563,14 @@ if __name__ == "__main__":
                 )
             )
 
+        # Track the best without-H accuracy independently (record-keeping only;
+        # previously it silently updated only when with-H accuracy improved).
+        best_formula_wo_acc = max(best_formula_wo_acc, formula_wo_acc)
+
         # Checkpoint selection is unchanged: keep the model with the best formula
         # accuracy (with H). Decoupled from early stopping above.
         if best_formula_acc < formula_acc:
             best_formula_acc = formula_acc
-            best_formula_wo_acc = formula_wo_acc
 
             if args.checkpoint_path != "":
                 print("Saving checkpoint (best formula acc)...")
@@ -566,6 +585,25 @@ if __name__ == "__main__":
                     "best_val_wo_acc": best_formula_wo_acc,
                 }
                 torch.save(checkpoint, args.checkpoint_path)
+
+        # Rolling last-epoch checkpoint for crash recovery: until accuracy
+        # exceeds 0 the best-acc file stays at epoch 1, so a crash would
+        # otherwise resume from the very start. Overwritten every epoch.
+        if args.checkpoint_path != "":
+            last_path = args.checkpoint_path.replace(".pt", "_last.pt")
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "scheduler_state_dict": scheduler.state_dict(),
+                    "num_params": num_params,
+                    "best_val_mae": best_valid_mae,
+                    "best_val_acc": best_formula_acc,
+                    "best_val_wo_acc": best_formula_wo_acc,
+                },
+                last_path,
+            )
 
         # Step the LR scheduler after the warmup phase (halve LR when valid_mae plateaus)
         if epoch > warmup_steps // len(train_loader):
