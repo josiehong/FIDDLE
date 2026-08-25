@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Merged the [msfiddle](https://pypi.org/project/msfiddle/) PyPI package repository into this repo. The `msfiddle/` package directory is now the single source of truth for the shared core (`model_tcn.py`, `dataset.py`, `utils/`, `config/`, `demo/`); the research scripts import from it and the former top-level copies are removed. Packaging (`setup.py`), docs (readthedocs), package tests, and the PyPI publish workflow now live here. Pre-merge package release history is appended at the bottom of this file.
 - The package picks up fixes that had only landed on the research side: `fast_mass` refinement speedup, the `generate_ms` per-bin m/z fix, the Python 3.11 `random.sample` fix, and the halogen-extended refinement configs.
+- `msfiddle/utils/refine_utils.py`: refinement search internals optimised (deque frontier with O(1) membership, `f0_list` parsed once per call, hydrogen adjustment without string round-trips) — ~3.4× faster, output verified identical against the previous implementation on 400 randomised cases.
 - Research scripts moved from the repo root into `scripts/` (shell drivers stay in `running_scripts/`, with paths updated). Each script bootstraps the repo root onto `sys.path` and the conda environments now install the package in editable mode, so `msfiddle` imports resolve regardless of working directory; scripts should still be run from the repo root so their relative default paths resolve.
 
 ## [2.1.0] - 2026-06-13
