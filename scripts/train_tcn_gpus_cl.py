@@ -124,11 +124,14 @@ def train_step(
     batch_size,
     weight,
     formula_loss="mse",
+    scaler=None,
 ):
     if formula_loss == "poisson":
         f_criterion = lambda pred, y: poisson_formula_criterion(pred, y)
     else:
         f_criterion = lambda pred, y: formula_criterion(pred, y, weight)
+
+    use_amp = scaler is not None and scaler.is_enabled()
 
     mae = []
     mass_mae = []
@@ -160,24 +163,47 @@ def train_step(
             # train MS2FNet_tcn (generator)
             # -------------------------
             model.zero_grad()
-            z1, pred_f, pred_mass, pred_atomnum, pred_hcnum = model(x, env)
-            z2, pred_f2, pred_mass2, pred_atomnum2, pred_hcnum2 = model(x2, env2)
+            # Fused Siamese forward: the weights are shared and the model has
+            # no batch-coupled layers (weight_norm only), so running both pair
+            # members through one concatenated batch computes exactly the same
+            # function as two passes, at better GPU occupancy.
+            n1 = x.shape[0]
+            with torch.autocast(
+                device_type="cuda" if use_amp else "cpu", enabled=use_amp
+            ):
+                z_all, f_all, m_all, an_all, hc_all = model(
+                    torch.cat([x, x2], dim=0), torch.cat([env, env2], dim=0)
+                )
+                z1, z2 = z_all[:n1], z_all[n1:]
+                pred_f, pred_f2 = f_all[:n1], f_all[n1:]
+                pred_mass, pred_mass2 = m_all[:n1], m_all[n1:]
+                pred_atomnum, pred_atomnum2 = an_all[:n1], an_all[n1:]
+                pred_hcnum, pred_hcnum2 = hc_all[:n1], hc_all[n1:]
 
-            loss = (
-                mse_criterion(mass, pred_mass) * 0.01
-                + mse_criterion(atomnum, pred_atomnum)
-                + mse_criterion(hcnum, pred_hcnum) * 10
-                + f_criterion(pred_f, y)
-                + mse_criterion(mass2, pred_mass2) * 0.01
-                + mse_criterion(atomnum2, pred_atomnum2)
-                + mse_criterion(hcnum2, pred_hcnum2) * 10
-                + f_criterion(pred_f2, y2)
-                + cl_criterion(F.normalize(z1, dim=1), F.normalize(z2, dim=1), label)
-            )
+                loss = (
+                    mse_criterion(mass, pred_mass) * 0.01
+                    + mse_criterion(atomnum, pred_atomnum)
+                    + mse_criterion(hcnum, pred_hcnum) * 10
+                    + f_criterion(pred_f, y)
+                    + mse_criterion(mass2, pred_mass2) * 0.01
+                    + mse_criterion(atomnum2, pred_atomnum2)
+                    + mse_criterion(hcnum2, pred_hcnum2) * 10
+                    + f_criterion(pred_f2, y2)
+                    + cl_criterion(
+                        F.normalize(z1, dim=1), F.normalize(z2, dim=1), label
+                    )
+                )
 
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
+            if use_amp:
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)  # so the clip sees true gradients
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
 
             # Update the learning rate during warm-up phase
             # After warm-up phase, the learning rate ctrled by warmup_scheduler is fixed and we won't use it
@@ -315,6 +341,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no_cuda", action="store_true", default=False, help="Disables CUDA training"
     )
+    parser.add_argument(
+        "--amp",
+        action="store_true",
+        default=False,
+        help="Mixed-precision training (autocast fp16 + GradScaler); CUDA only",
+    )
     args = parser.parse_args()
 
     init_random_seed(args.seed)
@@ -322,11 +354,21 @@ if __name__ == "__main__":
         config = yaml.load(f, Loader=yaml.FullLoader)
     print("Load the model & training configuration from {}".format(args.config_path))
 
+    # Input size is fixed (padded spectra, constant batch), the exact case
+    # cuDNN's algorithm autotuner exists for.
+    torch.backends.cudnn.benchmark = True
+
     device_1st = (
         torch.device("cuda:" + str(args.device[0]))
         if torch.cuda.is_available() and not args.no_cuda
         else torch.device("cpu")
     )
+    use_amp = args.amp and torch.cuda.is_available() and not args.no_cuda
+    if args.amp and not use_amp:
+        print("AMP requested but CUDA unavailable — training in full precision")
+    amp_scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    if use_amp:
+        print("Mixed-precision training enabled (autocast fp16 + GradScaler)")
     print(f"Device(s): {args.device}")
 
     # predifined tensors:
@@ -449,6 +491,7 @@ if __name__ == "__main__":
                 batch_size=config["train"]["batch_size"],
                 weight=weight,
                 formula_loss=args.formula_loss,
+                scaler=amp_scaler,
             )
         )
         print(

@@ -288,6 +288,10 @@ if __name__ == "__main__":
         config = yaml.load(f, Loader=yaml.FullLoader)
     print("Load the model & training configuration from {}".format(args.config_path))
 
+    # Input size is fixed (padded spectra, constant batch), the exact case
+    # cuDNN's algorithm autotuner exists for.
+    torch.backends.cudnn.benchmark = True
+
     device_1st = (
         torch.device("cuda:" + str(args.device[0]))
         if torch.cuda.is_available() and not args.no_cuda
