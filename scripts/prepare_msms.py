@@ -66,6 +66,12 @@ if __name__ == "__main__":
         action="store_true",
         help="If using MaxMin algorithm to pick training molecules",
     )
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=8,
+        help="Process count for parallel filtering/encoding (0 = serial)",
+    )
     args = parser.parse_args()
 
     assert args.train_ratio < 1.0
@@ -238,6 +244,7 @@ if __name__ == "__main__":
                 origin_spectra[ds],
                 config[config_name],
                 type2charge=config["encoding"]["type2charge"],
+                num_workers=args.num_workers,
             )
 
             # mgf.write(origin_spectra[ds], './data/mgf_debug/original_{}.mgf'.format(config_name), file_mode="w") # save mgf for debug
@@ -342,7 +349,9 @@ if __name__ == "__main__":
         # convert the spectra into arrays
         print("({}) Convert spectra and molecules data into arrays...".format(ins))
         # test (do not apply contrastive learning on test set)
-        test_data, _ = spec2arr(test_spectra, config["encoding"])
+        test_data, _ = spec2arr(
+            test_spectra, config["encoding"], num_workers=args.num_workers
+        )
         out_path = os.path.join(
             args.pkl_dir,
             "{}_{}_test.pkl".format(ins, "maxmin" if args.maxmin_pick else "random"),
@@ -351,7 +360,9 @@ if __name__ == "__main__":
             pickle.dump(test_data, f)
             print("Save {} data to {}".format(len(test_data), out_path))
         # train
-        train_data, bad_title = spec2arr(train_spectra, config["encoding"])
+        train_data, bad_title = spec2arr(
+            train_spectra, config["encoding"], num_workers=args.num_workers
+        )
         out_path = os.path.join(
             args.pkl_dir,
             "{}_{}_train.pkl".format(ins, "maxmin" if args.maxmin_pick else "random"),

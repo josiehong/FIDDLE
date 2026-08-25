@@ -108,11 +108,102 @@ def sdf2mgf(path, prefix):
     return spectra
 
 
-def filter_spec(spectra, config, type2charge):
+def _filter_spec_single(spectrum, config, type2charge):
+    """Filter/clean one spectrum. Returns (kept_spectrum_or_None, reject_key).
+
+    reject_key is the records category the rejection counts under, or None for
+    rejections the original code did not record (bad SMILES, atom count).
+    """
+    smiles = spectrum["params"]["smiles"]
+    # Guard before AddHs: AddHs(None) raises instead of returning None,
+    # so one malformed SMILES would abort the whole run.
+    mol = Chem.MolFromSmiles(smiles)
+    if mol == None:
+        return None, None
+    mol = Chem.AddHs(mol)
+
+    # Unify the smiles format
+    smiles = Chem.MolToSmiles(mol, isomericSmiles=False, canonical=True)
+    spectrum["params"]["smiles"] = smiles
+
+    # Filter by instrument type
+    if "instrument_type" in config.keys():
+        instrument_type = spectrum["params"]["instrument_type"]
+        if instrument_type not in config["instrument_type"]:
+            return None, "instrument_type"
+
+    # Filter by instrument (MoNA contains too many intrument names to filter out)
+    if "instrument" in config.keys():
+        instrument = spectrum["params"]["source_instrument"]
+        if instrument not in config["instrument"]:
+            return None, "instrument"
+
+    # Filter by mslevel
+    if "ms_level" in config.keys():
+        mslevel = spectrum["params"]["ms_level"]
+        if mslevel != config["ms_level"]:
+            return None, "ms_level"
+
+    # Filter by atom number and atom type
+    if (
+        len(mol.GetAtoms()) > config["max_atom_num"]
+        or len(mol.GetAtoms()) < config["min_atom_num"]
+    ):
+        return None, None
+    for atom in mol.GetAtoms():
+        if atom.GetSymbol() not in config["atom_type"]:
+            return None, "atom_type"
+
+    # Filter by precursor type
+    precursor_type = spectrum["params"]["precursor_type"]
+    if precursor_type not in config["precursor_type"]:
+        return None, "precursor_type"
+
+    # Filt by peak number
+    if len(spectrum["m/z array"]) < config["min_peak_num"]:
+        return None, "peak_num"
+
+    # Filter by max m/z
+    if (
+        np.max(spectrum["m/z array"]) < config["min_mz"]
+        or np.max(spectrum["m/z array"]) > config["max_mz"]
+    ):
+        return None, "max_mz"
+
+    # Theoretical precursor m/z and mass error are always computed (they
+    # are stamped on every surviving spectrum for downstream encoders);
+    # the ppm cut itself only applies when the config sets a tolerance.
+    f = CalcMolFormula(mol)
+    molmass = monoisotopic_mass_calculator(f, "f")
+    theo_mz = precursor_mz_calculator(precursor_type, molmass)
+    ppm = abs(theo_mz - float(spectrum["params"]["precursor_mz"])) / theo_mz * 10**6
+
+    # Filter by ppm (mass error)
+    if "ppm_tolerance" in config.keys() and ppm > config["ppm_tolerance"]:
+        return None, "ppm_tolerance"
+
+    # Remove the invalid spectra
+    if spectrum["intensity array"].max() == spectrum["intensity array"].min():
+        return None, "invalid_intensity_array"
+
+    spectrum["params"]["theoretical_precursor_mz"] = theo_mz
+    spectrum["params"]["ppm"] = ppm
+    spectrum["params"]["simulated_precursor_mz"] = (
+        simulate_experimental_mz(theo_mz, config["ppm_tolerance"])
+        if "ppm_tolerance" in config.keys()
+        else theo_mz
+    )
+    spectrum["params"]["charge"] = type2charge[precursor_type]  # add charge
+    return spectrum, None
+
+
+def filter_spec(spectra, config, type2charge, num_workers=0):
     """Filter and clean a list of spectra according to a configuration dict.
 
     Applies sequential filters: instrument type/name, MS level, atom count/type,
-    precursor type, peak count, m/z range, and ppm mass error.
+    precursor type, peak count, m/z range, and ppm mass error. Each spectrum is
+    independent, so with num_workers > 1 the work runs in a process pool
+    (order-preserving, output identical to serial).
 
     Args:
             spectra: List of spectra dicts in MGF format.
@@ -120,13 +211,35 @@ def filter_spec(spectra, config, type2charge):
                     'atom_type', 'precursor_type', 'min_peak_num', 'min_mz', 'max_mz',
                     'ppm_tolerance', etc.).
             type2charge: Dict mapping precursor type string to charge int.
+            num_workers: Process count for parallel filtering (0/1 = serial).
 
     Returns:
             tuple: (clean_spectra, smiles_list) — filtered spectra and their SMILES.
     """
+    if num_workers and num_workers > 1:
+        from functools import partial
+        from multiprocessing import Pool
+
+        with Pool(num_workers) as pool:
+            results = list(
+                tqdm(
+                    pool.imap(
+                        partial(
+                            _filter_spec_single,
+                            config=config,
+                            type2charge=type2charge,
+                        ),
+                        spectra,
+                        chunksize=256,
+                    ),
+                    total=len(spectra),
+                )
+            )
+    else:
+        results = [_filter_spec_single(s, config, type2charge) for s in tqdm(spectra)]
+
     clean_spectra = []
     smiles_list = []
-
     records = {
         "instrument_type": [],
         "instrument": [],
@@ -139,102 +252,12 @@ def filter_spec(spectra, config, type2charge):
         "ppm_tolerance": [],
         "invalid_intensity_array": [],
     }
-    for idx, spectrum in enumerate(tqdm(spectra)):
-        smiles = spectrum["params"]["smiles"]
-        # Guard before AddHs: AddHs(None) raises instead of returning None,
-        # so one malformed SMILES would abort the whole run.
-        mol = Chem.MolFromSmiles(smiles)
-        if mol == None:
-            continue
-        mol = Chem.AddHs(mol)
-
-        # Unify the smiles format
-        smiles = Chem.MolToSmiles(mol, isomericSmiles=False, canonical=True)
-        spectrum["params"]["smiles"] = smiles
-
-        # Filter by instrument type
-        if "instrument_type" in config.keys():
-            instrument_type = spectrum["params"]["instrument_type"]
-            if instrument_type not in config["instrument_type"]:
-                records["instrument_type"].append(spectrum["params"]["title"])
-                continue
-
-        # Filter by instrument (MoNA contains too many intrument names to filter out)
-        if "instrument" in config.keys():
-            instrument = spectrum["params"]["source_instrument"]
-            if instrument not in config["instrument"]:
-                records["instrument"].append(spectrum["params"]["title"])
-                continue
-
-        # Filter by mslevel
-        if "ms_level" in config.keys():
-            mslevel = spectrum["params"]["ms_level"]
-            if mslevel != config["ms_level"]:
-                records["ms_level"].append(spectrum["params"]["title"])
-                continue
-
-        # Filter by atom number and atom type
-        if (
-            len(mol.GetAtoms()) > config["max_atom_num"]
-            or len(mol.GetAtoms()) < config["min_atom_num"]
-        ):
-            continue
-        is_compound_countain_rare_atom = False
-        for atom in mol.GetAtoms():
-            if atom.GetSymbol() not in config["atom_type"]:
-                is_compound_countain_rare_atom = True
-                break
-        if is_compound_countain_rare_atom:
-            records["atom_type"].append(spectrum["params"]["title"])
-            continue
-
-        # Filter by precursor type
-        precursor_type = spectrum["params"]["precursor_type"]
-        if precursor_type not in config["precursor_type"]:
-            records["precursor_type"].append(spectrum["params"]["title"])
-            continue
-
-        # Filt by peak number
-        if len(spectrum["m/z array"]) < config["min_peak_num"]:
-            records["peak_num"].append(spectrum["params"]["title"])
-            continue
-
-        # Filter by max m/z
-        if (
-            np.max(spectrum["m/z array"]) < config["min_mz"]
-            or np.max(spectrum["m/z array"]) > config["max_mz"]
-        ):
-            records["max_mz"].append(spectrum["params"]["title"])
-            continue
-
-        # Theoretical precursor m/z and mass error are always computed (they
-        # are stamped on every surviving spectrum for downstream encoders);
-        # the ppm cut itself only applies when the config sets a tolerance.
-        f = CalcMolFormula(mol)
-        molmass = monoisotopic_mass_calculator(f, "f")
-        theo_mz = precursor_mz_calculator(precursor_type, molmass)
-        ppm = abs(theo_mz - float(spectrum["params"]["precursor_mz"])) / theo_mz * 10**6
-
-        # Filter by ppm (mass error)
-        if "ppm_tolerance" in config.keys() and ppm > config["ppm_tolerance"]:
-            records["ppm_tolerance"].append(spectrum["params"]["title"])
-            continue
-
-        # Remove the invalid spectra
-        if spectrum["intensity array"].max() == spectrum["intensity array"].min():
-            records["invalid_intensity_array"].append(spectrum["params"]["title"])
-            continue
-
-        spectrum["params"]["theoretical_precursor_mz"] = theo_mz
-        spectrum["params"]["ppm"] = ppm
-        spectrum["params"]["simulated_precursor_mz"] = (
-            simulate_experimental_mz(theo_mz, config["ppm_tolerance"])
-            if "ppm_tolerance" in config.keys()
-            else theo_mz
-        )
-        spectrum["params"]["charge"] = type2charge[precursor_type]  # add charge
-        clean_spectra.append(spectrum)
-        smiles_list.append(smiles)
+    for spectrum, (kept, reject_key) in zip(spectra, results):
+        if kept is not None:
+            clean_spectra.append(kept)
+            smiles_list.append(kept["params"]["smiles"])
+        elif reject_key is not None:
+            records[reject_key].append(spectrum["params"]["title"])
 
     print("Filtering records: ")
     for k, v in records.items():

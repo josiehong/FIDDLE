@@ -23,18 +23,38 @@ from .mol_utils import (
 # ------------------------ Main Functions ------------------------
 
 
-def spec2arr(spectra, encoder):
+def spec2arr(spectra, encoder, num_workers=0):
     """data format
     [
         {'title': <str>, 'formula': <numpy array>, 'env': <numpy array>, 'spec': <numpy array>},
         {'title': <str>, 'formula': <numpy array>, 'env': <numpy array>, 'spec': <numpy array>},
         ....
     ]
+
+    Encoding is independent per spectrum, so with num_workers > 1 the work is
+    farmed to a process pool (order-preserving, output identical to serial).
     """
+    if num_workers and num_workers > 1:
+        from functools import partial
+        from multiprocessing import Pool
+
+        with Pool(num_workers) as pool:
+            results = list(
+                tqdm(
+                    pool.imap(
+                        partial(spec2arr_single, encoder=encoder),
+                        spectra,
+                        chunksize=64,
+                    ),
+                    total=len(spectra),
+                )
+            )
+    else:
+        results = [spec2arr_single(s, encoder) for s in tqdm(spectra)]
+
     data = []
     bad_data = []
-    for idx, spectrum in enumerate(tqdm(spectra)):
-        data_item = spec2arr_single(spectrum, encoder)
+    for spectrum, data_item in zip(spectra, results):
         if data_item != None:
             data.append(data_item)
         else:
@@ -84,27 +104,38 @@ def spec2pair(data, bad_title, encoder):
 
 
 def generate_pairs(df):
-    df_group = df.groupby("smiles")
-    groups = list(df_group.groups.values())
+    """Sample one positive (same compound) and one negative (different
+    compound) partner per spectrum.
+
+    Same sampling distribution as the original implementation — uniform over
+    the row's group minus itself for positives; uniform over the other groups,
+    then uniform over that group's members, for negatives — but O(n) instead
+    of rescanning every group per row (each row belongs to exactly one smiles
+    group, so "groups not containing this row" is just "every other group").
+    """
+    group_members = {s: list(idx) for s, idx in df.groupby("smiles").groups.items()}
+    group_keys = list(group_members.keys())
+    n_groups = len(group_keys)
 
     positive_pairs = set()
     negative_pairs = set()
 
-    for _, row in tqdm(df.iterrows(), total=len(df)):
-        group = df_group.get_group(row["smiles"])
-
+    for row_name, smiles in tqdm(zip(df.index, df["smiles"]), total=len(df)):
         # Positive pair (from the same group)
-        if len(group) > 1:
-            positive_pair_candidates = list(set(group.index) - {row.name})
-            positive_pair = random.sample(positive_pair_candidates, 1)[0]
-            positive_pairs.add(tuple(sorted((row.name, positive_pair))))
+        members = group_members[smiles]
+        if len(members) > 1:
+            positive_pair = row_name
+            while positive_pair == row_name:
+                positive_pair = random.choice(members)
+            positive_pairs.add(tuple(sorted((row_name, positive_pair))))
 
         # Negative pair (from a different group)
-        other_groups = [g for g in groups if row.name not in g]
-        if other_groups:
-            random_group = random.choice(other_groups)
-            negative_pair = random.choice(random_group)
-            negative_pairs.add(tuple(sorted((row.name, negative_pair))))
+        if n_groups > 1:
+            other = smiles
+            while other == smiles:
+                other = group_keys[random.randrange(n_groups)]
+            negative_pair = random.choice(group_members[other])
+            negative_pairs.add(tuple(sorted((row_name, negative_pair))))
 
     return positive_pairs, negative_pairs
 
@@ -225,10 +256,19 @@ def generate_ms(x, y, precursor_mz, resolution=1, max_mz=1500, charge=1):
         int(max_mz // resolution)
     )  # Track the per-bin max single-peak intensity
 
-    # Convert x, y to indices and accumulate in the mass spectra vector
+    # Convert x, y to indices and accumulate in the mass spectra vector.
+    # Bin index = floor(mz / resolution), computed in float with a small
+    # epsilon instead of per-peak Decimal parsing (~100x cheaper in the
+    # hottest loop of preprocessing). The epsilon absorbs float representation
+    # error on exact bin boundaries (100.2 * 5 = 500.99999... must bin to
+    # 501): peak m/z values carry <= 5 decimals, so true off-boundary products
+    # sit >= 5e-4 from an integer while float error is < 1e-8 — 1e-6 separates
+    # the two cleanly. Parity with the old Decimal formula is pinned by tests.
+    inv_res = float(1 / resolution)
+    n_bins = len(intensity_val)
     for mz, intensity in zip(x, y):
-        idx = int(round(Decimal(str(mz)) // resolution))
-        if idx >= len(intensity_val):
+        idx = int(mz * inv_res + 1e-6)
+        if idx >= n_bins:
             # A peak at exactly max_mz bins one past the end (filters admit
             # m/z == max_mz); drop it rather than crash mid-run.
             continue
