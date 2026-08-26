@@ -72,8 +72,8 @@ def poisson_formula_criterion(outputs, targets):
 
     rate = softplus(raw output): positive as Poisson requires, and ~identity
     for raw > 2, so a checkpoint trained under MSE (raw ≈ counts) fine-tunes
-    continuously. The point prediction for a Poisson rate is its mode,
-    floor(rate) — see decode_formula_counts.
+    continuously. Point predictions decode as round(rate) — see
+    decode_formula_counts.
     """
     rates = F.softplus(outputs.float())
     t = nn.PoissonNLLLoss(log_input=False, full=False)
@@ -83,11 +83,14 @@ def poisson_formula_criterion(outputs, targets):
 def decode_formula_counts(y_pred, formula_loss):
     """Model output -> count vector for formula decoding.
 
-    mse: raw outputs (vector_to_formula rounds). poisson: floor(softplus),
-    the Poisson mode — a committed integer prediction.
+    mse: raw outputs (vector_to_formula rounds). poisson: round(softplus).
+    Round, not floor: the NLL drives rates toward the true integer count, so
+    converged rates jitter symmetrically around it (17.98 for a true 18) and
+    floor — the mode of a sampled Poisson, not of a mean-fitted estimate —
+    would turn half of those correct rates into off-by-one-low predictions.
     """
     if formula_loss == "poisson":
-        return torch.floor(F.softplus(y_pred))
+        return torch.round(F.softplus(y_pred))
     return y_pred
 
 
@@ -161,8 +164,9 @@ def train_step(
                 warmup_scheduler.step()
                 # print('Warmup lr: {:.6f}'.format(get_lr(optimizer))) # Josie: for debug
 
+            pf_dec = decode_formula_counts(pred_f.detach(), formula_loss)
             mae = (
-                mae + torch.mean(torch.abs(y - pred_f), dim=1).tolist()
+                mae + torch.mean(torch.abs(y - pf_dec), dim=1).tolist()
             )  # Josie: for debug
             mass_mae = (
                 mass_mae + torch.abs(mass - pred_mass).tolist()
@@ -255,7 +259,7 @@ if __name__ == "__main__":
         default="mse",
         choices=["mse", "poisson"],
         help="Loss for the formula count head: mse (mass-weighted, default) "
-        "or poisson (count likelihood; predictions decode as floor(softplus))",
+        "or poisson (count likelihood; predictions decode as round(softplus))",
     )
 
     parser.add_argument(
