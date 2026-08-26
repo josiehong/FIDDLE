@@ -19,7 +19,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from msfiddle.dataset import MS2FDataset_CL, MS2FDataset
-from msfiddle.model_tcn import MS2FNet_tcn
+from msfiddle.model_tcn import MS2FNet_tcn, decode_formula_counts
 from msfiddle.utils import ATOMS_WEIGHT, ATOMS_INDEX, ATOMS_INDEX_re, vector_to_formula
 
 
@@ -85,20 +85,6 @@ def poisson_formula_criterion(outputs, targets):
     rates = F.softplus(outputs.float())
     t = nn.PoissonNLLLoss(log_input=False, full=False)
     return t(rates, targets.float()).to(torch.float32)
-
-
-def decode_formula_counts(y_pred, formula_loss):
-    """Model output -> count vector for formula decoding.
-
-    mse: raw outputs (vector_to_formula rounds). poisson: round(softplus).
-    Round, not floor: the NLL drives rates toward the true integer count, so
-    converged rates jitter symmetrically around it (17.98 for a true 18) and
-    floor — the mode of a sampled Poisson, not of a mean-fitted estimate —
-    would turn half of those correct rates into off-by-one-low predictions.
-    """
-    if formula_loss == "poisson":
-        return torch.round(F.softplus(y_pred))
-    return y_pred
 
 
 def load_model_state(model, state_dict):

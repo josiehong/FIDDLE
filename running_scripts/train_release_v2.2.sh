@@ -200,6 +200,7 @@ python scripts/prepare_augment_rescore.py \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path $TCN_QTOF \
 --rescore_dir $PKL_DIR \
+--formula_loss $FORMULA_LOSS \
 --pos_cap 10 --neg_per_pos 8 --tolerance 50 --num_workers 8 --device $DEV1_QTOF
 
 python scripts/train_rescore.py \
@@ -217,6 +218,7 @@ python scripts/prepare_augment_rescore.py \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path $TCN_ORBITRAP \
 --rescore_dir $PKL_DIR \
+--formula_loss $FORMULA_LOSS \
 --pos_cap 10 --neg_per_pos 8 --tolerance 50 --num_workers 8 --device $DEV1_ORBITRAP
 
 python scripts/train_rescore.py \
@@ -244,6 +246,7 @@ done
 python scripts/run_fiddle.py --test_data $PKL_DIR/qtof_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path $TCN_QTOF \
+--formula_loss $FORMULA_LOSS \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_$TAG.pt \
 --result_path ./result/fiddle_qtof_$TAG.csv --device $DEV1_QTOF
 python scripts/eval_topk.py --result ./result/fiddle_qtof_$TAG.csv \
@@ -254,6 +257,7 @@ python scripts/eval_topk.py --result ./result/fiddle_qtof_$TAG.csv \
 python scripts/run_fiddle.py --test_data $PKL_DIR/orbitrap_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path $TCN_ORBITRAP \
+--formula_loss $FORMULA_LOSS \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_$TAG.pt \
 --result_path ./result/fiddle_orbitrap_$TAG.csv --device $DEV1_ORBITRAP
 python scripts/eval_topk.py --result ./result/fiddle_orbitrap_$TAG.csv \

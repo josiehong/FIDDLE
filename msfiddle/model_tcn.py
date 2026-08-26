@@ -5,6 +5,19 @@ import torch.nn.init as init
 from torch.nn.utils import weight_norm
 
 
+def decode_formula_counts(y_pred, formula_loss="mse"):
+    """Model formula-head output -> count vector, per training loss.
+
+    mse: raw outputs (downstream vector_to_formula rounds). poisson: the head
+    emits pre-softplus rate scores, so decode as round(softplus(raw)); raw
+    scores for zero-count elements are strongly negative and must never be
+    rounded directly.
+    """
+    if formula_loss == "poisson":
+        return torch.round(torch.nn.functional.softplus(y_pred))
+    return y_pred
+
+
 class Chomp1d(nn.Module):
     def __init__(self, chomp_size):
         super(Chomp1d, self).__init__()

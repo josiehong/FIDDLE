@@ -19,7 +19,12 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from msfiddle.dataset import MGFDataset
-from msfiddle.model_tcn import MS2FNet_tcn, FormulaEncoder, RescoreHead
+from msfiddle.model_tcn import (
+    MS2FNet_tcn,
+    FormulaEncoder,
+    RescoreHead,
+    decode_formula_counts,
+)
 from msfiddle.utils import (
     formula_refinement,
     mass_calculator,
@@ -146,6 +151,13 @@ if __name__ == "__main__":
         "--resume_path", type=str, required=True, help="Path to pretrained TCN model"
     )
     parser.add_argument(
+        "--formula_loss",
+        type=str,
+        default="mse",
+        choices=["mse", "poisson"],
+        help="Formula-head training loss of the checkpoint (decides output decoding)",
+    )
+    parser.add_argument(
         "--rescore_resume_path",
         type=str,
         required=True,
@@ -201,6 +213,8 @@ if __name__ == "__main__":
         model = nn.DataParallel(model, device_ids=args.device)
 
     print("Loading the best formula prediction model...")
+    formula_loss = args.formula_loss
+    print(f"Formula decoding for loss type: {formula_loss}")
     state_dict = torch.load(args.resume_path, map_location=device_1st)[
         "model_state_dict"
     ]
@@ -242,7 +256,11 @@ if __name__ == "__main__":
     prediction_time = time.time() - start_time
     prediction_time /= len(valid_set)
 
-    formula_pred = [vector_to_formula(y) for y in y_pred]
+    y_pred_dec = decode_formula_counts(y_pred, formula_loss)
+    formula_pred = [vector_to_formula(y) for y in y_pred_dec]
+    # Y Pred keeps continuous outputs (softplus rates for poisson) for analyses
+    if formula_loss == "poisson":
+        y_pred = torch.nn.functional.softplus(y_pred)
     y_pred = [";".join(y) for y in y_pred.numpy().astype("str")]
 
     spectra = []
