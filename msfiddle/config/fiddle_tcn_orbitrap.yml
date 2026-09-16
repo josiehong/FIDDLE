@@ -156,13 +156,13 @@ post_processing:
   # D0c: halogens in the refinement search so a missed halogen can be introduced and
   # H rebalanced to the exact precursor mass. (Orbitrap is halogen-rich, so the model
   # usually predicts halogens already; this mainly helps the cases it misses.)
-  refine_atom_type: ['C', 'O', 'N', 'H', 'Cl', 'Br', 'F', 'I']
-  refine_atom_num: [3, 3, 3, -1, 2, 1, 2, 1]
+  refine_atom_type: ['C', 'O', 'N', 'H', 'Cl', 'Br', 'F', 'I', 'S', 'P']
+  refine_atom_num: [5, 5, 5, -1, 2, 1, 2, 1, 2, 1] # config E caps (08/2026 sweep): recall@20 88.5% -> 94.3% at 10ppm, 95.7% if 5ppm window validates
 
-  mass_tolerance: 20.0 # target space
+  mass_tolerance: 5.0 # config E (08/2026 sweep): matches the data filters' ppm_tolerance 5 (no admitted spectrum can be orphaned) and Orbitrap instrument accuracy; halves the decoy count vs 10 ppm, recall@20 ceiling 95.7%
   ppm_mode: True
   time_out: 300
   maxium_miss_atom_num: 20 # search space
-  top_k: 10 # widened from 5 so the true formula isn't crowded out by halogen candidates
+  top_k: 20 # config E (08/2026 sweep): +2 points of rescorer ceiling over K=10; keep pair-generation and inference matched
   buddy_fdr_thr: 0.6
   sirius_score_thr: -5

@@ -191,13 +191,13 @@ post_processing:
   # S/P deliberately NOT in base (already reachable when the model predicts them;
   # adding them only created spurious candidates). Halogen caps kept tight to limit
   # near-isobaric false positives on the CONH majority.
-  refine_atom_type: ['C', 'O', 'N', 'H', 'Cl', 'Br', 'F', 'I']
-  refine_atom_num: [5, 5, 5, -1, 2, 1, 2, 1]
+  refine_atom_type: ['C', 'O', 'N', 'H', 'Cl', 'Br', 'F', 'I', 'S', 'P']
+  refine_atom_num: [5, 5, 5, -1, 2, 1, 2, 1, 2, 1] # config B (08/2026 sweep): S/P reachable; recall@20 92.3% -> 94.0%
 
   mass_tolerance: 10.0 # target space
   ppm_mode: True
   time_out: -1 # do not limit the time
   maxium_miss_atom_num: 50 # search space
-  top_k: 10 # widened from 5 so the true formula isn't crowded out by halogen candidates (20 tested; 10 = sweet-spot check)
+  top_k: 20 # config B (08/2026 sweep): +2 points of rescorer ceiling over K=10; keep pair-generation and inference matched
   buddy_fdr_thr: 0.6
   sirius_score_thr: -5

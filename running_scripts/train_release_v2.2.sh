@@ -13,13 +13,11 @@
 #     fine-tune experiments (experiments_finetune_loss.sh, old data) win.
 #
 # PREREQUISITES
-#   (a) Config update in msfiddle/config/fiddle_tcn_{qtof,orbitrap}.yml:
-#         refine_atom_type: ['C','O','N','H','Cl','Br','F','I','S','P']
-#         refine_atom_num:  [5, 5, 5, -1, 2, 1, 2, 1, 2, 1]
-#         top_k: 20
-#       Orbitrap mass_tolerance: 5.0 only if the measured-mass check passes
-#       (PPM-field distribution of the orbitrap test MGF; keep 10.0 if >~1%
-#       of spectra exceed 5 ppm).
+#   (a) Config B/E post-processing is committed in
+#       msfiddle/config/fiddle_tcn_{qtof,orbitrap}.yml (S/P caps, top_k 20,
+#       Orbitrap mass_tolerance 5.0 — safe because the data filters admit
+#       only <=5 ppm spectra). Make sure the checkout is current before
+#       Parts 3-4: they read the configs at run time.
 #   (b) FORMULA_LOSS defaults to poisson (per decision 08/24/26); override
 #       with FORMULA_LOSS=mse to train the incumbent-loss arm.
 #
@@ -34,23 +32,33 @@ DEVICE_QTOF=${DEVICE_QTOF:-"0 1"}
 DEVICE_ORBITRAP=${DEVICE_ORBITRAP:-"3 4"}
 PKL_DIR=./data/cl_pkl_$DATA_TAG
 
-# Refuse to stack on an existing run: repeated launches (e.g. retried
-# commands from a frozen terminal) would train duplicate processes into the
-# same checkpoint paths and exhaust RAM.
-if pgrep -f "train_tcn_gpus_cl.py" > /dev/null; then
-    echo "A train_tcn_gpus_cl.py process is already running — refusing to launch."
-    echo "Inspect with: ps aux | grep train_tcn   (kill it first if intended)"
-    exit 1
-fi
+# PART 2 skip: an instrument whose TCN checkpoint already exists is not
+# retrained (delete the checkpoint to force retraining), so a rerun after a
+# finished training goes straight to the rescore/eval parts.
+train_done=true
+for f in ./check_point/fiddle_tcn_qtof_$TAG.pt ./check_point/fiddle_tcn_orbitrap_$TAG.pt; do
+    [ -s "$f" ] || train_done=false
+done
 
-# Each CL training holds its noise-augmented dataset in RAM (~77GB Q-TOF,
-# ~200GB Orbitrap with the current x3 augmentation). Refuse to start without
-# headroom rather than push the node into swap.
-avail_ram_gb=$(free -g | awk '/^Mem:/ {print $7}')
-if [ "$avail_ram_gb" -lt 320 ]; then
-    echo "Only ${avail_ram_gb}GB RAM available — need ~320GB for both trainings."
-    echo "Free memory (or run one instrument at a time) before launching."
-    exit 1
+if [ "$train_done" = false ]; then
+    # Refuse to stack on an existing run: repeated launches (e.g. retried
+    # commands from a frozen terminal) would train duplicate processes into the
+    # same checkpoint paths and exhaust RAM.
+    if pgrep -f "train_tcn_gpus_cl.py" > /dev/null; then
+        echo "A train_tcn_gpus_cl.py process is already running — refusing to launch."
+        echo "Inspect with: ps aux | grep train_tcn   (kill it first if intended)"
+        exit 1
+    fi
+
+    # Each CL training holds its noise-augmented dataset in RAM (~77GB Q-TOF,
+    # ~200GB Orbitrap with the current x3 augmentation). Refuse to start without
+    # headroom rather than push the node into swap.
+    avail_ram_gb=$(free -g | awk '/^Mem:/ {print $7}')
+    if [ "$avail_ram_gb" -lt 320 ]; then
+        echo "Only ${avail_ram_gb}GB RAM available — need ~320GB for both trainings."
+        echo "Free memory (or run one instrument at a time) before launching."
+        exit 1
+    fi
 fi
 
 # Workaround for the degraded GPU driver on carnot (since 08/14): NCCL cannot
@@ -147,39 +155,43 @@ fi
 # PART 2 — TCN training from scratch (both instruments in parallel)
 # ============================================================================
 
-CUDA_VISIBLE_DEVICES=$DEVICE_QTOF_CSV python -u scripts/train_tcn_gpus_cl.py \
---train_data $PKL_DIR/qtof_maxmin_train.pkl \
---test_data $PKL_DIR/qtof_maxmin_test.pkl \
---config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
---formula_loss $FORMULA_LOSS \
---checkpoint_path ./check_point/fiddle_tcn_qtof_$TAG.pt \
---result_path ./result/fiddle_tcn_qtof_$TAG.csv \
---device $DEVICE_QTOF_LOCAL > tcn_qtof_$TAG.log 2>&1 &
+if [ "$train_done" = true ]; then
+    echo "TCN checkpoints already present for tag $TAG — skipping PART 2"
+else
+    CUDA_VISIBLE_DEVICES=$DEVICE_QTOF_CSV python -u scripts/train_tcn_gpus_cl.py \
+    --train_data $PKL_DIR/qtof_maxmin_train.pkl \
+    --test_data $PKL_DIR/qtof_maxmin_test.pkl \
+    --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
+    --formula_loss $FORMULA_LOSS \
+    --checkpoint_path ./check_point/fiddle_tcn_qtof_$TAG.pt \
+    --result_path ./result/fiddle_tcn_qtof_$TAG.csv \
+    --device $DEVICE_QTOF_LOCAL > tcn_qtof_$TAG.log 2>&1 &
 
-CUDA_VISIBLE_DEVICES=$DEVICE_ORBITRAP_CSV python -u scripts/train_tcn_gpus_cl.py \
---train_data $PKL_DIR/orbitrap_maxmin_train.pkl \
---test_data $PKL_DIR/orbitrap_maxmin_test.pkl \
---config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
---formula_loss $FORMULA_LOSS \
---checkpoint_path ./check_point/fiddle_tcn_orbitrap_$TAG.pt \
---result_path ./result/fiddle_tcn_orbitrap_$TAG.csv \
---device $DEVICE_ORBITRAP_LOCAL > tcn_orbitrap_$TAG.log 2>&1 &
+    CUDA_VISIBLE_DEVICES=$DEVICE_ORBITRAP_CSV python -u scripts/train_tcn_gpus_cl.py \
+    --train_data $PKL_DIR/orbitrap_maxmin_train.pkl \
+    --test_data $PKL_DIR/orbitrap_maxmin_test.pkl \
+    --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
+    --formula_loss $FORMULA_LOSS \
+    --checkpoint_path ./check_point/fiddle_tcn_orbitrap_$TAG.pt \
+    --result_path ./result/fiddle_tcn_orbitrap_$TAG.csv \
+    --device $DEVICE_ORBITRAP_LOCAL > tcn_orbitrap_$TAG.log 2>&1 &
 
-wait
+    wait
 
-for log in tcn_qtof_$TAG.log tcn_orbitrap_$TAG.log; do
-    echo "=== tail of $log ==="; tail -5 "$log"
-done
-for f in ./check_point/fiddle_tcn_qtof_$TAG.pt ./check_point/fiddle_tcn_orbitrap_$TAG.pt; do
-    [ -s "$f" ] || { echo "MISSING: $f — check the training log above"; exit 1; }
-done
+    for log in tcn_qtof_$TAG.log tcn_orbitrap_$TAG.log; do
+        echo "=== tail of $log ==="; tail -5 "$log"
+    done
+    for f in ./check_point/fiddle_tcn_qtof_$TAG.pt ./check_point/fiddle_tcn_orbitrap_$TAG.pt; do
+        [ -s "$f" ] || { echo "MISSING: $f — check the training log above"; exit 1; }
+    done
 
-python scripts/analyze_count_ambiguity.py \
---result ./result/fiddle_tcn_qtof_$TAG.csv \
---test_data $PKL_DIR/qtof_maxmin_test.pkl
-python scripts/analyze_count_ambiguity.py \
---result ./result/fiddle_tcn_orbitrap_$TAG.csv \
---test_data $PKL_DIR/orbitrap_maxmin_test.pkl
+    python scripts/analyze_count_ambiguity.py \
+    --result ./result/fiddle_tcn_qtof_$TAG.csv \
+    --test_data $PKL_DIR/qtof_maxmin_test.pkl
+    python scripts/analyze_count_ambiguity.py \
+    --result ./result/fiddle_tcn_orbitrap_$TAG.csv \
+    --test_data $PKL_DIR/orbitrap_maxmin_test.pkl
+fi
 
 # ============================================================================
 # PART 3 — Rescore retrain on enumeration-generated pairs, against the NEW
