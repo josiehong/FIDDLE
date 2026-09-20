@@ -29,7 +29,6 @@ from msfiddle.model_tcn import (
     MS2FNet_tcn,
     FormulaEncoder,
     RescoreHead,
-    decode_formula_counts,
 )
 from msfiddle.utils import (
     formula_refinement,
@@ -60,10 +59,6 @@ MODELS = {
 # Model loading
 # ---------------------------------------------------------------------------
 
-
-# Training loss of the TCN checkpoint below; decides output decoding.
-# Set to "poisson" when pointing MODELS at a poisson-trained checkpoint.
-FORMULA_LOSS = "mse"
 
 
 def _load_state(path):
@@ -269,7 +264,6 @@ def predict(
         t0 = time.time()
         with torch.no_grad():
             encoded_x, pred_f, pred_mass, _, _ = tcn_model(spec_t, env_t)
-        pred_f = decode_formula_counts(pred_f, FORMULA_LOSS)
         pred_f -= na_t
 
         # Zero out precursor_mz for rescore encoding to match training

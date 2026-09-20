@@ -9,8 +9,9 @@
 #     adducts, crash guards. Never mix generations: old checkpoints pair with
 #     cl_pkl_060526, everything trained here pairs with cl_pkl_$DATA_TAG.
 #   - Rescore models retrained on enumeration-generated pairs.
-#   - Optionally the Poisson count-likelihood formula loss, if the Track 1
-#     fine-tune experiments (experiments_finetune_loss.sh, old data) win.
+#   - MSE formula loss. The Poisson count-likelihood arm was trained and
+#     evaluated 09/2026 and lost decisively (Q-TOF top-1 53.7% vs 68.2%);
+#     poisson support was removed from the code afterwards.
 #
 # PREREQUISITES
 #   (a) Config B/E post-processing is committed in
@@ -18,29 +19,24 @@
 #       Orbitrap mass_tolerance 5.0 — safe because the data filters admit
 #       only <=5 ppm spectra). Make sure the checkout is current before
 #       Parts 3-4: they read the configs at run time.
-#   (b) FORMULA_LOSS defaults to poisson (per decision 08/24/26); override
-#       with FORMULA_LOSS=mse to train the incumbent-loss arm.
 #
-# Env overrides: DATA_TAG (pkl generation), TAG (model tag), FORMULA_LOSS,
+# Env overrides: DATA_TAG (pkl generation), TAG (model tag),
 #   DEVICE_QTOF / DEVICE_ORBITRAP (space-separated lists allowed, e.g. "6 7").
 # ============================================================================
 
 DATA_TAG=${DATA_TAG:-082426}
 TAG=${TAG:-$DATA_TAG}
-FORMULA_LOSS=${FORMULA_LOSS:-poisson}
 DEVICE_QTOF=${DEVICE_QTOF:-"0 1"}
 DEVICE_ORBITRAP=${DEVICE_ORBITRAP:-"3 4"}
 PKL_DIR=./data/cl_pkl_$DATA_TAG
 
-# PART 2 skip: an instrument whose TCN checkpoint already exists is not
-# retrained (delete the checkpoint to force retraining), so a rerun after a
-# finished training goes straight to the rescore/eval parts.
-train_done=true
-for f in ./check_point/fiddle_tcn_qtof_$TAG.pt ./check_point/fiddle_tcn_orbitrap_$TAG.pt; do
-    [ -s "$f" ] || train_done=false
-done
+# PART 2 skip, per instrument: an instrument whose TCN checkpoint already
+# exists is not retrained (delete the checkpoint to force retraining), so a
+# rerun after a finished training goes straight to the rescore/eval parts.
+qtof_ckpt_done=false; [ -s ./check_point/fiddle_tcn_qtof_$TAG.pt ] && qtof_ckpt_done=true
+orbitrap_ckpt_done=false; [ -s ./check_point/fiddle_tcn_orbitrap_$TAG.pt ] && orbitrap_ckpt_done=true
 
-if [ "$train_done" = false ]; then
+if [ "$qtof_ckpt_done" = false ] || [ "$orbitrap_ckpt_done" = false ]; then
     # Refuse to stack on an existing run: repeated launches (e.g. retried
     # commands from a frozen terminal) would train duplicate processes into the
     # same checkpoint paths and exhaust RAM.
@@ -53,9 +49,12 @@ if [ "$train_done" = false ]; then
     # Each CL training holds its noise-augmented dataset in RAM (~77GB Q-TOF,
     # ~200GB Orbitrap with the current x3 augmentation). Refuse to start without
     # headroom rather than push the node into swap.
+    need_ram_gb=0
+    [ "$qtof_ckpt_done" = false ] && need_ram_gb=$((need_ram_gb + 100))
+    [ "$orbitrap_ckpt_done" = false ] && need_ram_gb=$((need_ram_gb + 220))
     avail_ram_gb=$(free -g | awk '/^Mem:/ {print $7}')
-    if [ "$avail_ram_gb" -lt 320 ]; then
-        echo "Only ${avail_ram_gb}GB RAM available — need ~320GB for both trainings."
+    if [ "$avail_ram_gb" -lt "$need_ram_gb" ]; then
+        echo "Only ${avail_ram_gb}GB RAM available — need ~${need_ram_gb}GB for the pending trainings."
         echo "Free memory (or run one instrument at a time) before launching."
         exit 1
     fi
@@ -155,43 +154,46 @@ fi
 # PART 2 — TCN training from scratch (both instruments in parallel)
 # ============================================================================
 
-if [ "$train_done" = true ]; then
-    echo "TCN checkpoints already present for tag $TAG — skipping PART 2"
+if [ "$qtof_ckpt_done" = true ]; then
+    echo "Q-TOF TCN checkpoint already present for tag $TAG — skipping"
 else
     CUDA_VISIBLE_DEVICES=$DEVICE_QTOF_CSV python -u scripts/train_tcn_gpus_cl.py \
     --train_data $PKL_DIR/qtof_maxmin_train.pkl \
     --test_data $PKL_DIR/qtof_maxmin_test.pkl \
     --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
-    --formula_loss $FORMULA_LOSS \
     --checkpoint_path ./check_point/fiddle_tcn_qtof_$TAG.pt \
     --result_path ./result/fiddle_tcn_qtof_$TAG.csv \
     --device $DEVICE_QTOF_LOCAL > tcn_qtof_$TAG.log 2>&1 &
+fi
 
+if [ "$orbitrap_ckpt_done" = true ]; then
+    echo "Orbitrap TCN checkpoint already present for tag $TAG — skipping"
+else
     CUDA_VISIBLE_DEVICES=$DEVICE_ORBITRAP_CSV python -u scripts/train_tcn_gpus_cl.py \
     --train_data $PKL_DIR/orbitrap_maxmin_train.pkl \
     --test_data $PKL_DIR/orbitrap_maxmin_test.pkl \
     --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
-    --formula_loss $FORMULA_LOSS \
     --checkpoint_path ./check_point/fiddle_tcn_orbitrap_$TAG.pt \
     --result_path ./result/fiddle_tcn_orbitrap_$TAG.csv \
     --device $DEVICE_ORBITRAP_LOCAL > tcn_orbitrap_$TAG.log 2>&1 &
+fi
 
-    wait
+wait
 
+if [ "$qtof_ckpt_done" = false ] || [ "$orbitrap_ckpt_done" = false ]; then
     for log in tcn_qtof_$TAG.log tcn_orbitrap_$TAG.log; do
-        echo "=== tail of $log ==="; tail -5 "$log"
+        [ -f "$log" ] && { echo "=== tail of $log ==="; tail -5 "$log"; }
     done
-    for f in ./check_point/fiddle_tcn_qtof_$TAG.pt ./check_point/fiddle_tcn_orbitrap_$TAG.pt; do
-        [ -s "$f" ] || { echo "MISSING: $f — check the training log above"; exit 1; }
-    done
-
-    python scripts/analyze_count_ambiguity.py \
+    [ "$qtof_ckpt_done" = false ] && python scripts/analyze_count_ambiguity.py \
     --result ./result/fiddle_tcn_qtof_$TAG.csv \
     --test_data $PKL_DIR/qtof_maxmin_test.pkl
-    python scripts/analyze_count_ambiguity.py \
+    [ "$orbitrap_ckpt_done" = false ] && python scripts/analyze_count_ambiguity.py \
     --result ./result/fiddle_tcn_orbitrap_$TAG.csv \
     --test_data $PKL_DIR/orbitrap_maxmin_test.pkl
 fi
+for f in ./check_point/fiddle_tcn_qtof_$TAG.pt ./check_point/fiddle_tcn_orbitrap_$TAG.pt; do
+    [ -s "$f" ] || { echo "MISSING: $f — check the training log above"; exit 1; }
+done
 
 # ============================================================================
 # PART 3 — Rescore retrain on enumeration-generated pairs, against the NEW
@@ -212,7 +214,6 @@ python scripts/prepare_augment_rescore.py \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path $TCN_QTOF \
 --rescore_dir $PKL_DIR \
---formula_loss $FORMULA_LOSS \
 --pos_cap 10 --neg_per_pos 8 --tolerance 50 --num_workers 8 --device $DEV1_QTOF
 
 python scripts/train_rescore.py \
@@ -230,7 +231,6 @@ python scripts/prepare_augment_rescore.py \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path $TCN_ORBITRAP \
 --rescore_dir $PKL_DIR \
---formula_loss $FORMULA_LOSS \
 --pos_cap 10 --neg_per_pos 8 --tolerance 50 --num_workers 8 --device $DEV1_ORBITRAP
 
 python scripts/train_rescore.py \
@@ -258,7 +258,6 @@ done
 python scripts/run_fiddle.py --test_data $PKL_DIR/qtof_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path $TCN_QTOF \
---formula_loss $FORMULA_LOSS \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_$TAG.pt \
 --result_path ./result/fiddle_qtof_$TAG.csv --device $DEV1_QTOF
 python scripts/eval_topk.py --result ./result/fiddle_qtof_$TAG.csv \
@@ -269,7 +268,6 @@ python scripts/eval_topk.py --result ./result/fiddle_qtof_$TAG.csv \
 python scripts/run_fiddle.py --test_data $PKL_DIR/orbitrap_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path $TCN_ORBITRAP \
---formula_loss $FORMULA_LOSS \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_$TAG.pt \
 --result_path ./result/fiddle_orbitrap_$TAG.csv --device $DEV1_ORBITRAP
 python scripts/eval_topk.py --result ./result/fiddle_orbitrap_$TAG.csv \

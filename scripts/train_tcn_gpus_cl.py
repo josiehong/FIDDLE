@@ -19,7 +19,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from msfiddle.dataset import MS2FDataset_CL, MS2FDataset
-from msfiddle.model_tcn import MS2FNet_tcn, decode_formula_counts
+from msfiddle.model_tcn import MS2FNet_tcn
 from msfiddle.utils import ATOMS_WEIGHT, ATOMS_INDEX, ATOMS_INDEX_re, vector_to_formula
 
 
@@ -74,19 +74,6 @@ def mse_criterion(outputs, targets):
     return loss.to(torch.float32)
 
 
-def poisson_formula_criterion(outputs, targets):
-    """Poisson NLL on element counts (count-likelihood alternative to MSE).
-
-    rate = softplus(raw output): positive as Poisson requires, and ~identity
-    for raw > 2, so a checkpoint trained under MSE (raw ≈ counts) fine-tunes
-    continuously. Point predictions decode as round(rate) — see
-    decode_formula_counts.
-    """
-    rates = F.softplus(outputs.float())
-    t = nn.PoissonNLLLoss(log_input=False, full=False)
-    return t(rates, targets.float()).to(torch.float32)
-
-
 def load_model_state(model, state_dict):
     """Load model weights regardless of DataParallel wrapping on either side.
 
@@ -112,13 +99,9 @@ def train_step(
     device,
     batch_size,
     weight,
-    formula_loss="mse",
     scaler=None,
 ):
-    if formula_loss == "poisson":
-        f_criterion = lambda pred, y: poisson_formula_criterion(pred, y)
-    else:
-        f_criterion = lambda pred, y: formula_criterion(pred, y, weight)
+    f_criterion = lambda pred, y: formula_criterion(pred, y, weight)
 
     use_amp = scaler is not None and scaler.is_enabled()
 
@@ -201,15 +184,10 @@ def train_step(
                 # print('Warmup lr: {:.6f}'.format(get_lr(optimizer))) # Josie: for debug
 
             # (tmp) for debug
-            # Monitor MAE on decoded counts (raw pre-softplus scores go
-            # strongly negative for zero-count elements under poisson, which
-            # made this line rise as the model improved).
-            pf_dec = decode_formula_counts(pred_f.detach(), formula_loss)
-            pf2_dec = decode_formula_counts(pred_f2.detach(), formula_loss)
             mae = (
                 mae
-                + torch.mean(torch.abs(y - pf_dec), dim=1).tolist()
-                + torch.mean(torch.abs(y2 - pf2_dec), dim=1).tolist()
+                + torch.mean(torch.abs(y - pred_f.detach()), dim=1).tolist()
+                + torch.mean(torch.abs(y2 - pred_f2.detach()), dim=1).tolist()
             )
             mass_mae = (
                 mass_mae
@@ -303,14 +281,6 @@ if __name__ == "__main__":
         "--resume_path", type=str, default="", help="Path to pretrained model"
     )
     parser.add_argument("--transfer", action="store_true", default=False)
-    parser.add_argument(
-        "--formula_loss",
-        type=str,
-        default="mse",
-        choices=["mse", "poisson"],
-        help="Loss for the formula count head: mse (mass-weighted, default) "
-        "or poisson (count likelihood; predictions decode as round(softplus))",
-    )
 
     parser.add_argument(
         "--ex_model_path",
@@ -484,7 +454,6 @@ if __name__ == "__main__":
                 device_1st,
                 batch_size=config["train"]["batch_size"],
                 weight=weight,
-                formula_loss=args.formula_loss,
                 scaler=amp_scaler,
             )
         )
@@ -504,13 +473,7 @@ if __name__ == "__main__":
         valid_mass_mae = np.mean(mass_mae)
 
         # calculate the formula (tmp)
-        y_pred_dec = decode_formula_counts(y_pred, args.formula_loss)
-        # Validation MAE on DECODED counts, not raw outputs: for the poisson
-        # loss the raw values are pre-softplus scores that go strongly
-        # negative as zero-count rates improve, so raw-space MAE rises while
-        # the model gets better — driving patience/LR off it stalls or kills
-        # healthy runs. Count-space MAE is meaningful for every loss (and
-        # identical to the raw metric for mse).
+        y_pred_dec = y_pred
         valid_mae = torch.mean(torch.abs(y_true - y_pred_dec)).item()
         print(
             "Validation error: {:.4f} mass error: {:.4f}".format(
@@ -636,14 +599,9 @@ if __name__ == "__main__":
             )
         )
         # calculate the formula
-        y_pred_dec = decode_formula_counts(y_pred, args.formula_loss)
         formula_true = [vector_to_formula(y) for y in y_true]
-        formula_pred = [vector_to_formula(y) for y in y_pred_dec]
+        formula_pred = [vector_to_formula(y) for y in y_pred]
 
-        # Y Pred keeps the continuous outputs (softplus rates for poisson) so
-        # downstream ambiguity analyses see the model's raw uncertainty.
-        if args.formula_loss == "poisson":
-            y_pred = F.softplus(y_pred)
         # y_true = [','.join(y) for y in y_true.numpy().astype('str')]
         y_pred = [",".join(y) for y in y_pred.numpy().astype("str")]
 

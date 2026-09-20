@@ -47,7 +47,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from msfiddle.dataset import MS2FDataset
-from msfiddle.model_tcn import MS2FNet_tcn, decode_formula_counts
+from msfiddle.model_tcn import MS2FNet_tcn
 from msfiddle.utils import ATOMS_INDEX_re, formula_to_dict, formula_refinement
 
 
@@ -131,7 +131,7 @@ def run_inference(model, loader, device):
 
 
 def prepare_rescore_records(
-    data_path, model, device, config, pkl_data, num_workers=8, formula_loss="mse"
+    data_path, model, device, config, pkl_data, num_workers=8
 ):
     """Run TCN inference on a dataset and return flat list of rescore dicts."""
     dataset = MS2FDataset(data_path)
@@ -145,7 +145,7 @@ def prepare_rescore_records(
 
     spec_ids, y_true, y_pred, mass_true = run_inference(model, loader, device)
 
-    formula_pred = [vec2formula(v) for v in decode_formula_counts(y_pred, formula_loss)]
+    formula_pred = [vec2formula(v) for v in y_pred]
     formula_true = [vec2formula(v) for v in y_true]
 
     # Formula refinement (post-processing) — parallelised across CPU cores
@@ -336,13 +336,6 @@ def main():
         "--resume_path", type=str, required=True, help="Pretrained TCN checkpoint"
     )
     parser.add_argument(
-        "--formula_loss",
-        type=str,
-        default="mse",
-        choices=["mse", "poisson"],
-        help="Formula-head training loss of the checkpoint (decides output decoding)",
-    )
-    parser.add_argument(
         "--rescore_dir", type=str, required=True, help="Directory to save rescore pkls"
     )
     parser.add_argument(
@@ -398,8 +391,6 @@ def main():
     model = MS2FNet_tcn(config["model"]).to(device)
     if len(args.device) > 1:
         model = nn.DataParallel(model, device_ids=args.device)
-    formula_loss = args.formula_loss
-    print(f"Formula decoding for loss type: {formula_loss}")
     state = torch.load(args.resume_path, map_location=device)["model_state_dict"]
     state = {k.replace("module.", ""): v for k, v in state.items()}
     model.load_state_dict(state)
@@ -429,7 +420,6 @@ def main():
         config,
         train_pkl_data,
         args.num_workers,
-        formula_loss=formula_loss,
     )
     print(f"\nRaw rescore train records: {len(train_records)}")
 
@@ -456,7 +446,6 @@ def main():
         config,
         test_pkl_data,
         args.num_workers,
-        formula_loss=formula_loss,
     )
     print(f"\nRaw rescore test records: {len(test_records)}")
     with open(rescore_test_path, "wb") as f:

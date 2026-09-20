@@ -6,9 +6,9 @@ run_fiddle result CSV, ground truth from the test pkl, and reports:
   - ambiguity split by correct vs wrong predictions
   - exact / H-only / heavy-atom error anatomy
 
-Used to compare formula-loss variants (mse vs poisson), e.g.:
+Example:
   python scripts/analyze_count_ambiguity.py \
-      --result ./result/fiddle_tcn_qtof_poisson.csv \
+      --result ./result/fiddle_tcn_qtof_082426.csv \
       --test_data ./data/cl_pkl_060526/qtof_maxmin_test.pkl
 """
 
