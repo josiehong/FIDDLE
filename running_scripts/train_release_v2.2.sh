@@ -204,9 +204,18 @@ done
 
 TCN_QTOF=./check_point/fiddle_tcn_qtof_$TAG.pt
 TCN_ORBITRAP=./check_point/fiddle_tcn_orbitrap_$TAG.pt
+RESCORE_QTOF=./check_point/fiddle_rescore_qtof_$TAG.pt
+RESCORE_ORBITRAP=./check_point/fiddle_rescore_orbitrap_$TAG.pt
 DEV1_QTOF=${DEVICE_QTOF%% *}
 DEV1_ORBITRAP=${DEVICE_ORBITRAP%% *}
 
+# Per-instrument skip: an existing rescore checkpoint is kept (delete it to
+# force pair regeneration + retraining). Only valid while the TCN it was
+# trained against is unchanged — retraining a TCN means deleting its
+# rescore checkpoint too.
+if [ -s "$RESCORE_QTOF" ]; then
+    echo "Q-TOF rescore checkpoint already present for tag $TAG — skipping"
+else
 (
 python scripts/prepare_augment_rescore.py \
 --train_data $PKL_DIR/qtof_maxmin_train.pkl \
@@ -221,9 +230,13 @@ python scripts/train_rescore.py \
 --test_data $PKL_DIR/qtof_maxmin_rescore_test.pkl \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path $TCN_QTOF \
---checkpoint_path ./check_point/fiddle_rescore_qtof_$TAG.pt --device $DEV1_QTOF
+--checkpoint_path $RESCORE_QTOF --device $DEV1_QTOF
 ) > rescore_qtof_$TAG.log 2>&1 &
+fi
 
+if [ -s "$RESCORE_ORBITRAP" ]; then
+    echo "Orbitrap rescore checkpoint already present for tag $TAG — skipping"
+else
 (
 python scripts/prepare_augment_rescore.py \
 --train_data $PKL_DIR/orbitrap_maxmin_train.pkl \
@@ -238,15 +251,16 @@ python scripts/train_rescore.py \
 --test_data $PKL_DIR/orbitrap_maxmin_rescore_test.pkl \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path $TCN_ORBITRAP \
---checkpoint_path ./check_point/fiddle_rescore_orbitrap_$TAG.pt --device $DEV1_ORBITRAP
+--checkpoint_path $RESCORE_ORBITRAP --device $DEV1_ORBITRAP
 ) > rescore_orbitrap_$TAG.log 2>&1 &
+fi
 
-wait  # both rescore models trained
+wait  # rescore models trained
 
 for log in rescore_qtof_$TAG.log rescore_orbitrap_$TAG.log; do
-    echo "=== tail of $log ==="; tail -5 "$log"
+    [ -f "$log" ] && { echo "=== tail of $log ==="; tail -5 "$log"; }
 done
-for f in ./check_point/fiddle_rescore_qtof_$TAG.pt ./check_point/fiddle_rescore_orbitrap_$TAG.pt; do
+for f in $RESCORE_QTOF $RESCORE_ORBITRAP; do
     [ -s "$f" ] || { echo "MISSING: $f — check the log above"; exit 1; }
 done
 
