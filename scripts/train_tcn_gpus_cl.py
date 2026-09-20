@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from msfiddle.dataset import MS2FDataset_CL, MS2FDataset
 from msfiddle.model_tcn import MS2FNet_tcn
+from msfiddle.optim import Muon, split_matrix_params
 from msfiddle.utils import ATOMS_WEIGHT, ATOMS_INDEX, ATOMS_INDEX_re, vector_to_formula
 
 
@@ -373,10 +374,19 @@ if __name__ == "__main__":
 
     # 4. Train MS2FNet_tcn & FNet
     # define the hyperparameters
-    optimizer = optim.AdamW(
-        model.parameters(),
-        lr=config["train"]["lr"],
+    muon_params, adamw_params = split_matrix_params(model)
+    optimizer = Muon(
+        muon_params,
+        adamw_params,
+        lr=config["train"].get("muon_lr", 0.02),
+        adamw_lr=config["train"]["lr"],
         weight_decay=config["train"]["weight_decay"],
+    )
+    print(
+        "Muon: {} params orthogonalized, {} params on AdamW".format(
+            sum(p.numel() for p in muon_params),
+            sum(p.numel() for p in adamw_params),
+        )
     )
     # Early stopping keeps runs short (tens of epochs), so StepLR(step_size=100) never
     # fired and the LR stayed pinned at its initial value. Use ReduceLROnPlateau so the
@@ -392,7 +402,12 @@ if __name__ == "__main__":
         print("Load the checkpoints of the whole model")
         ckpt = torch.load(args.resume_path, map_location=device_1st)
         load_model_state(model, ckpt["model_state_dict"])
-        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        try:
+            optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        except (ValueError, KeyError):
+            # checkpoint written by a different optimizer (AdamW-era);
+            # weights and scheduler still resume, optimizer starts fresh
+            print("Optimizer state incompatible with Muon — starting it fresh")
         scheduler.load_state_dict(ckpt["scheduler_state_dict"])
         epoch_start = ckpt["epoch"]
         best_valid_mae = ckpt["best_val_mae"]
