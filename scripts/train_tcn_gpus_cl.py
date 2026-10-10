@@ -101,8 +101,10 @@ def train_step(
     batch_size,
     weight,
     scaler=None,
+    grad_accum_steps=1,
 ):
     f_criterion = lambda pred, y: formula_criterion(pred, y, weight)
+    n_batches = len(loader)
 
     use_amp = scaler is not None and scaler.is_enabled()
 
@@ -135,7 +137,17 @@ def train_step(
             # -------------------------
             # train MS2FNet_tcn (generator)
             # -------------------------
-            model.zero_grad()
+            # Gradient accumulation: one optimizer step per group of
+            # grad_accum_steps micro-batches. Every loss term is a batch mean
+            # and the model has no batch-coupled layers, so averaging the
+            # micro-batch losses reproduces the full-batch gradient. The
+            # epoch's last group may be shorter; it is averaged over its own
+            # size.
+            group_start = step - step % grad_accum_steps
+            group_size = min(grad_accum_steps, n_batches - group_start)
+            last_in_group = step - group_start + 1 == group_size
+            if step == group_start:
+                model.zero_grad()
             # Fused Siamese forward: the weights are shared and the model has
             # no batch-coupled layers (weight_norm only), so running both pair
             # members through one concatenated batch computes exactly the same
@@ -168,21 +180,25 @@ def train_step(
                 )
 
             if use_amp:
-                scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)  # so the clip sees true gradients
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                scaler.step(optimizer)
-                scaler.update()
+                scaler.scale(loss / group_size).backward()
             else:
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                optimizer.step()
+                (loss / group_size).backward()
 
-            # Update the learning rate during warm-up phase
-            # After warm-up phase, the learning rate ctrled by warmup_scheduler is fixed and we won't use it
-            if warmup_scheduler.last_epoch < warmup_steps:
-                warmup_scheduler.step()
-                # print('Warmup lr: {:.6f}'.format(get_lr(optimizer))) # Josie: for debug
+            if last_in_group:
+                if use_amp:
+                    scaler.unscale_(optimizer)  # so the clip sees true gradients
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                    optimizer.step()
+
+                # Update the learning rate during warm-up phase (counted in
+                # optimizer steps). After warm-up phase, the learning rate
+                # ctrled by warmup_scheduler is fixed and we won't use it
+                if warmup_scheduler.last_epoch < warmup_steps:
+                    warmup_scheduler.step()
 
             # (tmp) for debug
             mae = (
@@ -354,6 +370,17 @@ if __name__ == "__main__":
         num_workers=config["train"]["num_workers"],
         drop_last=True,
     )
+    # Optimizer step = grad_accum_steps loader batches, so the effective
+    # batch is batch_size * grad_accum_steps (e.g. 256 x 2 on 11GB GPUs
+    # reproduces batch 512).
+    grad_accum_steps = config["train"].get("grad_accum_steps", 1)
+    effective_batch_size = config["train"]["batch_size"] * grad_accum_steps
+    optimizer_steps_per_epoch = -(-len(train_loader) // grad_accum_steps)
+    print(
+        "Batch size {} x grad_accum_steps {} = effective batch {}".format(
+            config["train"]["batch_size"], grad_accum_steps, effective_batch_size
+        )
+    )
     valid_set = MS2FDataset(args.test_data, padding_dim=config["model"]["padding_dim"])
     valid_loader = DataLoader(
         valid_set,
@@ -427,9 +454,7 @@ if __name__ == "__main__":
         best_formula_acc = -1
         best_formula_wo_acc = -1
         warmup_steps = int(
-            len(train_set)
-            / config["train"]["batch_size"]
-            * config["train"]["warmup_ratio"]
+            len(train_set) / effective_batch_size * config["train"]["warmup_ratio"]
         )
     else:
         epoch_start = 0
@@ -437,10 +462,8 @@ if __name__ == "__main__":
         best_formula_acc = -1
         best_formula_wo_acc = -1
         warmup_steps = int(
-            len(train_set)
-            / config["train"]["batch_size"]
-            * config["train"]["warmup_ratio"]
-        )  # 10% of the total steps in the first epoch
+            len(train_set) / effective_batch_size * config["train"]["warmup_ratio"]
+        )  # 10% of the optimizer steps in the first epoch
 
     # Create the warm-up scheduler
     warmup_start_lr = 1e-6
@@ -470,6 +493,7 @@ if __name__ == "__main__":
                 batch_size=config["train"]["batch_size"],
                 weight=weight,
                 scaler=amp_scaler,
+                grad_accum_steps=grad_accum_steps,
             )
         )
         print(
@@ -578,7 +602,7 @@ if __name__ == "__main__":
             )
 
         # Step the LR scheduler after the warmup phase (halve LR when valid_mae plateaus)
-        if epoch > warmup_steps // len(train_loader):
+        if epoch > warmup_steps // optimizer_steps_per_epoch:
             scheduler.step(valid_mae)  # ReduceLROnPlateau
         print(f"Best absolute error so far: {best_valid_mae}")
         print(f"Best formula accuracy with H so far: {best_formula_acc}")

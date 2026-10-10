@@ -166,6 +166,7 @@ model:
 train: 
   epochs: 200
   batch_size: 512 # 128 fits 11GB GPUs (CL training holds 2 forward graphs, memory ~ 2x batch)
+  grad_accum_steps: 1 # optimizer step every N batches; effective batch = batch_size x N (256 x 2 on 2 x 11GB GPUs = 512)
   num_workers: 8
   lr: 0.002 # 0.001
   weight_decay: 0.01
