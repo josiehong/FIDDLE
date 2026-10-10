@@ -130,11 +130,13 @@ def run_inference(model, loader, device):
     )
 
 
-def prepare_rescore_records(
-    data_path, model, device, config, pkl_data, num_workers=8
-):
+def prepare_rescore_records(data_path, model, device, config, num_workers=8):
     """Run TCN inference on a dataset and return flat list of rescore dicts."""
     dataset = MS2FDataset(data_path)
+    print(f"Loaded {len(dataset)} items")
+    # Lookup built from the dataset's own records (no second copy of the pkl:
+    # the Orbitrap train pkl alone is ~50GB in RAM).
+    pkl_data = {d["title"]: [d["spec"], d["env"]] for d in dataset.data}
     loader = DataLoader(
         dataset,
         batch_size=config["train"]["batch_size"],
@@ -408,17 +410,11 @@ def main():
     # ── Train split: inference + augmentation ────────────────────────────────
     print(f"\n{'='*60}")
     print(f"Train split: {args.train_data}")
-    with open(args.train_data, "rb") as f:
-        train_raw = pickle.load(f)
-    print(f"Loaded {len(train_raw)} train items")
-    train_pkl_data = {d["title"]: [d["spec"], d["env"]] for d in train_raw}
-
     train_records = prepare_rescore_records(
         args.train_data,
         model,
         device,
         config,
-        train_pkl_data,
         args.num_workers,
     )
     print(f"\nRaw rescore train records: {len(train_records)}")
@@ -434,17 +430,11 @@ def main():
     # ── Test split: inference only, no augmentation ──────────────────────────
     print(f"\n{'='*60}")
     print(f"Test split: {args.test_data}")
-    with open(args.test_data, "rb") as f:
-        test_raw = pickle.load(f)
-    print(f"Loaded {len(test_raw)} test items")
-    test_pkl_data = {d["title"]: [d["spec"], d["env"]] for d in test_raw}
-
     test_records = prepare_rescore_records(
         args.test_data,
         model,
         device,
         config,
-        test_pkl_data,
         args.num_workers,
     )
     print(f"\nRaw rescore test records: {len(test_records)}")
