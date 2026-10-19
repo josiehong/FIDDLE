@@ -30,6 +30,10 @@ Model weights must be downloaded before running predictions:
    msfiddle-download-models --destination /path/to/models \
                              --models fiddle_tcn_qtof fiddle_rescore_qtof
 
+Each release keeps its checkpoints in its own directory (for 2.2.x,
+``~/.msfiddle/check_point/v2.2.0``), so run ``msfiddle-download-models`` again
+after upgrading to a new minor version.
+
 To inspect current model paths:
 
 .. code-block:: bash

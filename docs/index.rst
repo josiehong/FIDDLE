@@ -6,7 +6,7 @@ msfiddle
 .. rubric:: Features
 
 - Formula prediction from MS/MS spectra via pre-trained TCN models
-- Formula refinement with FDR-based confidence scoring
+- Candidate refinement by bounded formula enumeration, ranked by a rescore model
 - Support for Orbitrap and Q-TOF instruments
 - Optional integration with BUDDY and SIRIUS
 

@@ -43,7 +43,7 @@ required per spectrum; all others are ignored.
 ``[M+H]+``, ``[M+2H]2+``, ``[M+Na]+``, ``[M-H]-``, ``[M+H-H2O]+``,
 ``[M-H2O+H]+``, ``[2M+H]+``, ``[2M-H]-``, ``[M+H-2H2O]+``, ``[M+H-NH3]+``,
 ``[M+H+NH3]+``, ``[M+NH4]+``, ``[M+H-CH2O2]+``, ``[M+H-CH4O2]+``,
-``[M-H-CO2]-``, ``[M-CHO2]-``, ``[M-H-H2O]-``
+``[M-H-CO2]-``, ``[M-CHO2]-``, ``[M-H-H2O]-``, ``[M-H2O-H]-``
 
 Output: msfiddle CSV
 --------------------
@@ -84,7 +84,8 @@ One row is produced per input spectrum.
        (0–1; higher is more confident).
 
 The number of ranked columns is set by ``top_k`` in the configuration file
-(default: 5).
+(20 in the bundled Orbitrap and Q-TOF configs) unless ``top_k`` is passed
+explicitly.
 
 Native/Original BUDDY and SIRIUS Outputs
 ----------------------------------------
