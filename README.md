@@ -1,5 +1,10 @@
 <p align="center">
-  <a href="https://github.com/JosieHong/FIDDLE"><img src="https://raw.githubusercontent.com/JosieHong/FIDDLE/main/img/fiddle-logo-light.png" alt="FIDDLE" width="480"></a>
+  <a href="https://github.com/JosieHong/FIDDLE">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/JosieHong/FIDDLE/main/img/fiddle-logo-dark@2x.png">
+      <img src="https://raw.githubusercontent.com/JosieHong/FIDDLE/main/img/fiddle-logo-light@2x.png" alt="FIDDLE" width="480">
+    </picture>
+  </a>
 </p>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)

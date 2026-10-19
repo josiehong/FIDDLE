@@ -34,3 +34,5 @@ intersphinx_mapping = {
 
 html_theme = "sphinx_rtd_theme"
 html_title = "msfiddle"
+html_logo = "../img/fiddle-logo-dark@2x.png"
+html_favicon = "../img/fiddle-icon-512.png"
