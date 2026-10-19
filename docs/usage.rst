@@ -23,7 +23,7 @@ Model weights must be downloaded before running predictions:
 
 .. code-block:: bash
 
-   # Download to the default location (~/.msfiddle/check_point)
+   # Download to the default location (~/.msfiddle/check_point/<release tag>)
    msfiddle-download-models
 
    # Download specific models to a custom location

@@ -34,7 +34,7 @@ On Apple Silicon (macOS ARM64), use `environment_mac.yml` instead.
 
 ### Pre-trained Model Weights
 
-To use the pre-trained models, please use the following scripts to download the weights from the [release page](https://github.com/JosieHong/FIDDLE/releases/tag/v1.0.0) and place them in the `./check_point/` directory:
+To use the pre-trained models, please use the following scripts to download the weights from the [release page](https://github.com/JosieHong/FIDDLE/releases/tag/v2.2.0) and place them in the `./check_point/` directory:
 
 - **Orbitrap models**:
   - `fiddle_tcn_orbitrap.pt`: formula prediction model on Orbitrap spectra

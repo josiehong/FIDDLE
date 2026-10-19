@@ -16,11 +16,18 @@ from importlib.metadata import (
 
 
 def checkpoint_release_for_package_version(package_version):
-    """Return the major-version FIDDLE release tag that contains checkpoints."""
-    match = re.match(r"^(\d+)", str(package_version))
+    """Return the FIDDLE release tag that holds this version's checkpoints.
+
+    From 2.2 on, each minor version has its own checkpoints (tag vX.Y.0,
+    shared by its patch releases); 2.0 and 2.1 share the v2.0.0 assets.
+    """
+    match = re.match(r"^(\d+)(?:\.(\d+))?", str(package_version))
     if match is None:
         return f"v{package_version}"
-    return f"v{match.group(1)}.0.0"
+    major, minor = int(match.group(1)), int(match.group(2) or 0)
+    if (major, minor) < (2, 2):
+        return f"v{major}.0.0"
+    return f"v{major}.{minor}.0"
 
 
 try:
@@ -56,10 +63,14 @@ def download_url(url, output_path):
 def get_checkpoint_dir():
     """Get the directory where model checkpoints are stored.
 
-    Returns ``~/.msfiddle/check_point``, a user-level directory that is
-    consistent regardless of working directory or install method.
+    Returns ``~/.msfiddle/check_point/<release tag>``, a user-level directory
+    that is consistent regardless of working directory or install method. The
+    tag keeps checkpoints from different releases apart, so an upgrade never
+    silently reuses an older release's weights.
     """
-    return os.path.join(os.path.expanduser("~"), ".msfiddle", "check_point")
+    return os.path.join(
+        os.path.expanduser("~"), ".msfiddle", "check_point", FIDDLE_RELEASE
+    )
 
 
 def download_models(destination=None, models=None):
