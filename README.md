@@ -43,11 +43,7 @@ msfiddle predict --test_data spectra.mgf --instrument_type orbitrap --result_pat
 
 Use `--instrument_type qtof` for Q-TOF data. Each spectrum needs `TITLE`, `PRECURSOR_MZ`, `PRECURSOR_TYPE` and `COLLISION_ENERGY`. [`msfiddle/demo/input_msms.mgf`](https://github.com/JosieHong/FIDDLE/blob/main/msfiddle/demo/input_msms.mgf) has 21 example spectra from EMBL-MCF 2.0, and `msfiddle predict --demo --result_path demo.csv` runs on them.
 
-When the true formulas are known (a `SMILES` or `FORMULA` field in each spectrum), `msfiddle eval` reports top-k accuracy:
-
-```bash
-msfiddle eval --result results.csv --test_data spectra.mgf
-```
+When the true formulas are known (a `SMILES` or `FORMULA` field in each spectrum), add `--eval` to also report top-k accuracy, saved as `results_eval.csv`.
 
 The [documentation](https://msfiddle.readthedocs.io) covers the Python API, BUDDY and SIRIUS integration, custom checkpoints, and the output columns. [`scripts/test_caffeine.py`](https://github.com/JosieHong/FIDDLE/blob/main/scripts/test_caffeine.py) runs FIDDLE on a caffeine Orbitrap spectrum fetched from GNPS.
 

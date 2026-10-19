@@ -43,12 +43,11 @@ To inspect current model paths:
 Commands
 --------
 
-``msfiddle`` has four subcommands:
+``msfiddle`` has three subcommands:
 
 .. code-block:: text
 
    msfiddle predict   predict formulas for an MGF file
-   msfiddle eval      top-k accuracy of a result CSV against known formulas
    msfiddle download  download the pre-trained models
    msfiddle paths     show the checkpoint directory and downloaded models
 
@@ -94,17 +93,21 @@ identical) and ``--batch_size`` sets the inference batch (default 32).
 Evaluating Predictions
 ----------------------
 
-If the true formulas are known, ``msfiddle eval`` reports cumulative top-1 to
-top-k accuracy, per spectrum and per compound (each compound weighted equally):
+If the true formulas are known, add ``--eval`` to ``predict``. After saving the
+results it reports cumulative top-1 to top-k accuracy (k up to the number of
+candidates), per spectrum and per compound with each compound weighted equally,
+and saves the table as ``<result>_eval.csv``:
 
 .. code-block:: bash
 
-   msfiddle eval --result /path/to/results.csv \
-                 --test_data /path/to/data.mgf \
-                 --topk 10
+   msfiddle predict --test_data /path/to/data.mgf \
+                    --result_path /path/to/results.csv \
+                    --eval
 
-Spectra are matched by ``TITLE``. The truth is read from each spectrum's
-``SMILES`` field, or its ``FORMULA`` field when there is no SMILES.
+With ``--eval`` alone, the truth is each spectrum's ``SMILES`` field, or its
+``FORMULA`` field when there is no SMILES. ``--eval TRUTH`` reads it from another
+MGF or a test ``.pkl`` instead. Spectra are matched by ``TITLE``, and the output
+reports how many result rows matched.
 
 Integration with BUDDY and SIRIUS
 -----------------------------------

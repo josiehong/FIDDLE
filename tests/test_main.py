@@ -1,3 +1,6 @@
+import argparse
+
+import pandas as pd
 import pytest
 
 from msfiddle import main as cli
@@ -32,15 +35,40 @@ def test_predict_is_the_default_subcommand(monkeypatch, argv):
     assert seen["demo"] and seen["result_path"] == "out.csv"
 
 
-def test_eval_subcommand_prints_topk_table(tmp_path, capsys):
+@pytest.mark.parametrize(
+    "extra, expected",
+    [([], None), (["--eval"], True), (["--eval", "truth.pkl"], "truth.pkl")],
+)
+def test_predict_eval_flag(monkeypatch, extra, expected):
+    seen = {}
+    monkeypatch.setattr(cli, "_predict", lambda args, parser: seen.update(vars(args)))
+    cli.main(["--demo", "--result_path", "out.csv"] + extra)
+    assert seen["eval"] == expected
+
+
+def test_missing_truth_file_fails_before_predicting(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(
+            ["--demo", "--result_path", str(tmp_path / "out.csv")]
+            + ["--eval", str(tmp_path / "missing.pkl")]
+        )
+    assert exc.value.code == 1
+    assert "Truth file not found" in capsys.readouterr().err
+
+
+def test_evaluate_prints_and_saves_table(tmp_path, capsys):
     truth = tmp_path / "t.mgf"
     truth.write_text("BEGIN IONS\nTITLE=s1\nFORMULA=CH4\n85.0 100.0\nEND IONS\n")
-    result = tmp_path / "r.csv"
-    result.write_text("ID,Refined Formula (0),Refined Formula (1)\ns1,C2H6,CH4\n")
-    cli.main(["eval", "--result", str(result), "--test_data", str(truth)])
+    res = pd.DataFrame(
+        {"ID": ["s1"], "Refined Formula (0)": ["C2H6"], "Refined Formula (1)": ["CH4"]}
+    )
+    args = argparse.Namespace(result_path=str(tmp_path / "out.csv"))
+    cli._evaluate(res, str(truth), args, cli.build_parser())
     out = capsys.readouterr().out
-    assert "top-2" in out
     assert out.split("\nspectra")[1].split()[:2] == ["0.0%", "100.0%"]
+    saved = pd.read_csv(tmp_path / "out_eval.csv")
+    assert list(saved["k"]) == [1, 2]
+    assert list(saved["spectrum_acc"]) == [0.0, 1.0]
 
 
 def test_no_arguments_prints_help_and_fails(capsys):

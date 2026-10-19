@@ -40,7 +40,7 @@ def init_random_seed(seed):
     return
 
 
-SUBCOMMANDS = ("predict", "eval", "download", "paths")
+SUBCOMMANDS = ("predict", "download", "paths")
 
 
 def _add_predict_args(parser):
@@ -108,6 +108,19 @@ def _add_predict_args(parser):
         help="Processes for formula refinement (default: 1)",
     )
 
+    parser.add_argument(
+        "--eval",
+        nargs="?",
+        const=True,
+        default=None,
+        metavar="TRUTH",
+        help=(
+            "After predicting, report top-k accuracy and save it as "
+            "<result>_eval.csv. Truth comes from the input MGF's SMILES or "
+            "FORMULA fields, or from TRUTH (an MGF or test .pkl), matched by title"
+        ),
+    )
+
     # Add advanced arguments for custom configurations
     advanced_group = parser.add_argument_group("Advanced options")
     advanced_group.add_argument(
@@ -124,6 +137,10 @@ def _add_predict_args(parser):
 
 
 def _predict(args, parser):
+    # Fail before the long prediction run, not after it.
+    if isinstance(args.eval, str) and not os.path.exists(args.eval):
+        parser.exit(status=1, message=f"Truth file not found: {args.eval}\n")
+
     # Initialize random seed
     init_random_seed(args.seed)
 
@@ -195,20 +212,24 @@ def _predict(args, parser):
     res_df.to_csv(args.result_path, index=False)
     print(f"Done! Results saved to {args.result_path}")
 
+    if args.eval is not None:
+        _evaluate(
+            res_df, test_data_path if args.eval is True else args.eval, args, parser
+        )
 
-def _eval(args, parser):
-    import pandas as pd
 
+def _evaluate(res_df, truth_path, args, parser):
     from .evaluate import load_truth, topk_accuracy
 
     try:
-        result = topk_accuracy(
-            pd.read_csv(args.result), load_truth(args.test_data), args.topk
-        )
+        result = topk_accuracy(res_df, load_truth(truth_path))
     except ValueError as exc:
         parser.exit(status=1, message=f"{exc}\n")
-    print("Eval: {}  vs  {}".format(args.result, args.test_data))
+    eval_path = os.path.splitext(args.result_path)[0] + "_eval.csv"
+    result.to_frame().to_csv(eval_path, index=False)
+    print(f"\nEval against {truth_path}")
     print(result.format())
+    print(f"Saved to {eval_path}")
 
 
 def _download(args, parser):
@@ -231,21 +252,11 @@ def build_parser():
             "Without a subcommand, the arguments are passed to 'predict'."
         ),
     )
-    sub = parser.add_subparsers(dest="command", metavar="{predict,eval,download,paths}")
+    sub = parser.add_subparsers(dest="command", metavar="{predict,download,paths}")
 
     p = sub.add_parser("predict", help="Predict formulas for an MGF file")
     _add_predict_args(p)
     p.set_defaults(func=_predict)
-
-    p = sub.add_parser("eval", help="Top-k accuracy of a result CSV")
-    p.add_argument("--result", required=True, help="Result CSV from 'predict'")
-    p.add_argument(
-        "--test_data",
-        required=True,
-        help="Known formulas: MGF (SMILES or FORMULA field) or test .pkl",
-    )
-    p.add_argument("--topk", type=int, default=10, help="Largest k to report")
-    p.set_defaults(func=_eval)
 
     p = sub.add_parser("download", help="Download the pre-trained models")
     p.add_argument("-d", "--destination", help="Directory to save the models")

@@ -88,6 +88,18 @@ class TopKResult:
     n_compounds: int
     n_rows: int  # result rows in total
 
+    def to_frame(self) -> pd.DataFrame:
+        """One row per k: cumulative top-k accuracy per spectrum and compound."""
+        return pd.DataFrame(
+            {
+                "k": range(1, len(self.spectrum_acc) + 1),
+                "spectrum_acc": self.spectrum_acc,
+                "compound_acc": self.compound_acc,
+                "n_spectra": self.n_spectra,
+                "n_compounds": self.n_compounds,
+            }
+        )
+
     def format(self) -> str:
         k = len(self.spectrum_acc)
         return "\n".join(
@@ -105,9 +117,12 @@ class TopKResult:
 
 
 def topk_accuracy(
-    result: pd.DataFrame, truth: dict[str, tuple], topk: int = 5
+    result: pd.DataFrame, truth: dict[str, tuple], topk: Optional[int] = None
 ) -> TopKResult:
-    """Cumulative top-1..top-k accuracy of ``result`` rows that have a truth."""
+    """Cumulative top-1..top-k accuracy of ``result`` rows that have a truth.
+
+    ``topk`` defaults to every ``Refined Formula`` column.
+    """
     if "ID" not in result.columns:
         raise ValueError("result has no 'ID' column")
     cols = sorted(
@@ -116,7 +131,7 @@ def topk_accuracy(
     )
     if not cols:
         raise ValueError("result has no 'Refined Formula (k)' columns")
-    topk = min(topk, len(cols))
+    topk = len(cols) if topk is None else min(topk, len(cols))
     cols = cols[:topk]
 
     spectrum_hits = []
