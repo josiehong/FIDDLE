@@ -26,7 +26,14 @@ trainer = _load_trainer()
 def _small_config():
     with open(os.path.join(REPO, "msfiddle/config/fiddle_tcn_qtof.yml")) as f:
         config = yaml.safe_load(f)["model"]
-    config["tcn_channels"] = [4, 4, 8, 16, 32, 64]  # keeps sum == 2 x last, as the fc input assumes
+    config["tcn_channels"] = [
+        4,
+        4,
+        8,
+        16,
+        32,
+        64,
+    ]  # keeps sum == 2 x last, as the fc input assumes
     config["tcn_dropout"] = 0.0  # deterministic forward for exact comparison
     return config
 
@@ -117,8 +124,7 @@ def _assert_same_grads(rec_a, rec_b):
 
 def _max_param_diff(m1, m2):
     return max(
-        (p1 - p2).abs().max().item()
-        for p1, p2 in zip(m1.parameters(), m2.parameters())
+        (p1 - p2).abs().max().item() for p1, p2 in zip(m1.parameters(), m2.parameters())
     )
 
 

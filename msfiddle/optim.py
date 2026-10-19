@@ -131,9 +131,7 @@ class Muon(Optimizer):
                 state["momentum_buffer"] = torch.zeros_like(g)
             buf = state["momentum_buffer"]
             buf.mul_(group["momentum"]).add_(g)
-            update = (
-                g.add(buf, alpha=group["momentum"]) if group["nesterov"] else buf
-            )
+            update = g.add(buf, alpha=group["momentum"]) if group["nesterov"] else buf
             u2 = update.reshape(update.size(0), -1)
             u2 = zeropower_via_newtonschulz5(u2, steps=group["ns_steps"])
             scale = max(1.0, u2.size(0) / u2.size(1)) ** 0.5

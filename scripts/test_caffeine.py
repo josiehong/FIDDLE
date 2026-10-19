@@ -60,7 +60,6 @@ MODELS = {
 # ---------------------------------------------------------------------------
 
 
-
 def _load_state(path):
     sd = torch.load(path, map_location=DEVICE, weights_only=False)["model_state_dict"]
     if any(k.startswith("module.") for k in sd):

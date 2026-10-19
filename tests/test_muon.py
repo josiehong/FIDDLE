@@ -50,8 +50,15 @@ def test_split_matrix_params():
     assert id(named["fc.weight_v"]) in muon_ids
     assert id(named["bias_only.weight"]) in muon_ids
     # gains, biases, embeddings stay on adamw
-    for name in ["conv.weight_g", "fc.weight_g", "conv.bias", "fc.bias",
-                 "emb.weight_v", "emb.weight_g", "bias_only.bias"]:
+    for name in [
+        "conv.weight_g",
+        "fc.weight_g",
+        "conv.bias",
+        "fc.bias",
+        "emb.weight_v",
+        "emb.weight_g",
+        "bias_only.bias",
+    ]:
         assert id(named[name]) not in muon_ids, name
     assert len(muon_params) + len(adamw_params) == len(named)
 
