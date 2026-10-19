@@ -30,6 +30,9 @@ mgf_key_order = [
 ]
 
 
+C13_SHIFT = 1.0033548  # 13C - 12C, the spacing of isotope peaks
+
+
 def sdf2mgf(path, prefix):
     """Read an SDF file and convert each record to an MGF-style spectrum dict.
 
@@ -176,8 +179,15 @@ def _filter_spec_single(spectrum, config, type2charge):
     theo_mz = precursor_mz_calculator(precursor_type, molmass)
     ppm = abs(theo_mz - float(spectrum["params"]["precursor_mz"])) / theo_mz * 10**6
 
-    # Filter by ppm (mass error)
+    # Filter by ppm (mass error); a precursor picked at a 13C isotope peak is
+    # dropped too, but counted separately
     if "ppm_tolerance" in config.keys() and ppm > config["ppm_tolerance"]:
+        charge = abs(int(type2charge[precursor_type]))
+        error = float(spectrum["params"]["precursor_mz"]) - theo_mz
+        for k in (1, 2):
+            shifted = abs(error - k * C13_SHIFT / charge) / theo_mz * 10**6
+            if shifted <= config["ppm_tolerance"]:
+                return None, "isotope_error"
         return None, "ppm_tolerance"
 
     # Remove the invalid spectra
@@ -248,6 +258,7 @@ def filter_spec(spectra, config, type2charge, num_workers=0):
         "max_mz": [],
         "invalud_formula": [],
         "ppm_tolerance": [],
+        "isotope_error": [],
         "invalid_intensity_array": [],
     }
     for spectrum, (kept, reject_key) in zip(spectra, results):

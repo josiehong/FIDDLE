@@ -51,3 +51,40 @@ def test_unsupported_precursor_type_raises():
         precursor_mz_calculator("[M+K]+", MASS)
     with pytest.raises(ValueError):
         mass_calculator("[M+K]+", 201.0)
+
+
+def test_filter_counts_isotope_errors_separately(capsys):
+    import numpy as np
+
+    from msfiddle.utils.mol_utils import monoisotopic_mass_calculator
+    from msfiddle.utils.msms_utils import C13_SHIFT, filter_spec
+
+    theo = precursor_mz_calculator("[M+H]+", monoisotopic_mass_calculator("C2H6O", "f"))
+
+    def spectrum(title, mz):
+        params = {"title": title, "smiles": "CCO", "precursor_type": "[M+H]+"}
+        return {
+            "params": {**params, "precursor_mz": str(mz)},
+            "m/z array": np.array([31.0, 45.0, 46.0]),
+            "intensity array": np.array([10.0, 100.0, 30.0]),
+        }
+
+    config = {
+        "min_peak_num": 2,
+        "min_mz": 20,
+        "max_mz": 1500,
+        "max_atom_num": 100,
+        "min_atom_num": 2,
+        "atom_type": ["C", "H", "O"],
+        "precursor_type": ["[M+H]+"],
+        "ppm_tolerance": 10,
+    }
+    spectra = [
+        spectrum("ok", theo),
+        spectrum("isotope", theo + C13_SHIFT),
+        spectrum("off", theo + 0.5),
+    ]
+    kept, _ = filter_spec(spectra, config, {"[M+H]+": "+1"})
+    assert [s["params"]["title"] for s in kept] == ["ok"]
+    out = capsys.readouterr().out
+    assert "ppm_tolerance: 1" in out and "isotope_error: 1" in out
