@@ -20,6 +20,7 @@ Usage:
 """
 
 import argparse
+import pickle
 
 import numpy as np
 import torch
@@ -28,7 +29,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 import yaml
 from sklearn.metrics import roc_auc_score
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import os
@@ -37,104 +37,99 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from msfiddle.dataset import RescoreDataset
 from msfiddle.model_tcn import MS2FNet_tcn, FormulaEncoder, RescoreHead
+from msfiddle.utils.mol_utils import formula_to_vector
+
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
+
+
+def load_pairs(path, spec_encoder, batch_size, device):
+    """Load a rescore pkl and embed each distinct spectrum once.
+
+    The spectrum encoder is frozen and deterministic, so every pair of a spectrum
+    shares one embedding; the raw spectra are dropped once embedded.
+
+    Returns:
+        z:   (S, 512) L2-normalised spectrum embeddings (CPU)
+        idx: (N,) row of z for each pair
+        f:   (N, 13) formula vectors
+        y:   (N,) labels
+    """
+    with open(path, "rb") as file:
+        data = pickle.load(file)
+    print("Load {} pairs from {}".format(len(data), path))
+
+    rows, specs = {}, []
+    for d in data:
+        if d["title"] not in rows:
+            rows[d["title"]] = len(specs)
+            specs.append((d["spec"][:, 0], d["env"]))
+    idx = torch.tensor([rows[d["title"]] for d in data])
+    f = torch.tensor(
+        np.array([formula_to_vector(d["pred_formula"]) for d in data]),
+        dtype=torch.float32,
+    )
+    y = torch.tensor([d["label"] for d in data], dtype=torch.float32)
+    del data, rows
+
+    z = []
+    with torch.no_grad():
+        for i in tqdm(range(0, len(specs), batch_size), desc="Embed spectra"):
+            chunk = specs[i : i + batch_size]
+            x = torch.tensor(np.stack([s for s, _ in chunk]), dtype=torch.float32)
+            env = torch.tensor(np.stack([e for _, e in chunk]), dtype=torch.float32)
+            env[:, 0] = 0.0  # zero out precursor_mz to prevent mass-based shortcut
+            z_specs, _, _, _, _ = spec_encoder(x.to(device), env.to(device))
+            z.append(F.normalize(z_specs, dim=1).cpu())
+    print(f"Embedded {len(specs)} spectra")
+    return torch.cat(z), idx, f, y
+
 
 # ---------------------------------------------------------------------------
 # Train / eval
 # ---------------------------------------------------------------------------
 
 
-def train_step(spec_encoder, formula_encoder, rescore_head, loader, optimizer, device):
-    formula_encoder.train()
-    rescore_head.train()
-    spec_encoder.eval()
+def run_epoch(pairs, formula_encoder, rescore_head, batch_size, device, optimizer=None):
+    """One pass over the pairs; trains when an optimizer is given."""
+    z, idx, f, y = pairs
+    train = optimizer is not None
+    formula_encoder.train(train)
+    rescore_head.train(train)
 
     criterion = nn.BCEWithLogitsLoss()
+    order = torch.randperm(len(y)) if train else torch.arange(len(y))
     total_loss = 0.0
-    total_acc = 0
-    y_true = []
-    y_scores = []
+    seen, scores = [], []
 
-    with tqdm(total=len(loader)) as bar:
-        for batch in loader:
-            _, x, env, f, y = batch
-            x = x.to(device, dtype=torch.float32)
-            env = env.to(device, dtype=torch.float32)
-            f = f.to(device, dtype=torch.float32)
-            y = y.to(device, dtype=torch.float32)
-
-            env = env.clone()
-            env[:, 0] = 0.0  # zero out precursor_mz to prevent mass-based shortcut
-
-            optimizer.zero_grad()
-
-            with torch.no_grad():
-                z_specs, _, _, _, _ = spec_encoder(x, env)
-                z_specs = F.normalize(z_specs, dim=1)
-
-            z_forms = formula_encoder(f)  # (B, 512), L2-normalised
+    with torch.set_grad_enabled(train), tqdm(
+        order.split(batch_size), desc="Train" if train else "Valid"
+    ) as bar:
+        for b in bar:
+            z_specs = z[idx[b]].to(device)
+            z_forms = formula_encoder(f[b].to(device))  # (B, 512), L2-normalised
             logits = rescore_head(z_specs * z_forms)  # (B,)
-            y_hat = torch.sigmoid(logits)
+            loss = criterion(logits, y[b].to(device))
 
-            loss = criterion(logits, y)
-            if torch.isnan(loss):
-                bar.update(1)
-                continue
+            if train:
+                if torch.isnan(loss):
+                    continue
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                bar.set_postfix(loss=loss.item())
 
-            loss.backward()
-            optimizer.step()
+            total_loss += loss.item() * len(b)
+            seen.append(b)
+            scores.append(torch.sigmoid(logits).detach().cpu())
 
-            total_loss += loss.item() * x.size(0)
-            total_acc += torch.eq(y.round(), y_hat.round()).float().sum().item()
-            y_true.extend(y.cpu().numpy())
-            y_scores.extend(y_hat.detach().cpu().numpy())
-
-            bar.set_description("Train")
-            bar.set_postfix(loss=loss.item())
-            bar.update(1)
-
-    auc = roc_auc_score(y_true, y_scores)
-    return total_loss / len(loader.dataset), total_acc / len(loader.dataset), auc
-
-
-def eval_step(spec_encoder, formula_encoder, rescore_head, loader, device):
-    formula_encoder.eval()
-    rescore_head.eval()
-    spec_encoder.eval()
-
-    criterion = nn.BCEWithLogitsLoss()
-    total_loss = 0.0
-    total_acc = 0
-    y_true = []
-    y_scores = []
-
-    with torch.no_grad():
-        for batch in loader:
-            _, x, env, f, y = batch
-            x = x.to(device, dtype=torch.float32)
-            env = env.to(device, dtype=torch.float32)
-            f = f.to(device, dtype=torch.float32)
-            y = y.to(device, dtype=torch.float32)
-
-            env = env.clone()
-            env[:, 0] = 0.0
-
-            z_specs, _, _, _, _ = spec_encoder(x, env)
-            z_specs = F.normalize(z_specs, dim=1)
-
-            z_forms = formula_encoder(f)
-            logits = rescore_head(z_specs * z_forms)
-            y_hat = torch.sigmoid(logits)
-
-            loss = criterion(logits, y)
-            total_loss += loss.item() * x.size(0)
-            total_acc += torch.eq(y.round(), y_hat.round()).float().sum().item()
-            y_true.extend(y.cpu().numpy())
-            y_scores.extend(y_hat.detach().cpu().numpy())
-
-    auc = roc_auc_score(y_true, y_scores)
-    return total_loss / len(loader.dataset), total_acc / len(loader.dataset), auc
+    y_true = y[torch.cat(seen)]
+    y_score = torch.cat(scores)
+    acc = ((y_score > 0.5).float() == y_true).float().mean().item()
+    auc = roc_auc_score(y_true.numpy(), y_score.numpy())
+    return total_loss / len(y_true), acc, auc
 
 
 # ---------------------------------------------------------------------------
@@ -171,33 +166,18 @@ if __name__ == "__main__":
     )
     print(f"Device: {device}")
 
-    # Data
-    train_set = RescoreDataset(args.train_data)
-    train_loader = DataLoader(
-        train_set,
-        batch_size=config["train_rescore"]["batch_size"],
-        shuffle=True,
-        num_workers=config["train_rescore"]["num_workers"],
-        drop_last=True,
-    )
-    valid_set = RescoreDataset(args.test_data)
-    valid_loader = DataLoader(
-        valid_set,
-        batch_size=config["train_rescore"]["batch_size"],
-        shuffle=False,
-        num_workers=config["train_rescore"]["num_workers"],
-        drop_last=True,
-    )
-
-    # Frozen spectrum encoder
+    # Frozen spectrum encoder: embeds each distinct spectrum once
     spec_encoder = MS2FNet_tcn(config["model"]).to(device)
     state_dict = torch.load(args.resume_path, map_location=device)["model_state_dict"]
     state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
     spec_encoder.load_state_dict(state_dict, strict=False)
-    for p in spec_encoder.parameters():
-        p.requires_grad = False
     spec_encoder.eval()
     print(f"Loaded frozen spectrum encoder from {args.resume_path}")
+
+    batch_size = config["train_rescore"]["batch_size"]
+    train_pairs = load_pairs(args.train_data, spec_encoder, batch_size, device)
+    valid_pairs = load_pairs(args.test_data, spec_encoder, batch_size, device)
+    del spec_encoder
 
     # Trainable FormulaEncoder + RescoreHead
     formula_encoder = FormulaEncoder(config["model"]).to(device)
@@ -220,15 +200,15 @@ if __name__ == "__main__":
 
     for epoch in range(1, config["train_rescore"]["epochs"] + 1):
         print(f"\n=====Epoch {epoch}")
-        train_loss, train_acc, train_auc = train_step(
-            spec_encoder, formula_encoder, rescore_head, train_loader, optimizer, device
+        train_loss, train_acc, train_auc = run_epoch(
+            train_pairs, formula_encoder, rescore_head, batch_size, device, optimizer
         )
         print(
             f"Train loss: {train_loss:.4f}  acc: {train_acc:.4f}  auc: {train_auc:.4f}"
         )
 
-        valid_loss, valid_acc, valid_auc = eval_step(
-            spec_encoder, formula_encoder, rescore_head, valid_loader, device
+        valid_loss, valid_acc, valid_auc = run_epoch(
+            valid_pairs, formula_encoder, rescore_head, batch_size, device
         )
         print(
             f"Validation loss: {valid_loss:.4f}  acc: {valid_acc:.4f}  auc: {valid_auc:.4f}"

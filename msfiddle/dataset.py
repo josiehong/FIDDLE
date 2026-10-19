@@ -9,7 +9,7 @@ from pyteomics import mgf
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from .utils.mol_utils import ATOMS_INDEX, formula_to_dict, formula_to_vector
+from .utils.mol_utils import ATOMS_INDEX, formula_to_dict
 from .utils.pkl_utils import generate_ms, parse_collision_energy, unify_precursor_type
 
 
@@ -414,40 +414,3 @@ class MGFDataset(Dataset):
                 vector[index] = int(count) if count else 1
 
         return vector
-
-
-class RescoreDataset(Dataset):
-    """Dataset for FDR model training and evaluation.
-
-    Loads a pkl file produced by prepare_rescore.py, where each item contains a
-    spectrum array, environment vector, a predicted formula string, and a binary
-    label (1 = correct formula, 0 = decoy). The formula string is converted to a
-    fixed-length atom-count vector at load time.
-
-    Args:
-            path: Path to the FDR pkl file (e.g. 'orbitrap_maxmin_fdr_train.pkl').
-    """
-
-    def __init__(self, path):
-        with open(path, "rb") as file:
-            self.data = pickle.load(file)
-
-        # convert formula string to formula vector
-        for d in self.data:
-            f_vec = np.array(formula_to_vector(d["pred_formula"]))
-            # f_vec = (f_vec - f_vec.min()) / (f_vec.max() - f_vec.min()) # normalize formula vector
-            d["f"] = f_vec
-
-        print("Load {} data from {}".format(len(self.data), path))
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        return (
-            self.data[idx]["title"],
-            self.data[idx]["spec"][:, 0],
-            self.data[idx]["env"],
-            self.data[idx]["f"],
-            self.data[idx]["label"],
-        )
