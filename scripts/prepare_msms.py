@@ -33,15 +33,6 @@ if __name__ == "__main__":
         "--pkl_dir", type=str, default="./data/", help="Path to pkl data"
     )
     parser.add_argument(
-        "--test_smiles_list",
-        type=str,
-        default="",
-        help="File with one SMILES per line: these compounds form the test set "
-        "and every other compound goes to training, so an earlier split can be "
-        "kept when data is added. Use the SMILES from an earlier build's test "
-        "pkl (the canonical form preprocessing writes).",
-    )
-    parser.add_argument(
         "--dataset",
         type=str,
         nargs="+",
@@ -284,77 +275,46 @@ if __name__ == "__main__":
         # split the training and test set
         train_spectra = []
         test_spectra = []
-        if args.test_smiles_list:
-            with open(args.test_smiles_list, "r") as f:
-                test_smiles_set = {line.strip() for line in f if line.strip()}
-            for spectrum in tqdm(spectra):
-                if spectrum["params"]["smiles"] in test_smiles_set:
-                    test_spectra.append(spectrum)
-                else:
-                    train_spectra.append(spectrum)
-            found = test_smiles_set & set(smiles_list)
-            print(
-                "({}) {} of {} listed test compounds found".format(
-                    ins, len(found), len(test_smiles_set)
-                )
+        if args.maxmin_pick:
+            print("({}) Split training and test set by MaxMin algorithm...".format(ins))
+            # maxmin algorithm picking training smiles (Since the training set so far is not large enough,
+            # we'd like to make a full utilizing of our datasets. It worth noting that MaxMin picker is
+            # for application, and the experiments in our paper spliting the molecules randomly according
+            # to their smiles. )
+            fpgen = rdFingerprintGenerator.GetMorganGenerator(radius=3)
+            fp_list = [fpgen.GetFingerprint(Chem.MolFromSmiles(s)) for s in smiles_list]
+            picker = MaxMinPicker()
+            train_indices = picker.LazyBitVectorPick(
+                fp_list, len(fp_list), int(len(fp_list) * args.train_ratio), seed=42
             )
-            # Unmatched SMILES (e.g. another RDKit version canonicalizing
-            # differently) would move test compounds into training unnoticed
-            if len(found) < 0.95 * len(test_smiles_set):
-                raise SystemExit(
-                    "Too few listed test compounds found; check that the list "
-                    "comes from a test pkl built with the same RDKit version"
-                )
-            del spectra, smiles_list
+            train_indices = list(train_indices)
         else:
-            if args.maxmin_pick:
-                print(
-                    "({}) Split training and test set by MaxMin algorithm...".format(
-                        ins
-                    )
-                )
-                # maxmin algorithm picking training smiles (Since the training set so far is not large enough,
-                # we'd like to make a full utilizing of our datasets. It worth noting that MaxMin picker is
-                # for application, and the experiments in our paper spliting the molecules randomly according
-                # to their smiles. )
-                fpgen = rdFingerprintGenerator.GetMorganGenerator(radius=3)
-                fp_list = [
-                    fpgen.GetFingerprint(Chem.MolFromSmiles(s)) for s in smiles_list
-                ]
-                picker = MaxMinPicker()
-                train_indices = picker.LazyBitVectorPick(
-                    fp_list, len(fp_list), int(len(fp_list) * args.train_ratio), seed=42
-                )
-                train_indices = list(train_indices)
-            else:
-                print(
-                    "({}) Split training and test set by randomly choose...".format(ins)
-                )
-                train_indices = np.random.choice(
-                    len(smiles_list),
-                    int(len(smiles_list) * args.train_ratio),
-                    replace=False,
-                )
-
-            train_idx_set = {int(i) for i in train_indices}
-            train_smiles_list = [
-                smiles_list[i] for i in range(len(smiles_list)) if i in train_idx_set
-            ]
-            train_smiles_set = set(train_smiles_list)
-            test_smiles_list = [s for s in smiles_list if s not in train_smiles_set]
-            print(
-                "({}) Get {} training compounds and {} test compounds".format(
-                    ins, len(train_smiles_list), len(test_smiles_list)
-                )
+            print("({}) Split training and test set by randomly choose...".format(ins))
+            train_indices = np.random.choice(
+                len(smiles_list),
+                int(len(smiles_list) * args.train_ratio),
+                replace=False,
             )
 
-            for _, spectrum in enumerate(tqdm(spectra)):
-                smiles = spectrum["params"]["smiles"]
-                if smiles in train_smiles_set:
-                    train_spectra.append(spectrum)
-                else:
-                    test_spectra.append(spectrum)
-            del spectra, smiles_list, test_smiles_list
+        train_idx_set = {int(i) for i in train_indices}
+        train_smiles_list = [
+            smiles_list[i] for i in range(len(smiles_list)) if i in train_idx_set
+        ]
+        train_smiles_set = set(train_smiles_list)
+        test_smiles_list = [s for s in smiles_list if s not in train_smiles_set]
+        print(
+            "({}) Get {} training compounds and {} test compounds".format(
+                ins, len(train_smiles_list), len(test_smiles_list)
+            )
+        )
+
+        for _, spectrum in enumerate(tqdm(spectra)):
+            smiles = spectrum["params"]["smiles"]
+            if smiles in train_smiles_set:
+                train_spectra.append(spectrum)
+            else:
+                test_spectra.append(spectrum)
+        del spectra, smiles_list, test_smiles_list
         print(
             "({}) Get {} training spectra and {} test spectra".format(
                 ins, len(train_spectra), len(test_spectra)

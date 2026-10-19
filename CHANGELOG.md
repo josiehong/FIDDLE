@@ -8,7 +8,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- `prepare_msms.py --test_smiles_list`: a fixed list of test compounds forms the test set and every other compound goes to training, so an earlier split can be kept when data is added. It stops if fewer than 95% of the listed compounds are found.
 - `prepare_msms.py --report_only` loads and filters the raw libraries and reports what each dataset keeps and drops, including isotope-peak precursors and stepped collision energies, without the split, encoding or output files.
 - Isotope-error search ([#8](https://github.com/JosieHong/FIDDLE/issues/8)): `post_processing.isotope_errors` (default `[0]`) lists 13C isotope offsets k to refine at, for precursors read from the M+k isotope peak, and `isotope_penalty` (default 0.5) is subtracted from the rescore per unit of k. Results gain `Isotope Shift (k)` columns when enabled. `prepare_augment_rescore.py` adds the candidates found at those offsets as decoys, so the rescorer is trained on them.
 - `msfiddle.settings.load_config`: every config is read through it. It fills defaults, rejects invalid post-processing settings, and warns when a dataset's `ppm_tolerance` is wider than `mass_tolerance`.
@@ -28,7 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Removed
 
 - `scripts/train_tcn_gpus.py`; `scripts/train_tcn_gpus_cl.py` trains the TCN.
-- `--test_title_list` in `prepare_msms.py` and `prepare_msms_nist23.py`; nothing used it, and `--test_smiles_list` keeps a split by compound.
+- `--test_title_list` in `prepare_msms.py` and `prepare_msms_nist23.py`, which nothing used.
 - Unused imports and a duplicate collision-energy pattern in the package, and the manual test scripts at the end of the `msfiddle/utils` modules.
 
 ## [2.2.1] - 2026-10-19
