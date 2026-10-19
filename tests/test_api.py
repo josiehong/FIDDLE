@@ -221,3 +221,22 @@ def test_predict_mgf_loads_native_external_outputs(monkeypatch, tmp_path):
     assert seen_extra_formulas == ["C4H6N4O3", "C5H7NO2", "C6H12O6"]
     assert result.loc[0, "ID"] == "spec-1"
     assert result.loc[0, "Refined Formula (0)"] == "C4H6N4O3"
+
+
+def test_predict_mgf_skips_stepped_collision_energy_with_warning(tmp_path):
+    peaks = "".join(f"{mz} {i}\n" for mz, i in zip(VALID_MZ, VALID_INTENSITY))
+    path = tmp_path / "in.mgf"
+    path.write_text(
+        "".join(
+            f"BEGIN IONS\nTITLE={t}\nPRECURSOR_MZ={VALID_PRECURSOR_MZ}\n"
+            f"PRECURSOR_TYPE={VALID_ADDUCT}\nCOLLISION_ENERGY={ce}\n{peaks}END IONS\n"
+            for t, ce in [("single", "35"), ("stepped", "HCD (NCE 20-30-40%)")]
+        )
+    )
+    predictor = MsFiddlePredictor(
+        resume_path=tmp_path / "missing_tcn.pt",
+        rescore_resume_path=tmp_path / "missing_rescore.pt",
+    )
+    with pytest.warns(UserWarning, match="Skipped 1 spectra with a stepped"):
+        encoded = predictor._load_mgf_spectra(path)
+    assert [e.id for e in encoded] == ["single"]

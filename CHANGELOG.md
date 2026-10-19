@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Spectra with a stepped or ranged collision energy (`HCD (NCE 20-30-40%)`, `30-50 eV`) are skipped with one warning that gives the count, where `predict` used to drop them without saying why; `predict_from_spectrum` raises a clear error. Preprocessing reports how many it drops. The models were trained on single-energy spectra, so these are not encoded as a mean energy.
 - BUDDY and SIRIUS results are looked up by spectrum ID through an index, not by scanning the whole table for every spectrum. Results are unchanged.
 
 ### Removed

@@ -3,7 +3,11 @@ import random
 import pandas as pd
 import pytest
 
-from msfiddle.utils.pkl_utils import generate_ms, generate_pairs
+from msfiddle.utils.pkl_utils import (
+    generate_ms,
+    generate_pairs,
+    is_stepped_collision_energy,
+)
 
 # Precursor far from the test peaks so isotopic-peak removal leaves them intact.
 PRECURSOR_MZ = 1000.0
@@ -41,3 +45,20 @@ def test_generate_pairs():
     counts = df["smiles"].value_counts()
     replicated = {i for i, s in smiles.items() if counts[s] > 1}
     assert replicated <= {i for pair in positive for i in pair}
+
+
+@pytest.mark.parametrize(
+    "ce, stepped",
+    [
+        ("HCD (NCE 20-30-40%)", True),
+        ("30-50 eV", True),
+        ("stepped 20,40,60", True),
+        ("35", False),
+        ("NCE=35%", False),
+        ("HCD (NCE 40%)", False),
+        ("35.5 eV", False),
+        ("Unknown", False),
+    ],
+)
+def test_stepped_collision_energy(ce, stepped):
+    assert is_stepped_collision_energy(ce) is stepped

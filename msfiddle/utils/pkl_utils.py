@@ -20,6 +20,17 @@ from .mol_utils import (
 # ------------------------ Main Functions ------------------------
 
 
+# Several energies in one spectrum ("HCD (NCE 20-30-40%)", "30-50 eV",
+# "stepped 20,40,60"). The model was trained on single-energy spectra, so these
+# are dropped rather than encoded as, say, the mean energy.
+_STEPPED_CE = re.compile(r"\d\s*%?\s*[-,/]\s*\d|\bstep", re.IGNORECASE)
+
+
+def is_stepped_collision_energy(ce_str):
+    """True for a stepped or ranged collision energy string."""
+    return bool(_STEPPED_CE.search(str(ce_str)))
+
+
 def spec2arr(spectra, encoder, num_workers=0):
     """data format
     [
@@ -57,6 +68,12 @@ def spec2arr(spectra, encoder, num_workers=0):
         else:
             bad_data.append(spectrum["params"]["title"])
 
+    n_stepped = sum(
+        is_stepped_collision_energy(s["params"].get("collision_energy", ""))
+        for s in spectra
+    )
+    if n_stepped:
+        print(f"Dropped {n_stepped} spectra with a stepped collision energy")
     return data, bad_data
 
 
@@ -170,6 +187,9 @@ def spec2arr_single(spectrum, encoder):
         print("Failed to generate mass spectra: {}".format(spectrum["params"]["title"]))
         return None  # invalid spectra
 
+    if is_stepped_collision_energy(spectrum["params"]["collision_energy"]):
+        return None  # counted in spec2arr
+
     # env array
     adjust_formula, adjust_precursor_type = melt_neutral_precursor(
         formula, spectrum["params"]["precursor_type"]
@@ -185,7 +205,7 @@ def spec2arr_single(spectrum, encoder):
                 spectrum["params"]["collision_energy"]
             )
         )
-        return None  # can not process '30-50 eV'
+        return None
     env_arr = np.array(
         [
             float(spectrum["params"]["theoretical_precursor_mz"]),

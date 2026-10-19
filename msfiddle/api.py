@@ -28,7 +28,12 @@ from .utils.mol_utils import (
     vector_to_formula,
 )
 from .utils.msms_utils import mass_calculator
-from .utils.pkl_utils import generate_ms, parse_collision_energy, unify_precursor_type
+from .utils.pkl_utils import (
+    generate_ms,
+    is_stepped_collision_energy,
+    parse_collision_energy,
+    unify_precursor_type,
+)
 from .utils.refine_utils import formula_refinement
 
 _INSTRUMENT_TYPES = {"orbitrap", "qtof"}
@@ -349,6 +354,11 @@ class MsFiddlePredictor:
             )
 
         ce_str = _collision_energy_to_string(collision_energy)
+        if is_stepped_collision_energy(ce_str):
+            raise ValueError(
+                f"Stepped collision energy {collision_energy!r} is not supported: "
+                "FIDDLE was trained on single-energy spectra"
+            )
         ce, nce = parse_collision_energy(
             ce_str=ce_str,
             precursor_mz=precursor_mz,
@@ -393,6 +403,7 @@ class MsFiddlePredictor:
         )
         encoded: list[_EncodedSpectrum] = []
         invalid_count = 0
+        stepped: list[str] = []
         for spectrum in spectra:
             params = spectrum.get("params", {})
             missing = [
@@ -416,6 +427,10 @@ class MsFiddlePredictor:
                         f"('title', '{precursor_mz_key}', 'precursor_type', 'collision_energy')"
                     )
                 continue
+            if is_stepped_collision_energy(params["collision_energy"]):
+                stepped.append(str(params["collision_energy"]))
+                invalid_count += 1
+                continue
             try:
                 encoded.append(
                     self._encode_spectrum(
@@ -431,6 +446,13 @@ class MsFiddlePredictor:
                 invalid_count += 1
                 continue
 
+        if stepped:
+            warnings.warn(
+                f"Skipped {len(stepped)} spectra with a stepped collision energy "
+                f"(e.g. {stepped[0]!r}): FIDDLE was trained on single-energy "
+                "spectra. Set COLLISION_ENERGY to a single energy to predict them.",
+                stacklevel=3,
+            )
         if self.verbose:
             print(len(spectra) - invalid_count, "spectra left after filtering")
             print(len(encoded), "spectra loaded into the dataset")
