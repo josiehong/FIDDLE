@@ -1,162 +1,32 @@
-# ----------------------------------------
-# Experiments on external test datasets: 
-# CASMI 2016, CASMI 2017, and, EMBL MCF 2.0
-# ID: 092724
-# ----------------------------------------
-# I. Data preprocessing
-# ----------------------------------------
-# the structure of the benchmark dataset folder (`./data/benchmark`) should be:
-# |- data
-#   |- benchmark
-#     |- casmi2016
-#       |- MoNA-export-CASMI_2016.sdf
-#     |- casmi2017
-#       |- CASMI-solutions.csv
-#       |- Chal1to45Summary.csv
-#       |- challenges-001-045-msms-mgf-20170908 (unzip challenges-001-045-msms-mgf-20170908.zip)
-#     |- embl
-#       |- MoNA-export-EMBL-MCF_2.0_HRMS_Library.sdf
-# ----------------------------------------
+#!/usr/bin/env bash
+# External benchmarks (CASMI 2016, CASMI 2017, EMBL-MCF 2.0) with the released
+# Q-TOF models. Run from the repository root after `msfiddle download`.
+#
+# Raw data:
+#   data/benchmark/casmi2016/MoNA-export-CASMI_2016.sdf
+#   data/benchmark/casmi2017/CASMI-solutions.csv, Chal1to45Summary.csv and
+#       challenges-001-045-msms-mgf-20170908/ (unzipped)
+#   data/benchmark/embl/MoNA-export-EMBL-MCF_2.0_HRMS_Library.sdf
+#
+# FIDDLE + BUDDY runs read BUDDY output from ./run_buddy/<name>/ (see the docs
+# on BUDDY and SIRIUS); they are skipped when it is missing.
+set -e
 
-# 1. QTOF --------------------------------
-python scripts/prepare_msms.py \
---dataset agilent nist20 nist23 mona waters gnps \
---instrument_type qtof \
---config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
---pkl_dir ./data/cl_pkl_031826/ \
---test_title_list ./data/qtof_test_title_list_031826.txt \
---maxmin_pick
-
-# 2. Orbitrap -----------------------------
-python scripts/prepare_msms.py \
---dataset nist20 nist23 mona gnps \
---instrument_type orbitrap \
---config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
---pkl_dir ./data/cl_pkl_031826/ \
---test_title_list ./data/orbitrap_test_title_list_031826.txt \
---maxmin_pick
-
-# 3. CASMI 2016, 2017 ---------------------
 python scripts/casmi2mgf.py --data_config_path ./msfiddle/config/fiddle_tcn_casmi.yml
+python scripts/embl2mgf.py \
+    --raw_path ./data/benchmark/embl/MoNA-export-EMBL-MCF_2.0_HRMS_Library.sdf \
+    --mgf_path ./data/embl.mgf \
+    --data_config_path ./msfiddle/config/fiddle_tcn_embl.yml
 
-# 4. EMBL MCF 2.0 -------------------------
-python scripts/embl2mgf.py --raw_path ./data/benchmark/embl/MoNA-export-EMBL-MCF_2.0_HRMS_Library.sdf \
-                --mgf_path ./data/embl_mcf_2.0.mgf \
-                --data_config_path ./msfiddle/config/fiddle_tcn_embl.yml
+for name in casmi2016 casmi2017 embl; do
+    config=./msfiddle/config/fiddle_tcn_casmi.yml
+    [ "$name" = embl ] && config=./msfiddle/config/fiddle_tcn_embl.yml
+    predict="python -m msfiddle predict --test_data ./data/$name.mgf \
+        --instrument_type qtof --config_path $config --num_workers 8 --eval"
 
-
-
-# --------------------------
-# II. Train on QTOF
-# --------------------------
-
-# FIDDLE
-nohup python -u train_tcn_gpus_cl.py \
---train_data ./data/cl_pkl_031826/qtof_maxmin_train.pkl \
---test_data ./data/cl_pkl_031826/qtof_maxmin_test.pkl \
---config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
---checkpoint_path ./check_point/fiddle_tcn_qtof_031826.pt \
---resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
---device 6 7 >> fiddle_tcn_qtof_031826.out 
-
-# FIDDLES (fdr model)
-python prepare_rescore.py \
---train_data ./data/cl_pkl_031826/qtof_maxmin_train.pkl \
---test_data ./data/cl_pkl_031826/qtof_maxmin_test.pkl \
---config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
---resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
---rescore_dir ./data/cl_pkl_031826/ \
---device 4 5
-python scripts/train_rescore.py \
---train_data ./data/cl_pkl_031826/qtof_maxmin_rescore_train.pkl \
---test_data ./data/cl_pkl_031826/qtof_maxmin_rescore_test.pkl \
---config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
---resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
---transfer \
---checkpoint_path ./check_point/fiddle_rescore_qtof_031826.pt \
---device 4 5 
-
-
-
-# --------------------------
-# III. Train on Qrbitrap
-# --------------------------
-# FIDDLE
-python -u train_tcn_gpus_cl.py \
---train_data ./data/cl_pkl_031826/orbitrap_maxmin_train.pkl \
---test_data ./data/cl_pkl_031826/orbitrap_maxmin_test.pkl \
---config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
---checkpoint_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
---resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
---device 4 5 
-
-# FIDDLES (fdr model)
-python prepare_rescore.py \
---train_data ./data/cl_pkl_031826/orbitrap_maxmin_train.pkl \
---test_data ./data/cl_pkl_031826/orbitrap_maxmin_test.pkl \
---config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
---resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
---rescore_dir ./data/cl_pkl_031826/ \
---device 4 5 
-python scripts/train_rescore.py \
---train_data ./data/cl_pkl_031826/orbitrap_maxmin_rescore_train.pkl \
---test_data ./data/cl_pkl_031826/orbitrap_maxmin_rescore_test.pkl \
---config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
---resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
---transfer \
---checkpoint_path ./check_point/fiddle_rescore_orbitrap_031826.pt \
---device 4 5
-
-
-
-# ----------------------------------------
-# IV. test on CASMI
-# ----------------------------------------
-# FIDDLE
-python -m msfiddle predict --num_workers 8 --test_data ./data/casmi2016.mgf \
-                --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
-                --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
-                --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
-                --result_path ./result/fiddle_casmi16.csv 
-
-python -m msfiddle predict --num_workers 8 --test_data ./data/casmi2017.mgf \
-                --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
-                --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
-                --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
-                --result_path ./result/fiddle_casmi17.csv 
-
-# FIDDLE + BUDDY
-python -m msfiddle predict --num_workers 8 --test_data ./data/casmi2016.mgf \
-                    --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
-                    --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
-                    --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
-                    --buddy_path ./run_buddy/buddy_casmi2016.csv \
-                    --result_path ./result/two_casmi16.csv 
-
-python -m msfiddle predict --num_workers 8 --test_data ./data/casmi2017.mgf \
-                    --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
-                    --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
-                    --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
-                    --buddy_path ./run_buddy/buddy_casmi2017.csv \
-                    --result_path ./result/two_casmi17.csv 
-
-
-
-# ----------------------------------------
-# V. test on EMBL MCF 2.0
-# ----------------------------------------
-# FIDDLE
-python -m msfiddle predict --num_workers 8 --test_data ./data/embl_mcf_2.0.mgf \
-                --config_path ./msfiddle/config/fiddle_tcn_embl.yml \
-                --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
-                --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
-                --result_path ./result/fiddle_embl.csv 
-
-# FIDDLE + BUDDY
-python -m msfiddle predict --num_workers 8 --test_data ./data/embl_mcf_2.0.mgf \
-                --config_path ./msfiddle/config/fiddle_tcn_embl.yml \
-                --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
-                --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
-                --buddy_path ./run_buddy/buddy_embl.csv \
-                --result_path ./result/two_embl.csv 
-
+    $predict --result_path ./result/fiddle_$name.csv
+    if [ -e ./run_buddy/$name ]; then
+        $predict --buddy_path ./run_buddy/$name \
+            --result_path ./result/fiddle_buddy_$name.csv
+    fi
+done

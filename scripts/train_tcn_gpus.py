@@ -8,9 +8,8 @@ import pandas as pd
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split, RandomSampler
+from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import _LRScheduler
 
 import sys
@@ -20,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from msfiddle.dataset import MS2FDataset
 from msfiddle.model_tcn import MS2FNet_tcn
-from msfiddle.utils import ATOMS_WEIGHT, ATOMS_INDEX, ATOMS_INDEX_re, vector_to_formula
+from msfiddle.utils import ATOMS_WEIGHT, ATOMS_INDEX_re, vector_to_formula
 
 
 class WarmUpScheduler(_LRScheduler):
@@ -103,7 +102,7 @@ def train_step(
     record_loss = []
 
     with tqdm(total=len(loader)) as bar:
-        for step, batch in enumerate(loader):
+        for batch in loader:
             _, y, x, mass, env = batch
             x = x.to(device, dtype=torch.float32)
             y = y.to(device, dtype=torch.float32)
@@ -131,7 +130,6 @@ def train_step(
             # After warm-up phase, the learning rate ctrled by warmup_scheduler is fixed and we won't use it
             if warmup_scheduler.step_count < warmup_steps:
                 warmup_scheduler.step()
-                # print('Warmup lr: {:.6f}'.format(get_lr(optimizer))) # Josie: for debug
 
             mae = (
                 mae + torch.mean(torch.abs(y - pred_f.detach()), dim=1).tolist()
@@ -292,7 +290,6 @@ if __name__ == "__main__":
     # 2. Models
     model = MS2FNet_tcn(config["model"]).to(device_1st)
     num_params = sum(p.numel() for p in model.parameters())
-    # print(f'{str(model)} #Params: {num_params}')
     print(f"# MS2FNet_tcn Params: {num_params}")
 
     if len(args.device) > 1:  # Wrap the model with nn.DataParallel
@@ -308,7 +305,6 @@ if __name__ == "__main__":
     plateau_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5
     )
-    # cosine_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50)
 
     # load the checkpoints
     if args.resume_path != "":  # start from a checkpoint
@@ -460,7 +456,6 @@ if __name__ == "__main__":
         # Update the cosine annealing scheduler after the warmup phase
         if epoch > warmup_steps // len(train_loader):
             plateau_scheduler.step(valid_mae)  # ReduceLROnPlateau
-            # cosine_scheduler.step()
         print(f"Best absolute error so far: {best_valid_mae}")
         print(f"Best formula accuracy with H so far: {best_formula_acc}")
         print(f"Best formula accuracy without H so far: {best_formula_wo_acc}")
@@ -499,7 +494,6 @@ if __name__ == "__main__":
         formula_true = [vector_to_formula(y) for y in y_true]
         formula_pred = [vector_to_formula(y) for y in y_pred_dec]
 
-        # y_true = [','.join(y) for y in y_true.numpy().astype('str')]
         y_pred = [",".join(y) for y in y_pred.numpy().astype("str")]
 
         print("Save the predicted results...")

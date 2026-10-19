@@ -126,8 +126,7 @@ if __name__ == "__main__":
     )
     df_sum = pd.merge(df_sum, df_sol, left_on="challengename", right_on="Challenge")
     casmi17_spectra = []
-    # casmi17_ms_spectra = []
-    for idx, row in tqdm(df_sum.iterrows(), total=df_sum.shape[0]):
+    for _, row in tqdm(df_sum.iterrows(), total=df_sum.shape[0]):
         # msms data
         msms_file_name = row["MSMS_files"].replace(".txt", ".mgf")
         msms_mgf_file = os.path.join(
@@ -186,7 +185,6 @@ if __name__ == "__main__":
         casmi17_spectra.append(spectrum)
 
     # write ms data
-    # mgf.write(casmi17_ms_spectra, os.path.join(args.mgf_dir, 'casmi2017_ms.mgf'), file_mode="w")
 
     # 2. filter the spectra
     # 3. randomly split spectra into training and test set according to [smiles]

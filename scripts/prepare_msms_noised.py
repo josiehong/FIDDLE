@@ -83,7 +83,7 @@ def make_noised_dataset(spectra, noise_times, num_spectra=1000, noise_std=0.1, s
             current_intensity = spectrum["intensity array"].copy()
 
             # Add noise multiple times (each time separately)
-            for i in range(noise_time):
+            for _i in range(noise_time):
                 current_intensity = add_noise_to_spectrum(current_intensity, noise_std)
 
             # Update the spectrum with noised intensities

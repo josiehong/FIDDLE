@@ -278,7 +278,7 @@ def augment(data, pos_cap, neg_per_pos, tolerance, ppm_mode, seed):
         formula_groups[d["pred_formula"]].append(d)
 
     capped_positives = []
-    for formula, items in formula_groups.items():
+    for items in formula_groups.values():
         capped_positives.extend(random.sample(items, min(pos_cap, len(items))))
     random.shuffle(capped_positives)
 

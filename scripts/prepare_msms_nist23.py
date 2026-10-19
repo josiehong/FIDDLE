@@ -1,5 +1,4 @@
 import os
-import re
 import argparse
 import yaml
 from tqdm import tqdm
@@ -7,17 +6,11 @@ import numpy as np
 import pickle
 from pyteomics import mgf
 import pandas as pd
-import random
-
-from rdkit import Chem
-from rdkit.Chem import AllChem, rdFingerprintGenerator
 
 # ignore the warning
 from rdkit import RDLogger
 
 RDLogger.DisableLog("rdApp.*")
-from rdkit.Chem.rdMolDescriptors import CalcMolFormula
-from rdkit.SimDivFilters.rdSimDivPickers import MaxMinPicker
 
 import sys
 
@@ -25,7 +18,6 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from msfiddle.utils import sdf2mgf, filter_spec, mgf_key_order, spec2arr, spec2pair
-from msfiddle.utils import mgf_key_order
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -137,7 +129,6 @@ if __name__ == "__main__":
             prefix="mona_orbitrap",
         )
         origin_spectra["mona"] = spectra1 + spectra2
-        # origin_spectra['mona'] = sdf2mgf(path=os.path.join(args.raw_dir, 'MoNA-export-All_LC-MS-MS_QTOF.sdf'), prefix='mona_qtof')
     if "waters" in args.dataset:
         origin_spectra["waters"] = mgf.read(
             os.path.join(args.raw_dir, "waters_qtof.mgf")
@@ -234,8 +225,6 @@ if __name__ == "__main__":
                 type2charge=config["encoding"]["type2charge"],
             )
 
-            # mgf.write(origin_spectra[ds], './data/mgf_debug/original_{}.mgf'.format(config_name), file_mode="w") # save mgf for debug
-            # mgf.write(filter_spectra, './data/mgf_debug/filtered_{}.mgf'.format(config_name), file_mode="w") # save mgf for debug
             filter_smiles_list = list(set(filter_smiles_list))
             spectra += filter_spectra
             smiles_list += filter_smiles_list

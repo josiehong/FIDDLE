@@ -1,35 +1,15 @@
-# ============================================================================
-# TRACK 2 — v2.2 release cycle: rebuild the data, then train FROM SCRATCH.
+#!/usr/bin/env bash
+# Train the v2.2 release models from scratch: build the data (PART 1), train
+# the TCNs (PART 2) and rescore models (PART 3), and evaluate on the held-out
+# test sets (PART 4). Q-TOF trains in fp32, Orbitrap with --amp. Each part
+# skips work whose outputs already exist, so a rerun resumes where it stopped.
 #
-# Evidence and design in logs/experiment_v2.2.md. Summary vs v2.1:
-#   - formula_refinement: complete bounded enumeration (13x faster, provably
-#     complete within the caps) ranked by (edit distance, |dmass|).
-#   - Rebuilt pkls (PART 1) with the 08/2026 preprocessing fixes: contrastive
-#     pairing, isotope-removal direction, NCE scale, -2H2O labels, GNPS
-#     adducts, crash guards. Never mix generations: old checkpoints pair with
-#     cl_pkl_060526, everything trained here pairs with cl_pkl_$DATA_TAG.
-#   - Rescore models retrained on enumeration-generated pairs.
-#   - MSE formula loss. The Poisson count-likelihood arm was trained and
-#     evaluated 09/2026 and lost decisively (Q-TOF top-1 53.7% vs 68.2%);
-#     poisson support was removed from the code afterwards.
-#   - Muon optimizer (msfiddle/optim.py) for the TCN's matrix weights, AdamW
-#     for the rest. The release Q-TOF model trained in fp32; Orbitrap trained
-#     with --amp to fit its epochs into the available GPU time.
+# Env overrides: DATA_TAG (pkl generation), TAG (model tag), NUM_WORKERS,
+#   DEVICE_QTOF / DEVICE_ORBITRAP (space-separated GPU lists, e.g. "6 7").
 #
-# PREREQUISITES
-#   (a) Config B/E post-processing is committed in
-#       msfiddle/config/fiddle_tcn_{qtof,orbitrap}.yml (S/P caps, top_k 20,
-#       Orbitrap mass_tolerance 5.0 — safe because the data filters admit
-#       only <=5 ppm spectra). Make sure the checkout is current before
-#       Parts 3-4: they read the configs at run time.
-#
-# Env overrides: DATA_TAG (pkl generation), TAG (model tag),
-#   DEVICE_QTOF / DEVICE_ORBITRAP (space-separated lists allowed, e.g. "6 7").
-#
-# The release checkpoints are fiddle_{tcn,rescore}_{qtof,orbitrap}_082426_muon.pt
-# (the _082426 files without the suffix are the superseded AdamW models); they
-# ship renamed to fiddle_{tcn,rescore}_{qtof,orbitrap}.pt in the v2.2.0 zips.
-# ============================================================================
+# The release checkpoints are fiddle_{tcn,rescore}_{qtof,orbitrap}_082426_muon.pt,
+# shipped as fiddle_{tcn,rescore}_{qtof,orbitrap}.pt
+# (scripts/package_release_checkpoints.py).
 
 DATA_TAG=${DATA_TAG:-082426}
 TAG=${TAG:-${DATA_TAG}_muon}
@@ -97,17 +77,6 @@ for f in $ORBITRAP_OUTPUTS; do [ -s "$f" ] || orbitrap_done=false; done
 if [ "$qtof_done" = true ] && [ "$orbitrap_done" = true ]; then
     echo "Rebuilt data already present at $PKL_DIR — skipping PART 1"
 else
-    # Refuse to run on a stale checkout: the whole point is the fixed encoders.
-    python - <<'PY' || exit 1
-import sys
-from msfiddle.utils.pkl_utils import parse_collision_energy
-ce, nce = parse_collision_energy("35 nce", precursor_mz=400.0)
-if abs(nce - 35.0) > 1e-6:
-    sys.exit("STALE CODE: parse_collision_energy still fraction-scaled — "
-             "upload the fixed msfiddle/ and scripts/ files first")
-print("preprocessing fixes present — ok")
-PY
-
     avail_gb=$(df -Pk ./data | awk 'NR==2 {print int($4/1048576)}')
     if [ "$avail_gb" -lt 80 ]; then
         echo "Only ${avail_gb}GB free under ./data — need ~80GB for a full rebuild."
@@ -286,5 +255,3 @@ python -m msfiddle predict --num_workers 8 --test_data $PKL_DIR/orbitrap_maxmin_
 wait
 echo "v2.2 release cycle complete; see eval_qtof_$TAG.log / eval_orbitrap_$TAG.log"
 
-# Post-eval checks:
-# - Compare the eval tables against the v2.1 release (Q-TOF top-1 70.2%).

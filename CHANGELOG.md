@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Research evaluation uses the package CLI (`python -m msfiddle predict --eval`), so reported accuracy comes from the same code users run. `scripts/run_fiddle.py` and `scripts/eval_topk.py` are removed. The package computes the neutral mass from the full-precision precursor m/z, which can swap a decoy candidate at the edge of the mass window; top-k accuracy is unchanged on a 300-spectrum check.
 - New FIDDLE logo, with a dark-mode variant, in the README and docs. The README opens with a quick start.
 - Faster rescoring: the rescorer's spectrum embedding is computed in the batched model pass, not once more per spectrum. `predict` shows a "Rescore" progress bar. `scripts/train_rescore.py` also embeds each spectrum once, not once per candidate pair.
+- The experiment scripts in `running_scripts/` run again: they called scripts and flags that no longer existed. The benchmark, chimeric and noise experiments use the released models, and the NIST23 experiment trains on its own split. The BUDDY and SIRIUS runner steps are removed; FIDDLE + BUDDY runs read existing BUDDY output.
 
 ### Fixed
 
@@ -29,6 +30,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - `msfiddle.test_step` and `msfiddle.rescore_candidates`, unused leftovers of the pre-API CLI.
 - `scripts/analyze_count_ambiguity.py`.
+- `running_scripts/experiments_demo.sh` and `experiments_ablation_study.sh`, which depended on removed scripts and configs, with `scripts/prepare_msms_ablation.py` and `prepare_msms_ablation_ins.py`.
+- `running_scripts/train_released_models.sh`, `train_release_v2.1.sh` and `scripts/balance_ce_cap.py`; `train_release_v2.2.sh` trains the current models.
+- `scripts/plot_training_log.py` and `scripts/test_caffeine.py`.
+- Unused `ce2nce` and `exceed_refine_atom_limit` utilities.
 
 ### Known issues
 

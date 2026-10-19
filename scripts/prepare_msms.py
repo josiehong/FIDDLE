@@ -7,11 +7,9 @@ import numpy as np
 import pickle
 from pyteomics import mgf
 import pandas as pd
-import random
 
 from rdkit import Chem, RDLogger
-from rdkit.Chem import AllChem, rdFingerprintGenerator
-from rdkit.Chem.rdMolDescriptors import CalcMolFormula
+from rdkit.Chem import rdFingerprintGenerator
 from rdkit.SimDivFilters.rdSimDivPickers import MaxMinPicker
 
 RDLogger.DisableLog("rdApp.*")
@@ -144,7 +142,6 @@ if __name__ == "__main__":
             prefix="mona_orbitrap",
         )
         origin_spectra["mona"] = spectra1 + spectra2
-        # origin_spectra['mona'] = sdf2mgf(path=os.path.join(args.raw_dir, 'MoNA-export-All_LC-MS-MS_QTOF.sdf'), prefix='mona_qtof')
     if "waters" in args.dataset:
         origin_spectra["waters"] = mgf.read(
             os.path.join(args.raw_dir, "waters_qtof.mgf")
@@ -247,8 +244,6 @@ if __name__ == "__main__":
                 num_workers=args.num_workers,
             )
 
-            # mgf.write(origin_spectra[ds], './data/mgf_debug/original_{}.mgf'.format(config_name), file_mode="w") # save mgf for debug
-            # mgf.write(filter_spectra, './data/mgf_debug/filtered_{}.mgf'.format(config_name), file_mode="w") # save mgf for debug
             filter_smiles_list = sorted(set(filter_smiles_list))
             spectra += filter_spectra
             smiles_list += filter_smiles_list

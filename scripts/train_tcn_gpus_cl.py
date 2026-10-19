@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split, RandomSampler
+from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import _LRScheduler
 
 import sys
@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from msfiddle.dataset import MS2FDataset_CL, MS2FDataset
 from msfiddle.model_tcn import MS2FNet_tcn
 from msfiddle.optim import Muon, split_matrix_params
-from msfiddle.utils import ATOMS_WEIGHT, ATOMS_INDEX, ATOMS_INDEX_re, vector_to_formula
+from msfiddle.utils import ATOMS_WEIGHT, ATOMS_INDEX_re, vector_to_formula
 
 
 class ContrastiveLoss(nn.Module):
@@ -393,7 +393,6 @@ if __name__ == "__main__":
     # 2. Models
     model = MS2FNet_tcn(config["model"]).to(device_1st)
     num_params = sum(p.numel() for p in model.parameters())
-    # print(f'{str(model)} #Params: {num_params}')
     print(f"# MS2FNet_tcn Params: {num_params}")
 
     if len(args.device) > 1:  # Wrap the model with nn.DataParallel
@@ -421,8 +420,6 @@ if __name__ == "__main__":
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=config["train"]["patience"]
     )
-    # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
-    # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100, 150], gamma=0.5)
 
     # load the checkpoints
     if args.resume_path != "" and not args.transfer:  # start from a checkpoint
@@ -641,7 +638,6 @@ if __name__ == "__main__":
         formula_true = [vector_to_formula(y) for y in y_true]
         formula_pred = [vector_to_formula(y) for y in y_pred]
 
-        # y_true = [','.join(y) for y in y_true.numpy().astype('str')]
         y_pred = [",".join(y) for y in y_pred.numpy().astype("str")]
 
         print("Save the predicted results...")

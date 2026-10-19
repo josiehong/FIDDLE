@@ -107,7 +107,7 @@ def generate_mgf_block(data, type2charge):
     charge = type2charge[precursor_type]
 
     # Build the MGF formatted string
-    mgf_block = f"BEGIN IONS\n"
+    mgf_block = "BEGIN IONS\n"
     mgf_block += f"TITLE={title}\n"
     mgf_block += f"PEPMASS={precursor_mz}\n"
     mgf_block += f"CHARGE={charge}\n"

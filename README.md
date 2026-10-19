@@ -54,13 +54,13 @@ msfiddle download -d ./check_point
 
 | Script | Description |
 |---|---|
+| `running_scripts/train_release_v2.2.sh` | Build the data and train the release models (TCN and rescore, Q-TOF and Orbitrap) |
 | `running_scripts/experiments_test_benchmark.sh` | Evaluate on external benchmarks (CASMI 2016, CASMI 2017, EMBL-MCF 2.0) |
-| `running_scripts/experiments_test_nist23.sh` | Evaluate on NIST23 |
+| `running_scripts/experiments_test_nist23.sh` | Train and evaluate with compounds new in NIST23 held out |
 | `running_scripts/experiments_test_chimeric.sh` | Evaluate on chimeric spectra |
-| `running_scripts/experiments_test_noised.sh` | Evaluate under noise conditions |
-| `running_scripts/experiments_ablation_study.sh` | Run ablation study |
-| `running_scripts/experiments_demo.sh` | Run demo experiment |
-| `running_scripts/train_release_v2.2.sh` | Train the current release models (TCN and rescore, Orbitrap and Q-TOF) |
+| `running_scripts/experiments_test_noised.sh` | Evaluate on spectra with added noise peaks |
+
+The benchmark, chimeric and noise experiments use the released models; the chimeric and noise ones also need the data built by `train_release_v2.2.sh`.
 
 To train from scratch, see `scripts/train_tcn_gpus.py`, `scripts/train_tcn_gpus_cl.py` and `scripts/train_rescore.py` with the configs in [`msfiddle/config/`](https://github.com/JosieHong/FIDDLE/tree/main/msfiddle/config).
 
