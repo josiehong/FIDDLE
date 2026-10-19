@@ -9,7 +9,7 @@
 FIDDLE is a deep learning method for predicting molecular formulas from MS/MS spectra. This repository contains the full research codebase for model training, evaluation, and paper reproduction, plus the [`msfiddle`](https://pypi.org/project/msfiddle/) PyPI package (in [`./msfiddle/`](https://github.com/JosieHong/FIDDLE/tree/main/msfiddle)) for inference-only use.
 
 - **Paper:** [Nature Communications (2025)](https://www.nature.com/articles/s41467-025-66060-9)
-- **CLI and Python API:** `pip install "msfiddle[inference]"` — see the [package docs](https://msfiddle.readthedocs.io)
+- **CLI and Python API:** `pip install "msfiddle[inference]"` ([package docs](https://msfiddle.readthedocs.io))
 - **Try this demo!** [FIDDLE on Hugging Face](https://huggingface.co/spaces/J0siee/FIDDLE)
 
 <br clear="right"/>
@@ -32,69 +32,26 @@ On Apple Silicon (macOS ARM64), use `environment_mac.yml` instead.
 
 3. (optional) Install [BUDDY](https://github.com/Philipbear/msbuddy) and [SIRIUS](https://v6.docs.sirius-ms.io/) following the respective installation instructions provided in each tool's documentation. 
 
-### Pre-trained Model Weights
-
-To use the pre-trained models, please use the following scripts to download the weights from the [release page](https://github.com/JosieHong/FIDDLE/releases/tag/v2.2.0) and place them in the `./check_point/` directory:
-
-- **Orbitrap models**:
-  - `fiddle_tcn_orbitrap.pt`: formula prediction model on Orbitrap spectra
-  - `fiddle_rescore_orbitrap.pt`: rescore model on Orbitrap spectra
-- **Q-TOF models**:
-  - `fiddle_tcn_qtof.pt`: formula prediction model on Q-TOF spectra
-  - `fiddle_rescore_qtof.pt`: rescore model on Q-TOF spectra
-
-```bash
-bash ./running_scripts/download_models.sh
-```
-
 ## Usage
 
-The input format is `mgf`, where `title`, `precursor_mz`, `precursor_type`, `collision_energy` fields are required. Here, we sampled 21 spectra from the EMBL-MCF 2.0 dataset as an example.
-
-```mgf
-BEGIN IONS
-TITLE=EMBL_MCF_2_0_HRMS_Library000531
-PEPMASS=129.01941
-CHARGE=1-
-PRECURSOR_TYPE=[M-H]-
-PRECURSOR_MZ=129.01941
-COLLISION_ENERGY=50.0
-SMILES=[H]OC(=O)C([H])=C(C(=O)O[H])C([H])([H])[H]
-FORMULA=C5H6O4
-THEORETICAL_PRECURSOR_MZ=129.018785
-PPM=4.844255818912111
-SIMULATED_PRECURSOR_MZ=129.02032113281717
-41.2041 0.410228
-55.7698 0.503672
-56.8647 0.461943
-85.0296 100.0
-129.0196 8.036902
-END IONS
-```
-
-**Run FIDDLE!**
+Download the pre-trained models once per release, then predict formulas for an MGF file:
 
 ```bash
-msfiddle predict --test_data ./msfiddle/demo/input_msms.mgf \
-                 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
-                 --resume_path ./check_point/fiddle_tcn_orbitrap.pt \
-                 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap.pt \
-                 --result_path ./msfiddle/demo/output_fiddle.csv --device 0
+msfiddle download
+msfiddle predict --test_data spectra.mgf --instrument_type orbitrap --result_path results.csv
 ```
 
-If you'd like to integrate the results from SIRIUS and BUDDY, please organize the results in the format shown in `./msfiddle/demo/buddy_output.csv` and `./msfiddle/demo/sirius_output.csv`, and provide them to run FIDDLE:
+Use `--instrument_type qtof` for Q-TOF data. Each spectrum needs `TITLE`, `PRECURSOR_MZ`, `PRECURSOR_TYPE` and `COLLISION_ENERGY`. [`msfiddle/demo/input_msms.mgf`](https://github.com/JosieHong/FIDDLE/blob/main/msfiddle/demo/input_msms.mgf) has 21 example spectra from EMBL-MCF 2.0, and `msfiddle predict --demo --result_path demo.csv` runs on them.
+
+When the true formulas are known (a `SMILES` or `FORMULA` field in each spectrum), `msfiddle eval` reports top-k accuracy:
 
 ```bash
-msfiddle predict --test_data ./msfiddle/demo/input_msms.mgf \
-                 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
-                 --resume_path ./check_point/fiddle_tcn_orbitrap.pt \
-                 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap.pt \
-                 --buddy_path ./msfiddle/demo/output_buddy.csv \
-                 --sirius_path ./msfiddle/demo/output_sirius.csv \
-                 --result_path ./msfiddle/demo/output_fiddle_all.csv --device 0
+msfiddle eval --result results.csv --test_data spectra.mgf
 ```
 
-See [`scripts/test_caffeine.py`](https://github.com/JosieHong/FIDDLE/blob/main/scripts/test_caffeine.py) for a worked example running FIDDLE on a caffeine Orbitrap spectrum fetched live from GNPS.
+The [documentation](https://msfiddle.readthedocs.io) covers the Python API, BUDDY and SIRIUS integration, custom checkpoints, and the output columns. [`scripts/test_caffeine.py`](https://github.com/JosieHong/FIDDLE/blob/main/scripts/test_caffeine.py) runs FIDDLE on a caffeine Orbitrap spectrum fetched from GNPS.
+
+Models download to `~/.msfiddle/check_point/<release>/`. Research scripts that expect `./check_point/` can use `msfiddle download -d ./check_point`.
 
 ## Reproduce paper results
 
