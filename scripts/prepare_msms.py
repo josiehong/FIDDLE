@@ -36,6 +36,15 @@ if __name__ == "__main__":
         "--test_title_list", type=str, default="", help="Path to test title list"
     )
     parser.add_argument(
+        "--test_smiles_list",
+        type=str,
+        default="",
+        help="File with one SMILES per line: these compounds form the test set "
+        "and every other compound goes to training, so an earlier split can be "
+        "kept when data is added. Use the SMILES from an earlier build's test "
+        "pkl (the canonical form preprocessing writes).",
+    )
+    parser.add_argument(
         "--dataset",
         type=str,
         nargs="+",
@@ -81,6 +90,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     assert args.train_ratio < 1.0
+    assert not (
+        args.test_title_list and args.test_smiles_list
+    ), "--test_title_list and --test_smiles_list are exclusive"
 
     if not args.report_only:
         os.makedirs(args.pkl_dir, exist_ok=True)
@@ -278,7 +290,29 @@ if __name__ == "__main__":
         # split the training and test set
         train_spectra = []
         test_spectra = []
-        if args.test_title_list:
+        if args.test_smiles_list:
+            with open(args.test_smiles_list, "r") as f:
+                test_smiles_set = {line.strip() for line in f if line.strip()}
+            for spectrum in tqdm(spectra):
+                if spectrum["params"]["smiles"] in test_smiles_set:
+                    test_spectra.append(spectrum)
+                else:
+                    train_spectra.append(spectrum)
+            found = test_smiles_set & set(smiles_list)
+            print(
+                "({}) {} of {} listed test compounds found".format(
+                    ins, len(found), len(test_smiles_set)
+                )
+            )
+            # Unmatched SMILES (e.g. another RDKit version canonicalizing
+            # differently) would move test compounds into training unnoticed
+            if len(found) < 0.95 * len(test_smiles_set):
+                raise SystemExit(
+                    "Too few listed test compounds found; check that the list "
+                    "comes from a test pkl built with the same RDKit version"
+                )
+            del spectra, smiles_list
+        elif args.test_title_list:
             with open(args.test_title_list, "r") as f:
                 test_title_list = f.readlines()
                 test_title_list = [t.strip() for t in test_title_list]
