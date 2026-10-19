@@ -19,9 +19,10 @@ Follow [semantic versioning](https://semver.org/):
 - `x.Y.0` — new features, backwards compatible
 - `X.0.0` — breaking changes
 
-Checkpoints are pinned to the major version (see step 6): all `x.y.z`
-releases share the FIDDLE `x.0.0` checkpoint assets, so minor and patch
-bumps do **not** require new checkpoint uploads.
+Checkpoints follow the minor version (see step 6): every `x.y.z` release
+downloads from the `vx.y.0` GitHub release, so a patch bump reuses the
+existing checkpoints and a minor bump needs its own upload. 2.0.x and 2.1.x
+are the exception; both use the `v2.0.0` assets.
 
 ## 2. Update CHANGELOG.md
 
@@ -66,6 +67,25 @@ Any `v*` tag triggers the PyPI publish workflow, so only tag when you intend to 
 pip install msfiddle==2.2.0
 ```
 
-## 6. Checkpoints (if model weights changed)
+## 6. Checkpoints (every minor release)
 
-If new checkpoint files (`.pt`) were retrained, attach the zipped checkpoints to the `x.0.0` GitHub release for the current major version. `msfiddle` derives the checkpoint download URL from the installed package major version — for example, all `msfiddle` 2.x.x releases download checkpoint assets from this repo's `v2.0.0` release.
+`msfiddle` downloads checkpoints from the `vx.y.0` release matching its installed version (`checkpoint_release_for_package_version` in `msfiddle/download.py`) and caches them under `~/.msfiddle/check_point/vx.y.0/`. A minor release therefore needs four zips attached to its `vx.y.0` GitHub release, named exactly:
+
+- `fiddle_tcn_qtof.zip`, `fiddle_rescore_qtof.zip`
+- `fiddle_tcn_orbitrap.zip`, `fiddle_rescore_orbitrap.zip`
+
+Build them from the training checkpoints with:
+
+```bash
+python scripts/package_release_checkpoints.py --tag 082426_muon --out_dir ./release_v2.2.0
+```
+
+`--tag` is the suffix of `check_point/fiddle_<model>_<tag>.pt`. The script keeps only the weights inference needs, writes one `fiddle_<model>.pt` per zip, and checks each zip against its source. If the model weights did not change, upload the previous release's zips again under the new tag.
+
+Then check the download path from a clean install:
+
+```bash
+pip install msfiddle==2.2.0
+msfiddle-download-models
+msfiddle --demo --result_path ./output_demo.csv --no_cuda
+```
