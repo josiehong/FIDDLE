@@ -1,4 +1,5 @@
 import os
+import random
 import re
 import argparse
 from tqdm import tqdm
@@ -49,7 +50,17 @@ if __name__ == "__main__":
         help="Instrument type",
     )
     parser.add_argument(
-        "--train_ratio", type=float, default=0.9, help="Ratio for train set"
+        "--train_ratio",
+        type=float,
+        default=0.9,
+        help="Share of compounds outside the test set (the test set is the rest)",
+    )
+    parser.add_argument(
+        "--val_ratio",
+        type=float,
+        default=0.1,
+        help="Share of all compounds held out from training as the validation "
+        "set, for early stopping and checkpoint selection",
     )
     parser.add_argument(
         "--config_path",
@@ -78,6 +89,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     assert args.train_ratio < 1.0
+    assert 0 <= args.val_ratio < args.train_ratio
 
     if not args.report_only:
         os.makedirs(args.pkl_dir, exist_ok=True)
@@ -300,24 +312,34 @@ if __name__ == "__main__":
         train_smiles_list = [
             smiles_list[i] for i in range(len(smiles_list)) if i in train_idx_set
         ]
-        train_smiles_set = set(train_smiles_list)
-        test_smiles_list = [s for s in smiles_list if s not in train_smiles_set]
+        # Validation compounds come out of the training pool at random, so the
+        # test set is the same as without a validation split
+        val_smiles_set = set(
+            random.Random(42).sample(
+                train_smiles_list, int(len(smiles_list) * args.val_ratio)
+            )
+        )
+        train_smiles_set = set(train_smiles_list) - val_smiles_set
+        n_test = len(smiles_list) - len(train_smiles_list)
         print(
-            "({}) Get {} training compounds and {} test compounds".format(
-                ins, len(train_smiles_list), len(test_smiles_list)
+            "({}) Get {} training, {} validation and {} test compounds".format(
+                ins, len(train_smiles_set), len(val_smiles_set), n_test
             )
         )
 
-        for _, spectrum in enumerate(tqdm(spectra)):
+        val_spectra = []
+        for spectrum in tqdm(spectra):
             smiles = spectrum["params"]["smiles"]
             if smiles in train_smiles_set:
                 train_spectra.append(spectrum)
+            elif smiles in val_smiles_set:
+                val_spectra.append(spectrum)
             else:
                 test_spectra.append(spectrum)
-        del spectra, smiles_list, test_smiles_list
+        del spectra, smiles_list
         print(
-            "({}) Get {} training spectra and {} test spectra".format(
-                ins, len(train_spectra), len(test_spectra)
+            "({}) Get {} training, {} validation and {} test spectra".format(
+                ins, len(train_spectra), len(val_spectra), len(test_spectra)
             )
         )
 
@@ -335,19 +357,29 @@ if __name__ == "__main__":
         mgf.write(train_spectra, out_path, key_order=mgf_key_order, file_mode="w")
         print("Save {} for comparing with SIRIUS and BUDDY".format(out_path))
 
-        # convert the spectra into arrays
-        print("({}) Convert spectra and molecules data into arrays...".format(ins))
-        # test (do not apply contrastive learning on test set)
-        test_data, _ = spec2arr(
-            test_spectra, config["encoding"], num_workers=args.num_workers
-        )
         out_path = os.path.join(
             args.pkl_dir,
-            "{}_{}_test.pkl".format(ins, "maxmin" if args.maxmin_pick else "random"),
+            "{}_{}_val.mgf".format(ins, "maxmin" if args.maxmin_pick else "random"),
         )
-        with open(out_path, "wb") as f:
-            pickle.dump(test_data, f)
-            print("Save {} data to {}".format(len(test_data), out_path))
+        mgf.write(val_spectra, out_path, key_order=mgf_key_order, file_mode="w")
+        print("Save {}".format(out_path))
+
+        # convert the spectra into arrays
+        print("({}) Convert spectra and molecules data into arrays...".format(ins))
+        # test and validation (no contrastive pairs)
+        for split, split_spectra in (("test", test_spectra), ("val", val_spectra)):
+            split_data, _ = spec2arr(
+                split_spectra, config["encoding"], num_workers=args.num_workers
+            )
+            out_path = os.path.join(
+                args.pkl_dir,
+                "{}_{}_{}.pkl".format(
+                    ins, "maxmin" if args.maxmin_pick else "random", split
+                ),
+            )
+            with open(out_path, "wb") as f:
+                pickle.dump(split_data, f)
+                print("Save {} data to {}".format(len(split_data), out_path))
         # train
         train_data, bad_title = spec2arr(
             train_spectra, config["encoding"], num_workers=args.num_workers

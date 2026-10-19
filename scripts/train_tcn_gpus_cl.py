@@ -285,7 +285,10 @@ if __name__ == "__main__":
         "--train_data", type=str, required=True, help="Path to data (.pkl)"
     )
     parser.add_argument(
-        "--test_data", type=str, required=True, help="Path to data (.pkl)"
+        "--val_data",
+        type=str,
+        required=True,
+        help="Validation data (.pkl) for early stopping and checkpoint selection",
     )
     parser.add_argument(
         "--config_path", type=str, required=True, help="Path to configuration (.yaml)"
@@ -380,7 +383,7 @@ if __name__ == "__main__":
             config["train"]["batch_size"], grad_accum_steps, effective_batch_size
         )
     )
-    valid_set = MS2FDataset(args.test_data, padding_dim=config["model"]["padding_dim"])
+    valid_set = MS2FDataset(args.val_data, padding_dim=config["model"]["padding_dim"])
     valid_loader = DataLoader(
         valid_set,
         batch_size=int(config["train"]["batch_size"] / 4),

@@ -18,11 +18,11 @@ for spec in "qtof agilent nist20 nist23 mona waters gnps" "orbitrap nist20 nist2
         --config_path $CONFIG --pkl_dir $DATA/
 
     python -u scripts/train_tcn_gpus_cl.py \
-        --train_data $DATA/${INST}_train.pkl --test_data $DATA/${INST}_test.pkl \
+        --train_data $DATA/${INST}_train.pkl --val_data $DATA/${INST}_val.pkl \
         --config_path $CONFIG --checkpoint_path $TCN --device 0 1
 
     python scripts/prepare_augment_rescore.py \
-        --train_data $DATA/${INST}_train.pkl \
+        --train_data $DATA/${INST}_train.pkl --val_data $DATA/${INST}_val.pkl \
         --config_path $CONFIG --resume_path $TCN --rescore_dir $DATA/ --device 0
     python scripts/train_rescore.py \
         --train_data $DATA/${INST}_rescore_train.pkl \

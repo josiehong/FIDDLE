@@ -1,21 +1,23 @@
 """
-Prepare rescore training and validation pairs from the TCN training set.
+Prepare rescore training and validation pairs.
 
-  1. Run TCN inference and refinement: top-K candidates labelled correct or not
-  2. Hold out --val_ratio of the training compounds; their raw candidates are
-     the validation pairs (no augmentation), used to pick rescore checkpoints
-     by top-1 so the test set stays untouched
-  3. On the rest: cap positives per formula to --pos_cap, add cross-spectrum
-     negatives (--neg_per_pos per positive, within --tolerance), and
-     downsample to 1:1
+  1. Run TCN inference and refinement on the TCN training and validation sets:
+     top-K candidates labelled correct or not
+  2. Validation pairs: the validation set's raw candidates (no augmentation),
+     used to pick rescore checkpoints by top-1. The TCN never trained on them,
+     and the test set is not used.
+  3. Training pairs: from the training set, cap positives per formula to
+     --pos_cap, add cross-spectrum negatives (--neg_per_pos per positive,
+     within --tolerance), and downsample to 1:1
   → <rescore_dir>/<stem>_rescore_train.pkl and <stem>_rescore_val.pkl
 
 Usage:
     python scripts/prepare_augment_rescore.py \\
-        --train_data ./data/cl_pkl_082426/qtof_maxmin_train.pkl \\
+        --train_data ./data/cl_pkl_102026/qtof_maxmin_train.pkl \\
+        --val_data ./data/cl_pkl_102026/qtof_maxmin_val.pkl \\
         --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \\
-        --resume_path ./check_point/fiddle_tcn_qtof_082426_muon.pt \\
-        --rescore_dir ./data/rescore_082426_muon \\
+        --resume_path ./check_point/fiddle_tcn_qtof_102026_muon.pt \\
+        --rescore_dir ./data/rescore_102026_muon \\
         --pos_cap 10 --neg_per_pos 8 --tolerance 50 --device 0
 """
 
@@ -151,8 +153,7 @@ def run_inference(model, loader, device):
 
 
 def prepare_rescore_records(data_path, model, device, config, num_workers=8):
-    """Run TCN inference on a dataset; return the flat list of rescore dicts
-    and each spectrum title's SMILES."""
+    """Run TCN inference on a dataset and return flat list of rescore dicts."""
     dataset = MS2FDataset(data_path)
     print(f"Loaded {len(dataset)} items")
     # Lookup built from the dataset's own records (no second copy of the pkl:
@@ -251,7 +252,7 @@ def prepare_rescore_records(data_path, model, device, config, num_workers=8):
             )
     print("  " + ", ".join(f"{name}: {n}" for name, n in counts.items()))
 
-    return records, smiles
+    return records
 
 
 # ---------------------------------------------------------------------------
@@ -368,10 +369,10 @@ def main():
         help="TCN training pkl (e.g. qtof_maxmin_train.pkl)",
     )
     parser.add_argument(
-        "--val_ratio",
-        type=float,
-        default=0.1,
-        help="Fraction of training compounds held out as validation (default 0.1)",
+        "--val_data",
+        type=str,
+        required=True,
+        help="TCN validation pkl (e.g. qtof_maxmin_val.pkl)",
     )
     parser.add_argument("--config_path", type=str, required=True)
     parser.add_argument(
@@ -443,26 +444,19 @@ def main():
     rescore_train_path = os.path.join(args.rescore_dir, f"{stem}_rescore_train.pkl")
     rescore_val_path = os.path.join(args.rescore_dir, f"{stem}_rescore_val.pkl")
 
-    records, smiles_of = prepare_rescore_records(
-        args.train_data, model, device, config, args.num_workers
-    )
-    print(f"\nRaw rescore records: {len(records)}")
-
-    # Hold out whole compounds for validation, so a compound's spectra never
-    # sit on both sides
-    compounds = sorted({smiles_of[r["title"]] for r in records})
-    val_compounds = set(
-        random.Random(args.seed).sample(compounds, int(len(compounds) * args.val_ratio))
-    )
-    val_records = [r for r in records if smiles_of[r["title"]] in val_compounds]
-    train_records = [r for r in records if smiles_of[r["title"]] not in val_compounds]
-    print(
-        f"Validation: {len(val_compounds)} of {len(compounds)} compounds, "
-        f"{len(val_records)} pairs"
+    print(f"Validation set: {args.val_data}")
+    val_records = prepare_rescore_records(
+        args.val_data, model, device, config, args.num_workers
     )
     with open(rescore_val_path, "wb") as f:
         pickle.dump(val_records, f)
     print(f"Saved {len(val_records)} items to {rescore_val_path}")
+
+    print(f"\nTraining set: {args.train_data}")
+    train_records = prepare_rescore_records(
+        args.train_data, model, device, config, args.num_workers
+    )
+    print(f"Raw rescore training records: {len(train_records)}")
 
     print("\nAugmenting the training pairs...")
     train_augmented = augment(
