@@ -1,7 +1,7 @@
 import pytest
 import yaml
 
-from msfiddle.config import load_config
+from msfiddle.settings import load_config
 
 POST_PROCESSING = {
     "refine_atom_type": ["C", "H"],

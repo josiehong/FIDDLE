@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - Isotope-error search ([#8](https://github.com/JosieHong/FIDDLE/issues/8)): `post_processing.isotope_errors` (default `[0]`) lists 13C isotope offsets k to refine at, for precursors read from the M+k isotope peak, and `isotope_penalty` (default 0.5) is subtracted from the rescore per unit of k. Results gain `Isotope Shift (k)` columns when enabled. `prepare_augment_rescore.py` adds the candidates found at those offsets as decoys, so the rescorer is trained on them.
-- `msfiddle.config.load_config`: every config is read through it. It fills defaults, rejects invalid post-processing settings, and warns when a dataset's `ppm_tolerance` is wider than `mass_tolerance`.
+- `msfiddle.settings.load_config`: every config is read through it. It fills defaults, rejects invalid post-processing settings, and warns when a dataset's `ppm_tolerance` is wider than `mass_tolerance`.
 - `scripts/run_buddy_sirius.py` runs msbuddy and SIRIUS on an MGF file, setting `ION` from `PRECURSOR_TYPE` so both tools see the adduct, and `running_scripts/compare.sh` runs FIDDLE alone, with BUDDY, and with BUDDY and SIRIUS for each experiment. The experiment scripts run BUDDY and SIRIUS through it again.
 - `scripts/check_precursor_error.py` classifies each spectrum's precursor mass error as within tolerance, a 13C isotope peak, or other, and flags spectra within tolerance on the m/z but not on the neutral mass. Preprocessing reports isotope-peak precursors as `isotope_error` instead of `ppm_tolerance`; they are still dropped.
 

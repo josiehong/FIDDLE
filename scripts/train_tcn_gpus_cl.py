@@ -17,7 +17,7 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from msfiddle.config import load_config
+from msfiddle.settings import load_config
 from msfiddle.dataset import MS2FDataset_CL, MS2FDataset
 from msfiddle.model_tcn import MS2FNet_tcn
 from msfiddle.optim import Muon, split_matrix_params

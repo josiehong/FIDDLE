@@ -12,7 +12,7 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from msfiddle.config import load_config
+from msfiddle.settings import load_config
 from msfiddle.utils import parse_collision_energy, mgf_key_order
 
 

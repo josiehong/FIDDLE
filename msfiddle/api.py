@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 from pyteomics import mgf
 
-from .config import load_config
+from .settings import load_config
 from .download import download_models as download_pretrained_models
 from .download import get_checkpoint_dir
 from .external_results import load_buddy_results, load_sirius_results
