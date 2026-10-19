@@ -198,7 +198,8 @@ p_SIRIUS`` (weights default to ``1 1 1``), and the results gain
   top hit it would always be 1. Summaries scored by another column do not
   contribute.
 - BUDDY and SIRIUS candidates outside FIDDLE's refinement window are scored
-  too, if within 20 ppm of the neutral mass.
+  too. A candidate more than 50 ppm from the neutral mass, such as one
+  computed for another adduct, gets -1.
 
 ``scripts/run_buddy_sirius.py`` in the repository runs both tools on an MGF
 file with these settings.

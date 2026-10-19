@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- `msfiddle predict --integrate [W_FIDDLE W_BUDDY W_SIRIUS]` (and `integrate=` in `predict_mgf` / `predict_from_mgf`): rank candidates by the weighted sum of the FIDDLE rescore, the msbuddy candidate probability and the SIRIUS probability (softmax of `SiriusScore`), with `Integrated Score (k)` output columns. BUDDY and SIRIUS candidates outside FIDDLE's refinement window are scored too when within 20 ppm of the neutral mass.
+- `msfiddle predict --integrate [W_FIDDLE W_BUDDY W_SIRIUS]` (and `integrate=` in `predict_mgf` / `predict_from_mgf`): rank candidates by the weighted sum of the FIDDLE rescore, the msbuddy candidate probability and the SIRIUS probability (softmax of `SiriusScore`), with `Integrated Score (k)` output columns. BUDDY and SIRIUS candidates outside FIDDLE's refinement window are scored too; candidates more than 50 ppm from the neutral mass get -1.
 - `scripts/run_buddy_sirius.py` runs msbuddy and SIRIUS on an MGF file, setting `ION` from `PRECURSOR_TYPE` so both tools see the adduct, and `running_scripts/compare.sh` runs FIDDLE alone, with BUDDY, with BUDDY and SIRIUS, and integrated, for each experiment.
 
 ## [2.2.1] - 2026-10-19

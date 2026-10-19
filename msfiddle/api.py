@@ -924,9 +924,10 @@ def _integrate_scores(
 
 
 # The rescorer never sees the precursor mass, so integration penalizes external
-# candidates that do not match it. Looser than the refinement windows: the
-# tools already applied their own tolerance.
-_MASS_PPM = 20.0
+# candidates that do not match it. This only catches gross mismatches (another
+# adduct, a mismatched spectrum ID: at least ~1 Da), so it is far wider than
+# any instrument error or the tools' own tolerances.
+_MASS_PPM = 50.0
 _MASS_MISMATCH_PENALTY = -1.0
 
 

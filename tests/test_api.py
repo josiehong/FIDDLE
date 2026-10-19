@@ -261,12 +261,13 @@ def test_mass_mismatched_candidates_are_penalized():
     external = [
         ("C8H10N4O2", 0.1, 0.4),  # already refined
         ("C7H14O6", 0.2, 0.4),  # -6.9 ppm: outside 5 ppm refinement, no penalty
+        ("C12H8N3", 0.2, 0.3),  # -44 ppm: large mass error, no penalty
         ("C3H8", 0.3, 0.9),  # mass-incompatible: penalized
     ]
     merged = api._with_external(refined, external)
-    assert merged["formula"] == ["C8H10N4O2", "C7H14O6", "C3H8"]
+    assert merged["formula"] == ["C8H10N4O2", "C7H14O6", "C12H8N3", "C3H8"]
 
-    rescored = {**merged, "rescore": [0.5, 0.5, 0.5]}
-    out = api._integrate_scores(rescored, external, [], (1, 1, 1), 3, 194.0804)
-    assert out["formula"] == ["C8H10N4O2", "C7H14O6", "C3H8"]
-    assert out["integrated"] == pytest.approx([0.9, 0.9, 0.5 + 0.9 - 1.0])
+    rescored = {**merged, "rescore": [0.5, 0.5, 0.5, 0.5]}
+    out = api._integrate_scores(rescored, external, [], (1, 1, 1), 4, 194.0804)
+    assert out["formula"] == ["C8H10N4O2", "C7H14O6", "C12H8N3", "C3H8"]
+    assert out["integrated"] == pytest.approx([0.9, 0.9, 0.8, 0.5 + 0.9 - 1.0])
