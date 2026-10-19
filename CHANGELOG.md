@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- New FIDDLE logo in the README.
+
 ### Fixed
 
 - `prepare_augment_rescore.py` built rescore training pairs from the .pkl target, which folds neutral losses into the formula (candidates around M - H2O, positives M - H2O for `[M+H-H2O]+`), while inference rescores candidates around the intact molecule. Pairs are now built for the intact molecule, using each compound's SMILES. Spectra without neutral losses keep the same positives. This takes effect when the rescore models are retrained; the released 2.2 rescore checkpoints were trained on the old pairs.

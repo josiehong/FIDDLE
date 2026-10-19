@@ -1,18 +1,16 @@
-# FIDDLE
+<p align="center">
+  <a href="https://github.com/JosieHong/FIDDLE"><img src="https://raw.githubusercontent.com/JosieHong/FIDDLE/main/img/fiddle-logo-light.png" alt="FIDDLE" width="480"></a>
+</p>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.19181279-blue)](https://doi.org/10.5281/zenodo.19181279)
 [![Release](https://img.shields.io/github/v/release/JosieHong/FIDDLE?label=Release)](https://github.com/JosieHong/FIDDLE/releases)
-
-[<img src="https://raw.githubusercontent.com/JosieHong/FIDDLE/main/img/fiddle_logo.png" align="right" width="220">](https://github.com/JosieHong/FIDDLE)
 
 FIDDLE is a deep learning method for predicting molecular formulas from MS/MS spectra. This repository contains the full research codebase for model training, evaluation, and paper reproduction, plus the [`msfiddle`](https://pypi.org/project/msfiddle/) PyPI package (in [`./msfiddle/`](https://github.com/JosieHong/FIDDLE/tree/main/msfiddle)) for inference-only use.
 
 - **Paper:** [Nature Communications (2025)](https://www.nature.com/articles/s41467-025-66060-9)
 - **CLI and Python API:** `pip install "msfiddle[inference]"` ([package docs](https://msfiddle.readthedocs.io))
 - **Try this demo!** [FIDDLE on Hugging Face](https://huggingface.co/spaces/J0siee/FIDDLE)
-
-<br clear="right"/>
 
 > **Breaking change (v2.0.0):** The rescore model has been redesigned (Siamese architecture), see details in [CHANGELOG.md](https://github.com/JosieHong/FIDDLE/blob/main/CHANGELOG.md).
 
