@@ -183,12 +183,6 @@ if [ "$qtof_ckpt_done" = false ] || [ "$orbitrap_ckpt_done" = false ]; then
     for log in tcn_qtof_$TAG.log tcn_orbitrap_$TAG.log; do
         [ -f "$log" ] && { echo "=== tail of $log ==="; tail -5 "$log"; }
     done
-    [ "$qtof_ckpt_done" = false ] && python scripts/analyze_count_ambiguity.py \
-    --result ./result/fiddle_tcn_qtof_$TAG.csv \
-    --test_data $PKL_DIR/qtof_maxmin_test.pkl
-    [ "$orbitrap_ckpt_done" = false ] && python scripts/analyze_count_ambiguity.py \
-    --result ./result/fiddle_tcn_orbitrap_$TAG.csv \
-    --test_data $PKL_DIR/orbitrap_maxmin_test.pkl
 fi
 for f in ./check_point/fiddle_tcn_qtof_$TAG.pt ./check_point/fiddle_tcn_orbitrap_$TAG.pt; do
     [ -s "$f" ] || { echo "MISSING: $f — check the training log above"; exit 1; }

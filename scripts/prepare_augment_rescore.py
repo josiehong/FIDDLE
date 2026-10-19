@@ -48,7 +48,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from msfiddle.dataset import MS2FDataset
 from msfiddle.model_tcn import MS2FNet_tcn
-from msfiddle.utils import ATOMS_INDEX_re, formula_to_dict, formula_refinement
+from msfiddle.utils import (
+    ATOMS_INDEX_re,
+    formula_refinement,
+    formula_to_dict,
+    formula_to_vector,
+    monoisotopic_mass_calculator,
+)
 
 
 def _refine_worker(args):
@@ -105,6 +111,27 @@ def vec2formula(vec, withH=True):
     return formula
 
 
+def intact_offset(smiles, stored_vec):
+    """Atom-count offset from the stored target to the intact molecule.
+
+    The pkl target folds neutral losses into the formula ([M+H-H2O]+ stores
+    M - H2O); inference adds them back, so candidates and labels must be built
+    for the intact molecule. Zero when there is no neutral loss or no SMILES.
+    """
+    zero = np.zeros(len(stored_vec), dtype=np.float32)
+    if not smiles:
+        return zero
+    from rdkit import Chem
+    from rdkit.Chem.rdMolDescriptors import CalcMolFormula
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return zero
+    return np.asarray(formula_to_vector(CalcMolFormula(mol)), dtype=np.float32) - (
+        np.round(np.asarray(stored_vec, dtype=np.float32))
+    )
+
+
 def run_inference(model, loader, device):
     model.eval()
     spec_ids, y_true_all, y_pred_all, mass_true_all = [], [], [], []
@@ -145,10 +172,19 @@ def prepare_rescore_records(data_path, model, device, config, num_workers=8):
         drop_last=False,
     )
 
-    spec_ids, y_true, y_pred, mass_true = run_inference(model, loader, device)
+    spec_ids, y_true, y_pred, _ = run_inference(model, loader, device)
 
-    formula_pred = [vec2formula(v) for v in y_pred]
-    formula_true = [vec2formula(v) for v in y_true]
+    # Work in intact-molecule space, as inference does: shift the prediction
+    # and the target by each spectrum's neutral-loss offset and refine around
+    # the intact mass.
+    smiles = {d["title"]: d.get("smiles") for d in dataset.data}
+    offsets = np.stack(
+        [intact_offset(smiles[t], y) for t, y in zip(spec_ids, y_true.numpy())]
+    )
+    print(f"Spectra with a neutral-loss offset: {int((offsets != 0).any(1).sum())}")
+    formula_pred = [vec2formula(v) for v in y_pred.numpy() + offsets]
+    formula_true = [vec2formula(v) for v in np.round(y_true.numpy()) + offsets]
+    mass_true = [monoisotopic_mass_calculator(f, mode="f") for f in formula_true]
 
     # Formula refinement (post-processing) — parallelised across CPU cores
     pp = config["post_processing"]
@@ -157,7 +193,7 @@ def prepare_rescore_records(data_path, model, device, config, num_workers=8):
     worker_args = [
         (
             pred_f,
-            m.item(),
+            m,
             pp["mass_tolerance"],
             pp["ppm_mode"],
             top_k,

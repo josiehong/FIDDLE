@@ -21,10 +21,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Evaluation scored spectra with neutral-loss adducts (`[M+H-H2O]+`, `[M-H-H2O]-`, `[M+NH4]+`, `[M+H-NH3]+`, `[M-H-CO2]-`, ...) against the test .pkl target, which is the formula without the neutral loss, while predictions are the intact molecule. Every such spectrum counted as wrong: 19.3% of the Orbitrap and 4.5% of the Q-TOF held-out spectra. Evaluation now uses the MGF's SMILES or FORMULA. Accuracies reported for 2.2.0 and earlier are therefore too low; comparisons between models evaluated the same way are unaffected.
+- `prepare_augment_rescore.py` built rescore training pairs in the same no-loss space (candidates around M - H2O, positives M - H2O), while inference rescores candidates around the intact molecule. Pairs are now built for the intact molecule, using each compound's SMILES. Spectra without neutral losses keep the same positives. This takes effect when the rescore models are retrained; the released 2.2 rescore checkpoints were trained on the old pairs.
 
 ### Removed
 
 - `msfiddle.test_step` and `msfiddle.rescore_candidates`, unused leftovers of the pre-API CLI.
+- `scripts/analyze_count_ambiguity.py`.
 
 ### Known issues
 
