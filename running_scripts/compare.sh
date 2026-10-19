@@ -2,9 +2,9 @@
 #
 # compare MGF INSTRUMENT NAME [predict options...]
 #   Run BUDDY and SIRIUS on MGF (scripts/run_buddy_sirius.py), then predict
-#   with FIDDLE alone, FIDDLE + BUDDY, FIDDLE + BUDDY + SIRIUS, and all three
-#   with integrated scoring, writing ./result/{fiddle,fiddle_buddy,
-#   fiddle_buddy_sirius,integrated}_NAME.csv with --eval.
+#   with FIDDLE alone, FIDDLE + BUDDY and FIDDLE + BUDDY + SIRIUS (their
+#   candidates pooled and rescored by FIDDLE), writing
+#   ./result/{fiddle,fiddle_buddy,fiddle_buddy_sirius}_NAME.csv with --eval.
 compare() {
     local mgf=$1 inst=$2 name=$3
     shift 3
@@ -20,7 +20,5 @@ compare() {
     if [ -d "$ext/buddy" ] && [ -d "$ext/sirius" ]; then
         $predict --buddy_path "$ext/buddy" --sirius_path "$ext/sirius" \
             --result_path ./result/fiddle_buddy_sirius_$name.csv
-        $predict --buddy_path "$ext/buddy" --sirius_path "$ext/sirius" --integrate \
-            --result_path ./result/integrated_$name.csv
     fi
 }

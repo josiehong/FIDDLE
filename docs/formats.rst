@@ -75,17 +75,13 @@ One row is produced per input spectrum.
    * - ``Running Time``
      - Wall time per spectrum in seconds (prediction + refinement).
    * - ``Refined Formula (k)``
-     - The k-th best refined formula (0-indexed), ranked by rescore score, or
-       by ``Integrated Score`` with ``--integrate``.
+     - The k-th best refined formula (0-indexed), ranked by rescore score.
        ``None`` if fewer than k+1 candidates were found.
    * - ``Refined Mass (k)``
      - Monoisotopic mass of ``Refined Formula (k)``.
    * - ``Rescore (k)``
      - Rescore model confidence score for ``Refined Formula (k)``
        (0–1; higher is more confident).
-   * - ``Integrated Score (k)``
-     - Only with ``--integrate``: the weighted sum of ``Rescore (k)`` and the
-       BUDDY and SIRIUS probabilities of ``Refined Formula (k)``.
 
 The number of ranked columns is set by ``top_k`` in the configuration file
 (20 in the bundled Orbitrap and Q-TOF configs) unless ``top_k`` is passed

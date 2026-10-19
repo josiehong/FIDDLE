@@ -8,9 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- `msfiddle predict --integrate [W_FIDDLE W_BUDDY W_SIRIUS]` (and `integrate=` in `predict_mgf` / `predict_from_mgf`): rank candidates by the weighted sum of the FIDDLE rescore, the msbuddy candidate probability and the SIRIUS probability (softmax of `SiriusScore`), with `Integrated Score (k)` output columns. BUDDY and SIRIUS candidates outside FIDDLE's refinement window are scored too; candidates more than 50 ppm from the neutral mass get -1.
-- `scripts/run_buddy_sirius.py` runs msbuddy and SIRIUS on an MGF file, setting `ION` from `PRECURSOR_TYPE` so both tools see the adduct, and `running_scripts/compare.sh` runs FIDDLE alone, with BUDDY, with BUDDY and SIRIUS, and integrated, for each experiment. The experiment scripts run BUDDY and SIRIUS through it again.
+- `scripts/run_buddy_sirius.py` runs msbuddy and SIRIUS on an MGF file, setting `ION` from `PRECURSOR_TYPE` so both tools see the adduct, and `running_scripts/compare.sh` runs FIDDLE alone, with BUDDY, and with BUDDY and SIRIUS for each experiment. The experiment scripts run BUDDY and SIRIUS through it again.
 - `scripts/check_precursor_error.py` classifies each spectrum's precursor mass error as within tolerance, a 13C isotope peak, or other, and flags spectra within tolerance on the m/z but not on the neutral mass. Preprocessing reports isotope-peak precursors as `isotope_error` instead of `ppm_tolerance`; they are still dropped.
+
+### Changed
+
+- BUDDY and SIRIUS results are looked up by spectrum ID through an index, not by scanning the whole table for every spectrum. Results are unchanged.
 
 ### Removed
 

@@ -88,18 +88,6 @@ def _add_predict_args(parser):
         ),
     )
     parser.add_argument(
-        "--integrate",
-        type=float,
-        nargs="*",
-        metavar="W",
-        default=None,
-        help=(
-            "Rank candidates by FIDDLE, BUDDY and SIRIUS scores together, "
-            "weighted W_FIDDLE W_BUDDY W_SIRIUS (default 1 1 1). Needs "
-            "--buddy_path and/or --sirius_path."
-        ),
-    )
-    parser.add_argument(
         "--seed", type=int, default=42, help="Seed for random functions"
     )
     parser.add_argument(
@@ -210,7 +198,6 @@ def _predict(args, parser):
         buddy_path=args.buddy_path,
         sirius_path=args.sirius_path,
         num_workers=args.num_workers,
-        integrate=args.integrate,
     )
 
     print("\nSaving predicted results...")
