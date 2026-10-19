@@ -8,9 +8,9 @@ mona_qtof:
   ms_level: 'MS2'
   atom_type: ['C', 'O', 'N', 'H', 'P', 'S', 'F', 'Cl', 'B', 'Br', 'I', 'Na', 'K']
   precursor_type: ['[M+H]+', '[M+Na]+', '[2M+H]+', # +1
-                    '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+', # +1+-neutrue
+                    '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+', # +1, with a neutral loss or gain
                     '[M-H]-', '[2M-H]-', # -1
-                    '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-', '[M-H2O-H]-', # -1+-neutrue
+                    '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-', '[M-H2O-H]-', # -1, with a neutral loss or gain
                     '[M+2H]2+', ] # +2
   min_mz: 50
   max_mz: 1500
@@ -61,7 +61,7 @@ encoding:
 model: 
   resolution: 0.2
   max_mz: 1500
-  padding_dim: 20 # 1500 / 0.2 = 7500; 7500 / 2**5 (# pooling layer) = 234.375; 235 * (2**5) = 7520 
+  padding_dim: 20 # pads 7500 m/z bins to 7520, a multiple of 2**5 for the 5 pooling layers
   num_add: 6
   input_channels: 1
 
@@ -70,7 +70,6 @@ model:
   tcn_kernel_sizes: [45, 43, 41, 39, 37, 35]
   tcn_dropout: 0.2
 
-  # metadata_dim: 16 
   add_embedding_dim: 4
   ce_embedding_dim: 4
   mass_embedding_dim: 4
@@ -109,15 +108,15 @@ train_rescore:
 # postprocessing settings
 # ------------------------
 post_processing: 
-  refine_atom_type: ['C', 'O', 'N', 'H']
-  refine_atom_num: [5, 5, 5, -1]
+  refine_atom_type: ['C', 'O', 'N', 'H'] # atom types refinement may change
+  refine_atom_num: [5, 5, 5, -1] # maximum change per atom type from the predicted formula; -1: no limit
 
   mass_tolerance: 10.0 # ppm of the precursor m/z, the unit of the data filters' ppm_tolerance
   ppm_mode: True
   isotope_errors: [0] # 13C isotope offsets k to search; [0, 1] also tries a precursor read from the M+1 peak
   isotope_penalty: 0.5 # subtracted from the rescore per unit of k
-  time_out: -1 # do not limit the time
-  maxium_miss_atom_num: 50 # search space
-  top_k: 5
+  time_out: -1 # seconds per spectrum; 0 or less: no limit
+  maxium_miss_atom_num: 50 # maximum atom-change steps from the predicted formula when the search cannot be enumerated
+  top_k: 5 # candidates kept per spectrum, at inference and in rescore training pairs
   buddy_fdr_thr: 0.6
   sirius_score_thr: -5

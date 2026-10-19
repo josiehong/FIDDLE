@@ -20,9 +20,9 @@ nist20_qtof:
   ms_level: 'MS2'
   atom_type: ['C', 'O', 'N', 'H', 'P', 'S', 'F', 'Cl', 'B', 'Br', 'I', 'Na', 'K']
   precursor_type: ['[M+H]+', '[M+Na]+', '[2M+H]+', # +1
-                    '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+', # +1+-neutrue
+                    '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+', # +1, with a neutral loss or gain
                     '[M-H]-', '[2M-H]-', # -1
-                    '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-', '[M-H2O-H]-', # -1+-neutrue
+                    '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-', '[M-H2O-H]-', # -1, with a neutral loss or gain
                     '[M+2H]2+', ] # +2
   min_mz: 50
   max_mz: 1500
@@ -37,9 +37,9 @@ nist23_qtof:
   ms_level: 'MS2'
   atom_type: ['C', 'O', 'N', 'H', 'P', 'S', 'F', 'Cl', 'B', 'Br', 'I', 'Na', 'K']
   precursor_type: ['[M+H]+', '[M+Na]+', '[2M+H]+', # +1
-                    '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+', # +1+-neutrue
+                    '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+', # +1, with a neutral loss or gain
                     '[M-H]-', '[2M-H]-', # -1
-                    '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-', '[M-H2O-H]-', # -1+-neutrue
+                    '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-', '[M-H2O-H]-', # -1, with a neutral loss or gain
                     '[M+2H]2+', ] # +2
   min_mz: 50
   max_mz: 1500
@@ -55,9 +55,9 @@ mona_qtof:
   ms_level: 'MS2'
   atom_type: ['C', 'O', 'N', 'H', 'P', 'S', 'F', 'Cl', 'B', 'Br', 'I', 'Na', 'K']
   precursor_type: ['[M+H]+', '[M+Na]+', '[2M+H]+', # +1
-                    '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+', # +1+-neutrue
+                    '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+', # +1, with a neutral loss or gain
                     '[M-H]-', '[2M-H]-', # -1
-                    '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-', '[M-H2O-H]-', # -1+-neutrue
+                    '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-', '[M-H2O-H]-', # -1, with a neutral loss or gain
                     '[M+2H]2+', ] # +2
   min_mz: 50
   max_mz: 1500
@@ -83,9 +83,9 @@ gnps_qtof:
   instrument: ['qtof', 'quadrupole']
   atom_type: ['C', 'O', 'N', 'H', 'P', 'S', 'F', 'Cl', 'B', 'Br', 'I', 'Na', 'K']
   precursor_type: ['[M+H]+', '[M+Na]+', '[2M+H]+', # +1
-                    '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+', # +1+-neutrue
+                    '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+', # +1, with a neutral loss or gain
                     '[M-H]-', '[2M-H]-', # -1
-                    '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-', '[M-H2O-H]-', # -1+-neutrue
+                    '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-', '[M-H2O-H]-', # -1, with a neutral loss or gain
                     '[M+2H]2+', ] # +2
   min_mz: 50
   max_mz: 1500
@@ -136,7 +136,7 @@ encoding:
 model: 
   resolution: 0.2
   max_mz: 1500
-  padding_dim: 20 # 1500 / 0.2 = 7500; 7500 / 2**5 (# pooling layer) = 234.375; 235 * (2**5) = 7520 
+  padding_dim: 20 # pads 7500 m/z bins to 7520, a multiple of 2**5 for the 5 pooling layers
   num_add: 6
   input_channels: 1
 
@@ -145,7 +145,6 @@ model:
   tcn_kernel_sizes: [45, 43, 41, 39, 37, 35]
   tcn_dropout: 0.2
 
-  # metadata_dim: 16 
   add_embedding_dim: 4
   ce_embedding_dim: 4
   mass_embedding_dim: 4
@@ -165,13 +164,13 @@ model:
 # ------------------------
 train: 
   epochs: 200
-  batch_size: 512 # 128 fits 11GB GPUs (CL training holds 2 forward graphs, memory ~ 2x batch)
-  grad_accum_steps: 1 # optimizer step every N batches; effective batch = batch_size x N (256 x 2 on 2 x 11GB GPUs = 512)
+  batch_size: 512 # 128 fits an 11GB GPU; contrastive training runs two forward passes
+  grad_accum_steps: 1 # optimizer step every N batches; effective batch = batch_size x N
   num_workers: 8
-  lr: 0.002 # 0.001
+  lr: 0.002
   weight_decay: 0.01
   warmup_ratio: 0.1
-  early_stop_step: 15 # ~3x plateau patience so >=2 LR halvings get a chance
+  early_stop_step: 15 # about 3x the LR scheduler's patience, so the LR can halve at least twice
   early_stop_min_epochs: 5 # patience does not count before this epoch
   patience: 5
   noised_times: 3
@@ -187,20 +186,15 @@ train_rescore:
 # postprocessing settings
 # ------------------------
 post_processing:
-  # D0c (tuned): let refinement INTRODUCE a missed halogen and rebalance H to the
-  # exact precursor mass. Base was ['C','O','N','H'] -> halogens unreachable.
-  # S/P deliberately NOT in base (already reachable when the model predicts them;
-  # adding them only created spurious candidates). Halogen caps kept tight to limit
-  # near-isobaric false positives on the CONH majority.
-  refine_atom_type: ['C', 'O', 'N', 'H', 'Cl', 'Br', 'F', 'I', 'S', 'P']
-  refine_atom_num: [5, 5, 5, -1, 2, 1, 2, 1, 2, 1] # config B (08/2026 sweep): S/P reachable; recall@20 92.3% -> 94.0%
+  refine_atom_type: ['C', 'O', 'N', 'H', 'Cl', 'Br', 'F', 'I', 'S', 'P'] # atom types refinement may change
+  refine_atom_num: [5, 5, 5, -1, 2, 1, 2, 1, 2, 1] # maximum change per atom type from the predicted formula; -1: no limit
 
   mass_tolerance: 10.0 # ppm of the precursor m/z, the unit of the data filters' ppm_tolerance
   ppm_mode: True
   isotope_errors: [0] # 13C isotope offsets k to search; [0, 1] also tries a precursor read from the M+1 peak
   isotope_penalty: 0.5 # subtracted from the rescore per unit of k
-  time_out: -1 # do not limit the time
-  maxium_miss_atom_num: 50 # search space
-  top_k: 20 # config B (08/2026 sweep): +2 points of rescorer ceiling over K=10; keep pair-generation and inference matched
+  time_out: -1 # seconds per spectrum; 0 or less: no limit
+  maxium_miss_atom_num: 50 # maximum atom-change steps from the predicted formula when the search cannot be enumerated
+  top_k: 20 # candidates kept per spectrum, at inference and in rescore training pairs
   buddy_fdr_thr: 0.6
   sirius_score_thr: -5
