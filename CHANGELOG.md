@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Research evaluation uses the package CLI (`python -m msfiddle predict --eval`), so reported accuracy comes from the same code users run. `scripts/run_fiddle.py` and `scripts/eval_topk.py` are removed. The package computes the neutral mass from the full-precision precursor m/z, which can swap a decoy candidate at the edge of the mass window; top-k accuracy is unchanged on a 300-spectrum check.
 - New FIDDLE logo in the README.
+- Faster rescoring: the rescorer's spectrum embedding is computed in the batched model pass, not once more per spectrum. `predict` shows a "Rescore" progress bar. `scripts/train_rescore.py` also embeds each spectrum once, not once per candidate pair.
 
 ### Fixed
 

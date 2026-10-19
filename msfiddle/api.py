@@ -55,6 +55,8 @@ class _ModelPrediction:
     pred_atom_count: float
     pred_hc_count: float
     prediction_time: float
+    # L2-normalised embedding with precursor m/z zeroed, as the rescorer sees it
+    rescore_embedding: np.ndarray | None = None
 
 
 class MsFiddlePredictor:
@@ -246,12 +248,19 @@ class MsFiddlePredictor:
             [refine_args for refine_args, _ in jobs], num_workers, self.verbose
         )
 
-        for prediction, (_, neutral_mass), (refined_results, refine_time) in zip(
-            predictions, jobs, refined
-        ):
+        rescore_jobs = zip(predictions, jobs, refined)
+        if self.verbose:
+            from tqdm import tqdm
+
+            rescore_jobs = tqdm(rescore_jobs, total=len(jobs), desc="Rescore")
+        for (
+            prediction,
+            (_, neutral_mass),
+            (refined_results, refine_time),
+        ) in rescore_jobs:
             start_time = time.time()
             results = self._rescore_candidates(
-                prediction.spectrum, refined_results, top_k
+                prediction.rescore_embedding, refined_results, top_k
             )
             neutral_masses.append(neutral_mass)
             running_time.append(
@@ -441,6 +450,7 @@ class MsFiddlePredictor:
         mass_predictions: list[np.ndarray] = []
         atom_predictions: list[np.ndarray] = []
         hc_predictions: list[np.ndarray] = []
+        rescore_embeddings: list[np.ndarray] = []
 
         batch_starts: Sequence[int] = range(0, len(encoded), batch_size)
         if self.verbose:
@@ -472,6 +482,11 @@ class MsFiddlePredictor:
                 _, pred_f, pred_mass, pred_atomnum, pred_hcnum = self.model(
                     spec_t, env_t
                 )
+                env_t[:, 0] = 0.0  # the rescorer never sees the precursor m/z
+                z_spec, _, _, _, _ = self.model(spec_t, env_t)
+                rescore_embeddings.append(
+                    self._F.normalize(z_spec, dim=1).cpu().numpy()
+                )
             pred_f = pred_f - neutral_t
             formula_vectors.append(pred_f.detach().cpu().numpy())
             mass_predictions.append(pred_mass.detach().cpu().numpy())
@@ -483,6 +498,7 @@ class MsFiddlePredictor:
         mass_arr = np.concatenate(mass_predictions, axis=0)
         atom_arr = np.concatenate(atom_predictions, axis=0)
         hc_arr = np.concatenate(hc_predictions, axis=0)
+        z_arr = np.concatenate(rescore_embeddings, axis=0)
 
         predictions = []
         for idx, item in enumerate(encoded):
@@ -496,6 +512,7 @@ class MsFiddlePredictor:
                     pred_atom_count=float(atom_arr[idx]),
                     pred_hc_count=float(hc_arr[idx]),
                     prediction_time=prediction_time,
+                    rescore_embedding=z_arr[idx],
                 )
             )
         return predictions
@@ -624,7 +641,7 @@ class MsFiddlePredictor:
         )
         return (
             self._rescore_candidates(
-                prediction.spectrum,
+                prediction.rescore_embedding,
                 formula_refinement(*refine_args),
                 top_k,
             ),
@@ -674,15 +691,12 @@ class MsFiddlePredictor:
 
     def _rescore_candidates(
         self,
-        spectrum: _EncodedSpectrum,
+        z_spec: np.ndarray,
         refined_results: dict[str, list[Any]],
         top_k: int,
     ) -> dict[str, list[Any]]:
         torch = self._torch
-        F = self._F
         assert torch is not None
-        assert F is not None
-        assert self.model is not None
         assert self.formula_encoder is not None
         assert self.rescore_head is not None
 
@@ -703,23 +717,14 @@ class MsFiddlePredictor:
         f_vecs = torch.from_numpy(
             np.array([formula_to_vector(formula) for formula in refine_f])
         )
-        spec_t = torch.from_numpy(spectrum.spec[None, :]).to(
-            self.device, dtype=torch.float32
-        )
-        env_t = (
-            torch.from_numpy(spectrum.env[None, :])
-            .to(self.device, dtype=torch.float32)
-            .clone()
-        )
-        env_t[:, 0] = 0.0
-
-        self.model.eval()
         self.formula_encoder.eval()
         self.rescore_head.eval()
         with torch.no_grad():
-            z_spec, _, _, _, _ = self.model(spec_t, env_t)
-            z_spec = F.normalize(z_spec, dim=1)
-            z_spec_rep = z_spec.expand(len(refine_f), -1)
+            z_spec_rep = (
+                torch.from_numpy(z_spec[None, :])
+                .to(self.device)
+                .expand(len(refine_f), -1)
+            )
             f_t = f_vecs.to(self.device, dtype=torch.float32)
             z_form = self.formula_encoder(f_t)
             logits = self.rescore_head(z_spec_rep * z_form)
