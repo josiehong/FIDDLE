@@ -167,6 +167,7 @@ nplib_bak/
 notebook/
 result/
 check_point/
+release_v*/
 .DS_Store
 # msfiddle package
 .pypirc
