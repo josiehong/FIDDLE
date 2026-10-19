@@ -35,25 +35,12 @@ def test_predict_is_the_default_subcommand(monkeypatch, argv):
     assert seen["demo"] and seen["result_path"] == "out.csv"
 
 
-@pytest.mark.parametrize(
-    "extra, expected",
-    [([], None), (["--eval"], True), (["--eval", "truth.pkl"], "truth.pkl")],
-)
+@pytest.mark.parametrize("extra, expected", [([], False), (["--eval"], True)])
 def test_predict_eval_flag(monkeypatch, extra, expected):
     seen = {}
     monkeypatch.setattr(cli, "_predict", lambda args, parser: seen.update(vars(args)))
     cli.main(["--demo", "--result_path", "out.csv"] + extra)
     assert seen["eval"] == expected
-
-
-def test_missing_truth_file_fails_before_predicting(tmp_path, capsys):
-    with pytest.raises(SystemExit) as exc:
-        cli.main(
-            ["--demo", "--result_path", str(tmp_path / "out.csv")]
-            + ["--eval", str(tmp_path / "missing.pkl")]
-        )
-    assert exc.value.code == 1
-    assert "Truth file not found" in capsys.readouterr().err
 
 
 def test_evaluate_prints_and_saves_table(tmp_path, capsys):

@@ -110,14 +110,10 @@ def _add_predict_args(parser):
 
     parser.add_argument(
         "--eval",
-        nargs="?",
-        const=True,
-        default=None,
-        metavar="TRUTH",
+        action="store_true",
         help=(
-            "After predicting, report top-k accuracy and save it as "
-            "<result>_eval.csv. Truth comes from the input MGF's SMILES or "
-            "FORMULA fields, or from TRUTH (an MGF or test .pkl), matched by title"
+            "After predicting, report top-k accuracy against each spectrum's "
+            "SMILES or FORMULA field and save it as <result>_eval.csv"
         ),
     )
 
@@ -137,10 +133,6 @@ def _add_predict_args(parser):
 
 
 def _predict(args, parser):
-    # Fail before the long prediction run, not after it.
-    if isinstance(args.eval, str) and not os.path.exists(args.eval):
-        parser.exit(status=1, message=f"Truth file not found: {args.eval}\n")
-
     # Initialize random seed
     init_random_seed(args.seed)
 
@@ -212,10 +204,8 @@ def _predict(args, parser):
     res_df.to_csv(args.result_path, index=False)
     print(f"Done! Results saved to {args.result_path}")
 
-    if args.eval is not None:
-        _evaluate(
-            res_df, test_data_path if args.eval is True else args.eval, args, parser
-        )
+    if args.eval:
+        _evaluate(res_df, test_data_path, args, parser)
 
 
 def _evaluate(res_df, truth_path, args, parser):

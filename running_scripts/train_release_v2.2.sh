@@ -277,7 +277,7 @@ python -m msfiddle predict --num_workers 8 --test_data $PKL_DIR/qtof_maxmin_test
 --resume_path $TCN_QTOF \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_$TAG.pt \
 --result_path ./result/fiddle_qtof_$TAG.csv --device $DEV1_QTOF \
---eval $PKL_DIR/qtof_maxmin_test.pkl
+--eval
 ) > eval_qtof_$TAG.log 2>&1 &
 
 (
@@ -286,7 +286,7 @@ python -m msfiddle predict --num_workers 8 --test_data $PKL_DIR/orbitrap_maxmin_
 --resume_path $TCN_ORBITRAP \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_$TAG.pt \
 --result_path ./result/fiddle_orbitrap_$TAG.csv --device $DEV1_ORBITRAP \
---eval $PKL_DIR/orbitrap_maxmin_test.pkl
+--eval
 ) > eval_orbitrap_$TAG.log 2>&1 &
 
 wait

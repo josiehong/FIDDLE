@@ -104,10 +104,9 @@ and saves the table as ``<result>_eval.csv``:
                     --result_path /path/to/results.csv \
                     --eval
 
-With ``--eval`` alone, the truth is each spectrum's ``SMILES`` field, or its
-``FORMULA`` field when there is no SMILES. ``--eval TRUTH`` reads it from another
-MGF or a test ``.pkl`` instead. Spectra are matched by ``TITLE``, and the output
-reports how many result rows matched.
+The truth is each spectrum's ``SMILES`` field, or its ``FORMULA`` field when
+there is no SMILES. Both describe the intact molecule, which is also what
+msfiddle predicts for adducts with a neutral loss such as ``[M+H-H2O]+``.
 
 Integration with BUDDY and SIRIUS
 -----------------------------------

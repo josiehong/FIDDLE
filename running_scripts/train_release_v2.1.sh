@@ -95,7 +95,7 @@ python -m msfiddle predict --num_workers 8 --test_data ./data/cl_pkl_060526/qtof
 --resume_path ./check_point/fiddle_tcn_qtof_060526.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_060526.pt \
 --result_path ./result/fiddle_qtof_060526.csv --device 5 \
---eval ./data/cl_pkl_060526/qtof_maxmin_test.pkl
+--eval
 # Joined: 12627 spectra / 1540 compounds  (matched 12627/12627 result rows)
 #             top-1   top-2   top-3   top-4   top-5 
 # spectra    70.2%   74.9%   75.8%   76.0%   76.2%
@@ -107,7 +107,7 @@ python -m msfiddle predict --num_workers 8 --test_data ./data/cl_pkl_060526/orbi
 --resume_path ./check_point/fiddle_tcn_orbitrap_060526.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_060526.pt \
 --result_path ./result/fiddle_orbitrap_060526.csv --device 4 \
---eval ./data/cl_pkl_060526/orbitrap_maxmin_test.pkl
+--eval
 
 # --- 2c. External test: CASMI and EMBL (QTOF model) --------------------------
 python -m msfiddle predict --num_workers 8 --test_data ./data/casmi2016.mgf \
@@ -172,7 +172,7 @@ python -m msfiddle predict --num_workers 8 --test_data ./data/cl_pkl_060526/qtof
 --resume_path ./check_point/fiddle_tcn_qtof_060526_cek8.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_060526_cek8.pt \
 --result_path ./result/fiddle_qtof_060526_cek8.csv --device 5 \
---eval ./data/cl_pkl_060526/qtof_maxmin_test.pkl
+--eval
 # Compare against PART 2a (baseline). Per-compound row is the headline.
 
 # --- 3b. Orbitrap: cap -> TCN -> rescorer -> eval (set K from the printout) --
@@ -207,7 +207,7 @@ python -m msfiddle predict --num_workers 8 --test_data ./data/cl_pkl_060526/orbi
 --resume_path ./check_point/fiddle_tcn_orbitrap_060526_cek16.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_060526_cek16.pt \
 --result_path ./result/fiddle_orbitrap_060526_cek16.csv --device 4 \
---eval ./data/cl_pkl_060526/orbitrap_maxmin_test.pkl
+--eval
 # Compare against PART 2b (baseline).
 
 

@@ -11,12 +11,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - `msfiddle` subcommands: `predict`, `download` and `paths`. Arguments without a subcommand still go to `predict`, `python -m msfiddle` works without installing, and `msfiddle-download-models` / `msfiddle-checkpoint-paths` remain as aliases.
-- `msfiddle predict --eval [TRUTH]`: after predicting, report top-k accuracy per spectrum and per compound and save it as `<result>_eval.csv`. The truth is the input MGF's SMILES or FORMULA fields, or TRUTH (another MGF or a test .pkl), matched by title.
+- `msfiddle predict --eval`: after predicting, report top-k accuracy per spectrum and per compound against the input MGF's SMILES or FORMULA fields, and save it as `<result>_eval.csv`.
 - `--num_workers` for `msfiddle predict` and `num_workers` for `predict_mgf` / `predict_from_mgf`: formula refinement in parallel processes, with identical results.
 
 ### Changed
 
-- Research evaluation uses the package CLI (`python -m msfiddle predict --eval <test.pkl>`), so reported accuracy comes from the same code users run. `scripts/run_fiddle.py` and `scripts/eval_topk.py` are removed. The package computes the neutral mass from the full-precision precursor m/z, which can swap a decoy candidate at the edge of the mass window; top-k accuracy is unchanged on a 300-spectrum check.
+- Research evaluation uses the package CLI (`python -m msfiddle predict --eval`), so reported accuracy comes from the same code users run. `scripts/run_fiddle.py` and `scripts/eval_topk.py` are removed. The package computes the neutral mass from the full-precision precursor m/z, which can swap a decoy candidate at the edge of the mass window; top-k accuracy is unchanged on a 300-spectrum check.
+
+### Fixed
+
+- Evaluation scored spectra with neutral-loss adducts (`[M+H-H2O]+`, `[M-H-H2O]-`, `[M+NH4]+`, `[M+H-NH3]+`, `[M-H-CO2]-`, ...) against the test .pkl target, which is the formula without the neutral loss, while predictions are the intact molecule. Every such spectrum counted as wrong: 19.3% of the Orbitrap and 4.5% of the Q-TOF held-out spectra. Evaluation now uses the MGF's SMILES or FORMULA. Accuracies reported for 2.2.0 and earlier are therefore too low; comparisons between models evaluated the same way are unaffected.
 
 ### Removed
 

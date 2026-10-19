@@ -9,15 +9,15 @@ reported two ways:
 - per compound (macro): the mean over compounds of each compound's
   per-spectrum accuracy, so heavily replicated compounds do not dominate.
 
-The truth comes from a test ``.pkl`` (the stored training target, already
-adjusted for neutral-loss adducts) or an ``.mgf`` (``SMILES`` if present,
-otherwise ``FORMULA``).
+The truth is the intact molecule from each MGF spectrum's ``SMILES`` field, or
+its ``FORMULA`` field when there is no SMILES. Predictions are intact-molecule
+formulas too: neutral losses in the adduct (e.g. ``[M+H-H2O]+``) are added back
+after the model predicts the formula without them.
 """
 
 from __future__ import annotations
 
 import os
-import pickle
 from dataclasses import dataclass
 from typing import Optional
 
@@ -44,23 +44,11 @@ def formula_vec(formula) -> Optional[tuple[int, ...]]:
 
 
 def load_truth(path: str | os.PathLike[str]) -> dict[str, tuple]:
-    """Map spectrum title to (formula vector, compound key)."""
-    path = str(path)
-    truth = {}
-    if path.endswith(".pkl"):
-        with open(path, "rb") as fh:
-            data = pickle.load(fh)
-        for d in data:
-            title, fvec = d.get("title"), d.get("formula")
-            if title is None or fvec is None:
-                continue
-            vec = tuple(int(round(float(x))) for x in fvec)
-            truth[str(title)] = (vec, d.get("smiles") or vec)
-        return truth
-
+    """Map each MGF spectrum title to (formula vector, compound key)."""
     from pyteomics import mgf
 
-    for spec in mgf.read(path):
+    truth = {}
+    for spec in mgf.read(str(path)):
         p = spec.get("params", {})
         title, smiles, formula = p.get("title"), p.get("smiles"), p.get("formula")
         if not title:
