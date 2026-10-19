@@ -17,18 +17,20 @@ FIDDLE predicts molecular formulas from MS/MS spectra with deep learning.
 
 ## Quick start
 
-Install the [`msfiddle`](https://pypi.org/project/msfiddle/) package, download the pre-trained models once, then predict formulas for an MGF file:
+Install the [`msfiddle`](https://pypi.org/project/msfiddle/) package, download the pre-trained models once, then predict formulas:
 
 ```bash
 pip install "msfiddle[inference]"
 msfiddle download
+msfiddle predict --demo --result_path demo.csv        # 21 bundled example spectra
+
+# your own spectra
 msfiddle predict --test_data spectra.mgf --instrument_type orbitrap --result_path results.csv
 ```
 
 Use `--instrument_type qtof` for Q-TOF data. Each spectrum needs `TITLE`, `PRECURSOR_MZ`, `PRECURSOR_TYPE` and `COLLISION_ENERGY`. The results list ranked candidates per spectrum in `Refined Formula (0)`, `Refined Formula (1)`, … with their scores in `Rescore (k)`.
 
-- `msfiddle predict --demo --result_path demo.csv` runs on 21 example spectra from EMBL-MCF 2.0.
-- When the true formulas are known (a `SMILES` or `FORMULA` field in each spectrum), add `--eval` to also report top-k accuracy, saved as `results_eval.csv`.
+When the true formulas are known (a `SMILES` or `FORMULA` field in each spectrum), add `--eval` to also report top-k accuracy, saved as `results_eval.csv`.
 
 The [documentation](https://msfiddle.readthedocs.io) covers the Python API, BUDDY and SIRIUS integration, custom checkpoints, and all output columns.
 
