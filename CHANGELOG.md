@@ -22,7 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
-- Preprocessing dropped every Waters Q-TOF spectrum: `filter_spec` read its input twice, and the pyteomics MGF reader used for that library yields nothing on the second pass. Data built since the August 2026 preprocessing speed-up (including the 2.2 release data) has no Waters spectra.
+- Preprocessing dropped every spectrum of a library passed in as a one-pass MGF reader: `filter_spec` read its input twice, and the second pass was empty. One Q-TOF training library was affected; data built since the August 2026 preprocessing speed-up, including the 2.2 release data, lacks its spectra.
 
 ### Removed
 
