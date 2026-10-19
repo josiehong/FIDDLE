@@ -44,7 +44,7 @@ rescore() {
     local final=./check_point/fiddle_rescore_${inst}_${tag}_v2.3.pt
     [ -s "$final" ] && return
 
-    if [ ! -s "$dir/${inst}_maxmin_rescore_val.pkl" ]; then
+    if [ ! -s "$dir/${inst}_maxmin_rescore_train.pkl" ]; then  # written last
         CUDA_VISIBLE_DEVICES=$gpu python -u scripts/prepare_augment_rescore.py \
             --train_data "$pkl/${inst}_maxmin_train.pkl" --config_path "$config" \
             --resume_path "$tcn" --rescore_dir "$dir" \
@@ -52,12 +52,15 @@ rescore() {
             --num_workers "$NUM_WORKERS" --device 0
     fi
     for seed in $SEEDS; do
-        [ -s "${final%.pt}_seed$seed.pt" ] ||
-            CUDA_VISIBLE_DEVICES=$gpu python -u scripts/train_rescore.py \
-                --train_data "$dir/${inst}_maxmin_rescore_train.pkl" \
-                --val_data "$dir/${inst}_maxmin_rescore_val.pkl" \
-                --config_path "$config" --resume_path "$tcn" \
-                --checkpoint_path "${final%.pt}_seed$seed.pt" --seed "$seed" --device 0
+        local ckpt=${final%.pt}_seed$seed.pt
+        [ -s "$ckpt" ] && continue
+        # Train to a temporary file so an interrupted seed is retrained
+        CUDA_VISIBLE_DEVICES=$gpu python -u scripts/train_rescore.py \
+            --train_data "$dir/${inst}_maxmin_rescore_train.pkl" \
+            --val_data "$dir/${inst}_maxmin_rescore_val.pkl" \
+            --config_path "$config" --resume_path "$tcn" \
+            --checkpoint_path "$ckpt.part" --seed "$seed" --device 0
+        mv "$ckpt.part" "$ckpt"
     done
     python - "${final%.pt}"_seed*.pt "$final" <<'PY'
 import shutil, sys, torch
@@ -92,7 +95,7 @@ predict_eval() {
 orbitrap_job=$!
 
 # Q-TOF: data, TCN, rescorer, evaluation
-if [ ! -s "$QTOF_PKL/qtof_maxmin_test.pkl" ]; then
+if [ ! -s "$QTOF_PKL/qtof_maxmin_train_pairs.pkl" ]; then  # written last
     mkdir -p "$QTOF_PKL"
     python -u scripts/prepare_msms.py \
         --dataset agilent nist20 nist23 mona waters gnps --instrument_type qtof \
@@ -100,15 +103,21 @@ if [ ! -s "$QTOF_PKL/qtof_maxmin_test.pkl" ]; then
         --num_workers "$NUM_WORKERS" --pkl_dir "$QTOF_PKL/" --maxmin_pick \
         > "prep_qtof_$QTOF_DATA_TAG.log" 2>&1
 fi
-if [ ! -s "$TCN_QTOF" ]; then
+# The trainer saves its best checkpoint as it goes and writes the result CSV
+# when training ends, so the CSV marks a finished run; an interrupted run
+# resumes from its every-epoch _last.pt checkpoint.
+TCN_QTOF_DONE=./result/fiddle_tcn_qtof_${QTOF_DATA_TAG}_muon.csv
+if [ ! -s "$TCN_QTOF_DONE" ]; then
+    resume=()
+    [ -s "${TCN_QTOF%.pt}_last.pt" ] && resume=(--resume_path "${TCN_QTOF%.pt}_last.pt")
     n_gpus=$(echo $DEVICE_QTOF | wc -w)
     CUDA_VISIBLE_DEVICES=${DEVICE_QTOF// /,} python -u scripts/train_tcn_gpus_cl.py \
         --train_data "$QTOF_PKL/qtof_maxmin_train.pkl" \
         --test_data "$QTOF_PKL/qtof_maxmin_test.pkl" \
         --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
-        --checkpoint_path "$TCN_QTOF" \
-        --result_path "./result/fiddle_tcn_qtof_${QTOF_DATA_TAG}_muon.csv" \
-        --device $(seq -s' ' 0 $((n_gpus - 1))) > "tcn_qtof_${QTOF_DATA_TAG}_muon.log" 2>&1
+        --checkpoint_path "$TCN_QTOF" --result_path "$TCN_QTOF_DONE" \
+        "${resume[@]}" --device $(seq -s' ' 0 $((n_gpus - 1))) \
+        >> "tcn_qtof_${QTOF_DATA_TAG}_muon.log" 2>&1
 fi
 (
     rescore qtof "$QTOF_PKL" "$TCN_QTOF" "${DEVICE_QTOF%% *}"
