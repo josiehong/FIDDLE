@@ -55,7 +55,7 @@ class MS2FDataset_CL(Dataset):
         for data_item in self.data:
             spec = data_item["spec"]
             data_item["spec"] = np.concatenate(
-                (spec, np.zeros((padding_dim, spec.shape[1]))), axis=0
+                (spec, np.zeros((padding_dim, spec.shape[1]), dtype=spec.dtype)), axis=0
             )
 
     def augment_with_noise(self, data, pairs, noised_times):
@@ -156,7 +156,7 @@ class MS2FDataset(Dataset):
         for data_item in self.data:
             spec = data_item["spec"]
             data_item["spec"] = np.concatenate(
-                (spec, np.zeros((padding_dim, spec.shape[1]))), axis=0
+                (spec, np.zeros((padding_dim, spec.shape[1]), dtype=spec.dtype)), axis=0
             )
 
     def augment_with_noise(self, data, noised_times):
