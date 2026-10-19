@@ -25,10 +25,14 @@
 #
 # Env overrides: DATA_TAG (pkl generation), TAG (model tag),
 #   DEVICE_QTOF / DEVICE_ORBITRAP (space-separated lists allowed, e.g. "6 7").
+#
+# The release checkpoints are fiddle_{tcn,rescore}_{qtof,orbitrap}_082426_muon.pt
+# (the _082426 files without the suffix are the superseded AdamW models); they
+# ship renamed to fiddle_{tcn,rescore}_{qtof,orbitrap}.pt in the v2.2.0 zips.
 # ============================================================================
 
 DATA_TAG=${DATA_TAG:-082426}
-TAG=${TAG:-$DATA_TAG}
+TAG=${TAG:-${DATA_TAG}_muon}
 DEVICE_QTOF=${DEVICE_QTOF:-"0 1"}
 DEVICE_ORBITRAP=${DEVICE_ORBITRAP:-"3 4"}
 PKL_DIR=./data/cl_pkl_$DATA_TAG
@@ -201,6 +205,10 @@ TCN_QTOF=./check_point/fiddle_tcn_qtof_$TAG.pt
 TCN_ORBITRAP=./check_point/fiddle_tcn_orbitrap_$TAG.pt
 RESCORE_QTOF=./check_point/fiddle_rescore_qtof_$TAG.pt
 RESCORE_ORBITRAP=./check_point/fiddle_rescore_orbitrap_$TAG.pt
+# Rescore pairs depend on the TCN, so they live per model tag (the pkl dir is
+# shared by every model trained on this data generation).
+RESCORE_DIR=./data/rescore_$TAG
+mkdir -p $RESCORE_DIR
 DEV1_QTOF=${DEVICE_QTOF%% *}
 DEV1_ORBITRAP=${DEVICE_ORBITRAP%% *}
 
@@ -217,12 +225,12 @@ python scripts/prepare_augment_rescore.py \
 --test_data $PKL_DIR/qtof_maxmin_test.pkl \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path $TCN_QTOF \
---rescore_dir $PKL_DIR \
+--rescore_dir $RESCORE_DIR \
 --pos_cap 10 --neg_per_pos 8 --tolerance 50 --num_workers 8 --device $DEV1_QTOF
 
 python scripts/train_rescore.py \
---train_data $PKL_DIR/qtof_maxmin_rescore_train.pkl \
---test_data $PKL_DIR/qtof_maxmin_rescore_test.pkl \
+--train_data $RESCORE_DIR/qtof_maxmin_rescore_train.pkl \
+--test_data $RESCORE_DIR/qtof_maxmin_rescore_test.pkl \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path $TCN_QTOF \
 --checkpoint_path $RESCORE_QTOF --device $DEV1_QTOF
@@ -238,12 +246,12 @@ python scripts/prepare_augment_rescore.py \
 --test_data $PKL_DIR/orbitrap_maxmin_test.pkl \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path $TCN_ORBITRAP \
---rescore_dir $PKL_DIR \
+--rescore_dir $RESCORE_DIR \
 --pos_cap 10 --neg_per_pos 8 --tolerance 50 --num_workers 8 --device $DEV1_ORBITRAP
 
 python scripts/train_rescore.py \
---train_data $PKL_DIR/orbitrap_maxmin_rescore_train.pkl \
---test_data $PKL_DIR/orbitrap_maxmin_rescore_test.pkl \
+--train_data $RESCORE_DIR/orbitrap_maxmin_rescore_train.pkl \
+--test_data $RESCORE_DIR/orbitrap_maxmin_rescore_test.pkl \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path $TCN_ORBITRAP \
 --checkpoint_path $RESCORE_ORBITRAP --device $DEV1_ORBITRAP
