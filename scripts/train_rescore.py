@@ -210,7 +210,10 @@ if __name__ == "__main__":
     trainable = list(formula_encoder.parameters()) + list(rescore_head.parameters())
     optimizer = optim.AdamW(trainable, lr=config["train_rescore"]["lr"])
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="max", factor=0.5, patience=5
+        optimizer,
+        mode="max",
+        factor=0.5,
+        patience=config["train_rescore"]["patience"],
     )
 
     best_top1 = -1.0
