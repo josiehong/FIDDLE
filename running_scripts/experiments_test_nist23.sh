@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # NIST23 hold-out: compounds new in NIST23 form the test set; train the TCN and
 # rescore models on the rest and evaluate on it. Run from the repository root;
-# raw data as for train_release_v2.2.sh. GPU indices are for one machine.
+# raw data as for train_release_v2.3.sh. GPU indices are for one machine.
 # The test sets are also run with BUDDY and SIRIUS.
 set -e
 source running_scripts/compare.sh
@@ -22,11 +22,11 @@ for spec in "qtof agilent nist20 nist23 mona waters gnps" "orbitrap nist20 nist2
         --config_path $CONFIG --checkpoint_path $TCN --device 0 1
 
     python scripts/prepare_augment_rescore.py \
-        --train_data $DATA/${INST}_train.pkl --test_data $DATA/${INST}_test.pkl \
+        --train_data $DATA/${INST}_train.pkl \
         --config_path $CONFIG --resume_path $TCN --rescore_dir $DATA/ --device 0
     python scripts/train_rescore.py \
         --train_data $DATA/${INST}_rescore_train.pkl \
-        --test_data $DATA/${INST}_rescore_test.pkl \
+        --val_data $DATA/${INST}_rescore_val.pkl \
         --config_path $CONFIG --resume_path $TCN --checkpoint_path $RESCORE --device 0
 
     compare $DATA/${INST}_test.mgf $INST ${INST}_nist23 \

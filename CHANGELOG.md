@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `running_scripts/train_release_v2.3.sh`: rebuilds the Q-TOF data, trains the Q-TOF TCN, retrains both rescorers over several seeds (keeping the best by validation top-1) and evaluates them.
 - `prepare_msms.py --report_only` loads and filters the raw libraries and reports what each dataset keeps and drops, including isotope-peak precursors and stepped collision energies, without the split, encoding or output files.
 - Isotope-error search ([#8](https://github.com/JosieHong/FIDDLE/issues/8)): `post_processing.isotope_errors` (default `[0]`) lists 13C isotope offsets k to refine at, for precursors read from the M+k isotope peak, and `isotope_penalty` (default 0.5) is subtracted from the rescore per unit of k. Results gain `Isotope Shift (k)` columns when enabled. `prepare_augment_rescore.py` adds the candidates found at those offsets as decoys, so the rescorer is trained on them.
 - `msfiddle.settings.load_config`: every config is read through it. It fills defaults, rejects invalid post-processing settings, and warns when a dataset's `ppm_tolerance` is wider than `mass_tolerance`.
@@ -16,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Rescore checkpoints are chosen by top-1 on validation spectra instead of pair AUC on the test pairs. `prepare_augment_rescore.py` holds out a share of the training compounds (`--val_ratio`, default 0.1) as validation pairs and no longer builds test pairs; `train_rescore.py` takes `--val_data` instead of `--test_data`. The test set is then used only for the final evaluation. Pair-level AUC barely changes between retrains whose top-1 differs by several points.
 - The refinement window `mass_tolerance` is in ppm of the precursor m/z, the unit of the data filters' `ppm_tolerance`, and is converted to each adduct's neutral mass ([#9](https://github.com/JosieHong/FIDDLE/issues/9)). It used to be ppm of the neutral mass, so for adducts lighter than their ion, such as small `[M+Na]+`, spectra the filter admitted could fall outside the window. The CASMI and EMBL configs' windows are raised to their filters' tolerances (10 and 50 ppm), which changes those benchmark results. Rescore training pairs use the same window.
 - Spectra with a stepped or ranged collision energy (`HCD (NCE 20-30-40%)`, `30-50 eV`) are skipped with one warning that gives the count, where `predict` used to drop them without saying why; `predict_from_spectrum` raises a clear error. Preprocessing reports how many it drops. The models were trained on single-energy spectra, so these are not encoded as a mean energy. ([#7](https://github.com/JosieHong/FIDDLE/issues/7))
 - BUDDY and SIRIUS results are looked up by spectrum ID through an index, not by scanning the whole table for every spectrum. Results are unchanged.
@@ -26,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Removed
 
+- `running_scripts/train_release_v2.2.sh`, replaced by `train_release_v2.3.sh`.
 - `scripts/train_tcn_gpus.py`; `scripts/train_tcn_gpus_cl.py` trains the TCN.
 - `--test_title_list` in `prepare_msms.py` and `prepare_msms_nist23.py`, which nothing used.
 - Unused imports and a duplicate collision-energy pattern in the package, and the manual test scripts at the end of the `msfiddle/utils` modules.

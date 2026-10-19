@@ -1,29 +1,22 @@
 """
-Prepare and augment rescore train/test data directly from TCN train/test sets.
+Prepare rescore training and validation pairs from the TCN training set.
 
-Train pipeline (--train_data):
-  1. Run TCN inference → top-K candidates labelled correct/incorrect
-  2. Cap positives per formula to --pos_cap (default 10)
-  3. Generate cross-spectrum negatives (--neg_per_pos per positive, --tolerance ppm)
-  4. Pool original + cross-spectrum negatives, downsample to 1:1
-  → <rescore_dir>/qtof_maxmin_rescore_train.pkl
-
-Test pipeline (--test_data):
-  1. Run TCN inference → top-K candidates labelled correct/incorrect
-  2. No augmentation
-  → <rescore_dir>/qtof_maxmin_rescore_test.pkl
+  1. Run TCN inference and refinement: top-K candidates labelled correct or not
+  2. Hold out --val_ratio of the training compounds; their raw candidates are
+     the validation pairs (no augmentation), used to pick rescore checkpoints
+     by top-1 so the test set stays untouched
+  3. On the rest: cap positives per formula to --pos_cap, add cross-spectrum
+     negatives (--neg_per_pos per positive, within --tolerance), and
+     downsample to 1:1
+  → <rescore_dir>/<stem>_rescore_train.pkl and <stem>_rescore_val.pkl
 
 Usage:
     python scripts/prepare_augment_rescore.py \\
-        --train_data ./data/cl_pkl_031826/qtof_maxmin_train.pkl \\
-        --test_data  ./data/cl_pkl_031826/qtof_maxmin_test.pkl \\
+        --train_data ./data/cl_pkl_082426/qtof_maxmin_train.pkl \\
         --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \\
-        --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \\
-        --rescore_dir ./data/cl_pkl_031826 \\
-        --pos_cap 10 \\
-        --neg_per_pos 8 \\
-        --tolerance 50 \\
-        --device 2
+        --resume_path ./check_point/fiddle_tcn_qtof_082426_muon.pt \\
+        --rescore_dir ./data/rescore_082426_muon \\
+        --pos_cap 10 --neg_per_pos 8 --tolerance 50 --device 0
 """
 
 import argparse
@@ -158,7 +151,8 @@ def run_inference(model, loader, device):
 
 
 def prepare_rescore_records(data_path, model, device, config, num_workers=8):
-    """Run TCN inference on a dataset and return flat list of rescore dicts."""
+    """Run TCN inference on a dataset; return the flat list of rescore dicts
+    and each spectrum title's SMILES."""
     dataset = MS2FDataset(data_path)
     print(f"Loaded {len(dataset)} items")
     # Lookup built from the dataset's own records (no second copy of the pkl:
@@ -257,7 +251,7 @@ def prepare_rescore_records(data_path, model, device, config, num_workers=8):
             )
     print("  " + ", ".join(f"{name}: {n}" for name, n in counts.items()))
 
-    return records
+    return records, smiles
 
 
 # ---------------------------------------------------------------------------
@@ -365,7 +359,7 @@ def augment(data, pos_cap, neg_per_pos, tolerance, ppm_mode, seed):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Prepare and augment rescore data from TCN train/test sets"
+        description="Prepare rescore training and validation pairs"
     )
     parser.add_argument(
         "--train_data",
@@ -374,10 +368,10 @@ def main():
         help="TCN training pkl (e.g. qtof_maxmin_train.pkl)",
     )
     parser.add_argument(
-        "--test_data",
-        type=str,
-        required=True,
-        help="TCN test pkl (e.g. qtof_maxmin_test.pkl)",
+        "--val_ratio",
+        type=float,
+        default=0.1,
+        help="Fraction of training compounds held out as validation (default 0.1)",
     )
     parser.add_argument("--config_path", type=str, required=True)
     parser.add_argument(
@@ -444,48 +438,39 @@ def main():
     model.eval()
     print(f"Loaded TCN model from {args.resume_path}")
 
-    # Derive output paths from input filenames
-    train_stem = os.path.basename(args.train_data).replace("_train.pkl", "")
-    test_stem = os.path.basename(args.test_data).replace("_test.pkl", "")
-    rescore_train_path = os.path.join(
-        args.rescore_dir, f"{train_stem}_rescore_train.pkl"
-    )
-    rescore_test_path = os.path.join(args.rescore_dir, f"{test_stem}_rescore_test.pkl")
+    os.makedirs(args.rescore_dir, exist_ok=True)
+    stem = os.path.basename(args.train_data).replace("_train.pkl", "")
+    rescore_train_path = os.path.join(args.rescore_dir, f"{stem}_rescore_train.pkl")
+    rescore_val_path = os.path.join(args.rescore_dir, f"{stem}_rescore_val.pkl")
 
-    # ── Train split: inference + augmentation ────────────────────────────────
-    print(f"\n{'='*60}")
-    print(f"Train split: {args.train_data}")
-    train_records = prepare_rescore_records(
-        args.train_data,
-        model,
-        device,
-        config,
-        args.num_workers,
+    records, smiles_of = prepare_rescore_records(
+        args.train_data, model, device, config, args.num_workers
     )
-    print(f"\nRaw rescore train records: {len(train_records)}")
+    print(f"\nRaw rescore records: {len(records)}")
 
-    print("\nAugmenting train split...")
+    # Hold out whole compounds for validation, so a compound's spectra never
+    # sit on both sides
+    compounds = sorted({smiles_of[r["title"]] for r in records})
+    val_compounds = set(
+        random.Random(args.seed).sample(compounds, int(len(compounds) * args.val_ratio))
+    )
+    val_records = [r for r in records if smiles_of[r["title"]] in val_compounds]
+    train_records = [r for r in records if smiles_of[r["title"]] not in val_compounds]
+    print(
+        f"Validation: {len(val_compounds)} of {len(compounds)} compounds, "
+        f"{len(val_records)} pairs"
+    )
+    with open(rescore_val_path, "wb") as f:
+        pickle.dump(val_records, f)
+    print(f"Saved {len(val_records)} items to {rescore_val_path}")
+
+    print("\nAugmenting the training pairs...")
     train_augmented = augment(
         train_records, args.pos_cap, args.neg_per_pos, tolerance, ppm_mode, args.seed
     )
     with open(rescore_train_path, "wb") as f:
         pickle.dump(train_augmented, f)
     print(f"Saved {len(train_augmented)} items to {rescore_train_path}")
-
-    # ── Test split: inference only, no augmentation ──────────────────────────
-    print(f"\n{'='*60}")
-    print(f"Test split: {args.test_data}")
-    test_records = prepare_rescore_records(
-        args.test_data,
-        model,
-        device,
-        config,
-        args.num_workers,
-    )
-    print(f"\nRaw rescore test records: {len(test_records)}")
-    with open(rescore_test_path, "wb") as f:
-        pickle.dump(test_records, f)
-    print(f"Saved {len(test_records)} items to {rescore_test_path}")
 
     print("\nDone!")
 

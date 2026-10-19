@@ -9,14 +9,20 @@ Architecture
 Only FormulaEncoder and RescoreHead are trained.  The spectrum encoder
 weights are frozen at the pre-trained TCN checkpoint.
 
+The checkpoint is chosen by top-1 on the validation spectra (pairs from
+held-out training compounds, see prepare_augment_rescore.py): the fraction of
+spectra whose highest-scored candidate is correct, which is what prediction
+reports. Pair-level AUC barely moves between runs whose top-1 differs by
+several points.
+
 Usage:
     python scripts/train_rescore.py \\
-        --train_data ./data/cl_pkl_031826/qtof_maxmin_rescore_train.pkl \\
-        --test_data  ./data/cl_pkl_031826/qtof_maxmin_rescore_test.pkl \\
+        --train_data ./data/rescore_082426_muon/qtof_maxmin_rescore_train.pkl \\
+        --val_data ./data/rescore_082426_muon/qtof_maxmin_rescore_val.pkl \\
         --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \\
-        --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \\
-        --checkpoint_path ./check_point/fiddle_rescore_qtof_031826.pt \\
-        --device 2
+        --resume_path ./check_point/fiddle_tcn_qtof_082426_muon.pt \\
+        --checkpoint_path ./check_point/fiddle_rescore_qtof_082426_muon.pt \\
+        --seed 1 --device 0
 """
 
 import argparse
@@ -129,7 +135,16 @@ def run_epoch(pairs, formula_encoder, rescore_head, batch_size, device, optimize
     y_score = torch.cat(scores)
     acc = ((y_score > 0.5).float() == y_true).float().mean().item()
     auc = roc_auc_score(y_true.numpy(), y_score.numpy())
-    return total_loss / len(y_true), acc, auc
+    top1 = top1_accuracy(idx[torch.cat(seen)].numpy(), y_true.numpy(), y_score.numpy())
+    return total_loss / len(y_true), acc, auc, top1
+
+
+def top1_accuracy(spectrum, y_true, y_score):
+    """Fraction of spectra whose highest-scored candidate is correct."""
+    order = np.lexsort((-y_score, spectrum))  # by spectrum, best score first
+    grouped = spectrum[order]
+    first = np.r_[True, grouped[1:] != grouped[:-1]]
+    return float(y_true[order][first].mean())
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +156,12 @@ if __name__ == "__main__":
         description="Train Siamese rescore model (interaction head + BCE)"
     )
     parser.add_argument("--train_data", type=str, required=True)
-    parser.add_argument("--test_data", type=str, required=True)
+    parser.add_argument(
+        "--val_data",
+        type=str,
+        required=True,
+        help="Validation pairs from prepare_augment_rescore.py (*_rescore_val.pkl)",
+    )
     parser.add_argument("--config_path", type=str, required=True)
     parser.add_argument(
         "--resume_path", type=str, required=True, help="Pretrained TCN checkpoint"
@@ -175,7 +195,7 @@ if __name__ == "__main__":
 
     batch_size = config["train_rescore"]["batch_size"]
     train_pairs = load_pairs(args.train_data, spec_encoder, batch_size, device)
-    valid_pairs = load_pairs(args.test_data, spec_encoder, batch_size, device)
+    valid_pairs = load_pairs(args.val_data, spec_encoder, batch_size, device)
     del spec_encoder
 
     # Trainable FormulaEncoder + RescoreHead
@@ -193,35 +213,37 @@ if __name__ == "__main__":
         optimizer, mode="max", factor=0.5, patience=5
     )
 
-    best_auc = 0.0
+    best_top1 = -1.0
     early_stop_patience = 0
     early_stop_step = config["train_rescore"]["early_stop_step"]
 
     for epoch in range(1, config["train_rescore"]["epochs"] + 1):
         print(f"\n=====Epoch {epoch}")
-        train_loss, train_acc, train_auc = run_epoch(
+        train_loss, train_acc, train_auc, _ = run_epoch(
             train_pairs, formula_encoder, rescore_head, batch_size, device, optimizer
         )
         print(
             f"Train loss: {train_loss:.4f}  acc: {train_acc:.4f}  auc: {train_auc:.4f}"
         )
 
-        valid_loss, valid_acc, valid_auc = run_epoch(
+        valid_loss, valid_acc, valid_auc, valid_top1 = run_epoch(
             valid_pairs, formula_encoder, rescore_head, batch_size, device
         )
         print(
-            f"Validation loss: {valid_loss:.4f}  acc: {valid_acc:.4f}  auc: {valid_auc:.4f}"
+            f"Validation loss: {valid_loss:.4f}  acc: {valid_acc:.4f}  "
+            f"auc: {valid_auc:.4f}  top-1: {valid_top1:.4f}"
         )
 
-        if valid_auc > best_auc:
-            best_auc = valid_auc
+        if valid_top1 > best_top1:
+            best_top1 = valid_top1
             torch.save(
                 {
                     "epoch": epoch,
                     "formula_encoder_state_dict": formula_encoder.state_dict(),
                     "rescore_head_state_dict": rescore_head.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
-                    "best_val_auc": best_auc,
+                    "best_val_top1": best_top1,
+                    "seed": args.seed,
                 },
                 args.checkpoint_path,
             )
@@ -231,8 +253,8 @@ if __name__ == "__main__":
             early_stop_patience += 1
             print(f"Early stop count: {early_stop_patience}/{early_stop_step}")
 
-        scheduler.step(valid_auc)
-        print(f"Best auc so far: {best_auc:.4f}")
+        scheduler.step(valid_top1)
+        print(f"Best top-1 so far: {best_top1:.4f}")
 
         if early_stop_patience == early_stop_step:
             print("Early stop!")
