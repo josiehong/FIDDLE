@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from msfiddle.settings import load_config
 from msfiddle.utils import sdf2mgf, filter_spec, mgf_key_order, spec2arr, spec2pair
+from msfiddle.utils.pkl_utils import is_stepped_collision_energy
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -70,11 +71,19 @@ if __name__ == "__main__":
         default=8,
         help="Process count for parallel filtering/encoding (0 = serial)",
     )
+    parser.add_argument(
+        "--report_only",
+        action="store_true",
+        help="Load and filter only, and report what each dataset keeps and "
+        "drops (mass errors, isotope-peak precursors, stepped collision "
+        "energies); writes nothing",
+    )
     args = parser.parse_args()
 
     assert args.train_ratio < 1.0
 
-    os.makedirs(args.pkl_dir, exist_ok=True)
+    if not args.report_only:
+        os.makedirs(args.pkl_dir, exist_ok=True)
 
     if "agilent" in args.dataset:
         assert os.path.exists(os.path.join(args.raw_dir, "Agilent_Combined.sdf"))
@@ -251,11 +260,20 @@ if __name__ == "__main__":
                     len(filter_spectra), len(filter_smiles_list)
                 )
             )
+            if args.report_only:
+                # Encoding (skipped here) drops these too
+                n_stepped = sum(
+                    is_stepped_collision_energy(sp["params"]["collision_energy"])
+                    for sp in filter_spectra
+                )
+                print(f"# with a stepped collision energy: {n_stepped}")
             del filter_spectra, filter_smiles_list
         smiles_list = sorted(set(smiles_list))
         print(
             "Total # spectra: {} # compounds: {}".format(len(spectra), len(smiles_list))
         )
+        if args.report_only:
+            continue
 
         # split the training and test set
         train_spectra = []

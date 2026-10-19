@@ -84,7 +84,8 @@ def test_filter_counts_isotope_errors_separately(capsys):
         spectrum("isotope", theo + C13_SHIFT),
         spectrum("off", theo + 0.5),
     ]
-    kept, _ = filter_spec(spectra, config, {"[M+H]+": "+1"})
+    # A one-pass reader (like pyteomics' IndexedMGF) must work too
+    kept, _ = filter_spec(iter(spectra), config, {"[M+H]+": "+1"})
     assert [s["params"]["title"] for s in kept] == ["ok"]
     out = capsys.readouterr().out
     assert "ppm_tolerance: 1" in out and "isotope_error: 1" in out

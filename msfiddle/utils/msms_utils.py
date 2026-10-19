@@ -225,6 +225,9 @@ def filter_spec(spectra, config, type2charge, num_workers=0):
     Returns:
             tuple: (clean_spectra, smiles_list) — filtered spectra and their SMILES.
     """
+    # The input is read twice below (filtering, then pairing with results), so
+    # a one-pass reader such as pyteomics' IndexedMGF must be materialized.
+    spectra = list(spectra)
     if num_workers and num_workers > 1:
         from functools import partial
         from multiprocessing import Pool
