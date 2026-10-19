@@ -14,6 +14,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 import sys
+from multiprocessing import Pool
 
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -33,8 +34,19 @@ from msfiddle.utils import (
 )
 
 
+def _refine_worker(args):
+    """Module-level worker for multiprocessing: refine one spectrum, timed."""
+    start = time.time()
+    refined = formula_refinement(*args)
+    return refined, time.time() - start
+
+
 def test_step(model, loader, device):
+    """Predict every spectrum; also return each spectrum's (1, ...) input
+    tensors on the CPU, which the rescorer encodes again later."""
     model.eval()
+    spectra = []
+    environments = []
     spec_ids = []
     y_pred = []
     exp_precursor_mz = []
@@ -45,6 +57,8 @@ def test_step(model, loader, device):
     with tqdm(total=len(loader)) as bar:
         for _, batch in enumerate(loader):
             spec_id, exp_pre_type, x, env, neutral_add = batch
+            spectra.extend(x.split(1))
+            environments.extend(env.split(1))
             x = x.to(device, dtype=torch.float32)
             env = env.to(device, dtype=torch.float32)
             neutral_add = neutral_add.to(device, dtype=torch.float32)
@@ -71,6 +85,8 @@ def test_step(model, loader, device):
     atomnum_pred = torch.cat(atomnum_pred, dim=0)
     hcnum_pred = torch.cat(hcnum_pred, dim=0)
     return (
+        spectra,
+        environments,
         spec_ids,
         y_pred,
         exp_precursor_mz,
@@ -175,6 +191,15 @@ if __name__ == "__main__":
         help="Which GPUs to use if any (default: [0]). Accepts multiple values separated by space.",
     )
     parser.add_argument("--no_cuda", action="store_true", help="Disables CUDA")
+    parser.add_argument(
+        "--batch_size", type=int, default=64, help="Spectra per inference batch"
+    )
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=8,
+        help="Processes for formula refinement (<= 1 runs it in-process)",
+    )
     args = parser.parse_args()
 
     init_random_seed(args.seed)
@@ -194,7 +219,7 @@ if __name__ == "__main__":
     # 1. Data
     valid_set = MGFDataset(args.test_data, config["encoding"])
     valid_loader = DataLoader(
-        valid_set, batch_size=1, shuffle=False, num_workers=0, drop_last=True
+        valid_set, batch_size=args.batch_size, shuffle=False, num_workers=0
     )
 
     # 2. Spectrum encoder (MS2FNet_tcn)
@@ -234,6 +259,8 @@ if __name__ == "__main__":
 
     # 4. Formula Prediction
     (
+        spectra,
+        environments,
         spec_ids,
         y_pred,
         exp_precursor_mz,
@@ -248,13 +275,6 @@ if __name__ == "__main__":
 
     formula_pred = [vector_to_formula(y) for y in y_pred]
     y_pred = [";".join(y) for y in y_pred.numpy().astype("str")]
-
-    spectra = []
-    environments = []
-    for batch in valid_loader:
-        _, _, spec, env, _ = batch
-        spectra.append(spec)
-        environments.append(env)
 
     # 5. Post-processing
     if args.buddy_path != "":
@@ -276,18 +296,10 @@ if __name__ == "__main__":
     }
     running_time = []
     exp_mass = []
+    refine_args = []
 
-    for idx, pred_f, exp_pre_mz, exp_pre_type, spec, env in tqdm(
-        zip(
-            spec_ids,
-            formula_pred,
-            exp_precursor_mz,
-            exp_precursor_type,
-            spectra,
-            environments,
-        ),
-        total=len(exp_precursor_mz),
-        desc="Post",
+    for idx, pred_f, exp_pre_mz, exp_pre_type in zip(
+        spec_ids, formula_pred, exp_precursor_mz, exp_precursor_type
     ):
         m = mass_calculator(exp_pre_type, exp_pre_mz)
         exp_mass.append(m.item())
@@ -371,19 +383,40 @@ if __name__ == "__main__":
                 refine_atom_type.append(atom)
                 refine_atom_num.append(max(1, int(cnt)))
 
-        start_time = time.time()
-        refined_results = formula_refinement(
-            f0_list,
-            m.item(),
-            config["post_processing"]["mass_tolerance"],
-            config["post_processing"]["ppm_mode"],
-            config["post_processing"]["top_k"],
-            config["post_processing"]["maxium_miss_atom_num"],
-            config["post_processing"]["time_out"],
-            refine_atom_type,
-            refine_atom_num,
+        refine_args.append(
+            (
+                f0_list,
+                m.item(),
+                config["post_processing"]["mass_tolerance"],
+                config["post_processing"]["ppm_mode"],
+                config["post_processing"]["top_k"],
+                config["post_processing"]["maxium_miss_atom_num"],
+                config["post_processing"]["time_out"],
+                refine_atom_type,
+                refine_atom_num,
+            )
         )
 
+    # Refinement is CPU-bound and independent per spectrum; rescoring needs
+    # the GPU models, so it stays in this process.
+    if args.num_workers > 1:
+        with Pool(args.num_workers) as pool:
+            refined_all = list(
+                tqdm(
+                    pool.imap(_refine_worker, refine_args, chunksize=16),
+                    total=len(refine_args),
+                    desc="Refine",
+                )
+            )
+    else:
+        refined_all = [_refine_worker(a) for a in tqdm(refine_args, desc="Refine")]
+
+    for (refined_results, refine_time), spec, env in tqdm(
+        zip(refined_all, spectra, environments),
+        total=len(refined_all),
+        desc="Rescore",
+    ):
+        start_time = time.time()
         refined_results = rescore_candidates(
             model,
             formula_encoder,
@@ -405,8 +438,8 @@ if __name__ == "__main__":
             formula_redined[f"Refined Formula ({i})"].append(refined_f)
             mass_redined[f"Refined Mass ({i})"].append(refined_m)
             rescore_refined[f"Rescore ({i})"].append(refined_s)
-        refinement_time = time.time() - start_time
-        running_time.append(prediction_time + refinement_time)
+        rescore_time = time.time() - start_time
+        running_time.append(prediction_time + refine_time + rescore_time)
 
     # 6. Save the final results
     print("\nSave the predicted results...")
