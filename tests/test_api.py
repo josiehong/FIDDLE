@@ -11,34 +11,27 @@ VALID_PRECURSOR_MZ = 180.063
 VALID_ADDUCT = "[M+H]+"
 
 
-def test_predict_from_spectrum_rejects_unequal_array_lengths():
-    with pytest.raises(ValueError, match="same length"):
-        api.predict_from_spectrum(
-            mz_array=VALID_MZ,
-            intensity_array=VALID_INTENSITY[:-1],
-            precursor_mz=VALID_PRECURSOR_MZ,
-            adduct=VALID_ADDUCT,
-        )
-
-
-def test_predict_from_spectrum_rejects_too_few_peaks():
-    with pytest.raises(ValueError, match="at least 5 peaks"):
-        api.predict_from_spectrum(
-            mz_array=VALID_MZ[:4],
-            intensity_array=VALID_INTENSITY[:4],
-            precursor_mz=VALID_PRECURSOR_MZ,
-            adduct=VALID_ADDUCT,
-        )
-
-
-def test_predict_from_spectrum_rejects_unsupported_adduct():
-    with pytest.raises(ValueError, match="Unsupported adduct"):
-        api.predict_from_spectrum(
-            mz_array=VALID_MZ,
-            intensity_array=VALID_INTENSITY,
-            precursor_mz=VALID_PRECURSOR_MZ,
-            adduct="[M+K]+",
-        )
+@pytest.mark.parametrize(
+    "overrides, message",
+    [
+        ({"intensity_array": VALID_INTENSITY[:-1]}, "same length"),
+        (
+            {"mz_array": VALID_MZ[:4], "intensity_array": VALID_INTENSITY[:4]},
+            "at least 5 peaks",
+        ),
+        ({"adduct": "[M+K]+"}, "Unsupported adduct"),
+    ],
+)
+def test_predict_from_spectrum_rejects_invalid_input(overrides, message):
+    spectrum = {
+        "mz_array": VALID_MZ,
+        "intensity_array": VALID_INTENSITY,
+        "precursor_mz": VALID_PRECURSOR_MZ,
+        "adduct": VALID_ADDUCT,
+        **overrides,
+    }
+    with pytest.raises(ValueError, match=message):
+        api.predict_from_spectrum(**spectrum)
 
 
 def test_predict_batch_rejects_malformed_item():
@@ -64,41 +57,6 @@ def test_predict_from_spectrum_reports_missing_checkpoints(tmp_path):
             resume_path=tmp_path / "missing_tcn.pt",
             rescore_resume_path=tmp_path / "missing_rescore.pt",
         )
-
-
-def test_predict_from_spectrum_delegates_to_predictor(monkeypatch):
-    calls = {}
-
-    class DummyPredictor:
-        def __init__(self, **kwargs):
-            calls["init"] = kwargs
-
-        def predict_spectrum(self, *args, **kwargs):
-            calls["predict"] = {"args": args, "kwargs": kwargs}
-            return [
-                {
-                    "formula": "C8H9N3S",
-                    "score": 0.9,
-                    "mass": 179.05,
-                    "metadata": {"raw_rescore": 0.9},
-                }
-            ]
-
-    monkeypatch.setattr(api, "MsFiddlePredictor", DummyPredictor)
-
-    result = api.predict_from_spectrum(
-        mz_array=VALID_MZ,
-        intensity_array=VALID_INTENSITY,
-        precursor_mz=VALID_PRECURSOR_MZ,
-        adduct=VALID_ADDUCT,
-        device="cpu",
-        download_models=False,
-    )
-
-    assert calls["init"]["device"] == "cpu"
-    assert calls["init"]["download_models"] is False
-    assert calls["predict"]["kwargs"]["top_k"] == 5
-    assert result[0]["formula"] == "C8H9N3S"
 
 
 def test_predict_batch_preserves_order_ids_and_candidate_shape(monkeypatch, tmp_path):

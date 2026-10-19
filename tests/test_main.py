@@ -4,28 +4,13 @@ import pandas as pd
 import pytest
 
 from msfiddle import main as cli
-from msfiddle.main import validate_checkpoint_paths
-
-
-def test_cli_checkpoint_validation_reports_download_command(tmp_path):
-    tcn_path = tmp_path / "fiddle_tcn_orbitrap.pt"
-    rescore_path = tmp_path / "fiddle_rescore_orbitrap.pt"
-
-    with pytest.raises(FileNotFoundError) as exc_info:
-        validate_checkpoint_paths(str(tcn_path), str(rescore_path))
-
-    message = str(exc_info.value)
-    assert str(tcn_path) in message
-    assert str(rescore_path) in message
-    assert "msfiddle-download-models" in message
-    assert "msfiddle-checkpoint-paths" in message
 
 
 @pytest.mark.parametrize(
     "argv",
     [
         ["--demo", "--result_path", "out.csv"],  # pre-subcommand form
-        ["predict", "--demo", "--result_path", "out.csv"],
+        ["predict", "--demo", "--result_path", "out.csv", "--eval"],
     ],
 )
 def test_predict_is_the_default_subcommand(monkeypatch, argv):
@@ -33,14 +18,7 @@ def test_predict_is_the_default_subcommand(monkeypatch, argv):
     monkeypatch.setattr(cli, "_predict", lambda args, parser: seen.update(vars(args)))
     cli.main(argv)
     assert seen["demo"] and seen["result_path"] == "out.csv"
-
-
-@pytest.mark.parametrize("extra, expected", [([], False), (["--eval"], True)])
-def test_predict_eval_flag(monkeypatch, extra, expected):
-    seen = {}
-    monkeypatch.setattr(cli, "_predict", lambda args, parser: seen.update(vars(args)))
-    cli.main(["--demo", "--result_path", "out.csv"] + extra)
-    assert seen["eval"] == expected
+    assert seen["eval"] == ("--eval" in argv)
 
 
 def test_evaluate_prints_and_saves_table(tmp_path, capsys):

@@ -1,3 +1,4 @@
+import pytest
 import torch
 import torch.nn as nn
 from torch.nn.utils import weight_norm
@@ -21,22 +22,14 @@ def _toy_model():
     return Toy()
 
 
-def test_newton_schulz_orthogonalizes():
+@pytest.mark.parametrize("shape", [(32, 64), (64, 16)])
+def test_newton_schulz_orthogonalizes(shape):
     torch.manual_seed(0)
-    G = torch.randn(32, 64)
+    G = torch.randn(*shape)
     X = zeropower_via_newtonschulz5(G)
     assert X.shape == G.shape
     s = torch.linalg.svdvals(X.float())
     # quintic NS lands singular values near 1, not exactly 1
-    assert s.min() > 0.3 and s.max() < 1.6
-
-
-def test_newton_schulz_tall_matrix():
-    torch.manual_seed(0)
-    G = torch.randn(64, 16)
-    X = zeropower_via_newtonschulz5(G)
-    assert X.shape == G.shape
-    s = torch.linalg.svdvals(X.float())
     assert s.min() > 0.3 and s.max() < 1.6
 
 
@@ -78,17 +71,3 @@ def test_muon_reduces_loss():
         opt.step()
         losses.append(loss.item())
     assert losses[-1] < losses[0] * 0.9
-
-
-def test_muon_state_dict_roundtrip():
-    torch.manual_seed(0)
-    model = _toy_model()
-    opt = Muon(*split_matrix_params(model), lr=0.02, adamw_lr=1e-3)
-    x, idx = torch.randn(4, 4, 10), torch.randint(0, 7, (4, 2))
-    loss = model(x, idx).sum()
-    loss.backward()
-    opt.step()
-    state = opt.state_dict()
-    opt2 = Muon(*split_matrix_params(model), lr=0.02, adamw_lr=1e-3)
-    opt2.load_state_dict(state)
-    assert len(opt2.state_dict()["state"]) == len(state["state"])

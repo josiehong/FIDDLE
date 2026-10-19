@@ -115,17 +115,6 @@ def _exceeds_limits(refined_counts, f0_counts_list, active_limits):
     return False  # Does not exceed the limit for any formula
 
 
-def exceed_refine_atom_limit(
-    refined_counts, formulas, refine_atom_type, refine_atom_num
-):
-    """Check if the refined formula exceeds the refinement limit for a given atom type."""
-    return _exceeds_limits(
-        refined_counts,
-        [parse_formula(formula) for formula in formulas],
-        [(t, n) for t, n in zip(refine_atom_type, refine_atom_num) if n != -1],
-    )
-
-
 def _mass_from_counts(atom_counts):
     """Monoisotopic mass from an atom-count dict, without string round-trips.
 

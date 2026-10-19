@@ -290,21 +290,6 @@ def simulate_experimental_mz(theoretical_mz, relative_mass_tolerance_ppm):
     return experimental_mz
 
 
-def ce2nce(ce, precursor_mz, charge):
-    """Convert absolute collision energy (eV) to normalized collision energy (NCE).
-
-    Args:
-            ce: Collision energy in eV.
-            precursor_mz: Precursor m/z value.
-            charge: Precursor charge state (int, 1–8).
-
-    Returns:
-            float: Normalized collision energy (dimensionless).
-    """
-    charge_factor = {1: 1, 2: 0.9, 3: 0.85, 4: 0.8, 5: 0.75, 6: 0.75, 7: 0.75, 8: 0.75}
-    return ce * 500 * charge_factor[charge] / precursor_mz
-
-
 def precursor_mz_calculator(precursor_type, mass):
     """Compute the expected precursor m/z from neutral monoisotopic mass.
 
