@@ -85,6 +85,11 @@ One row is produced per input spectrum.
    * - ``Rescore (k)``
      - Rescore model confidence score for ``Refined Formula (k)``
        (0–1; higher is more confident).
+   * - ``Isotope Shift (k)``
+     - Only when the config's ``isotope_errors`` is not ``[0]``: the 13C
+       isotope offset at which ``Refined Formula (k)`` was found (0 for the
+       measured mass). The ranking uses ``Rescore (k)`` minus
+       ``isotope_penalty`` times this offset.
 
 The number of ranked columns is set by ``top_k`` in the configuration file
 (20 in the bundled Orbitrap and Q-TOF configs) unless ``top_k`` is passed

@@ -1,6 +1,5 @@
 import argparse
 from tqdm import tqdm
-import yaml
 import os
 
 import numpy as np
@@ -18,6 +17,7 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from msfiddle.config import load_config
 from msfiddle.dataset import MS2FDataset_CL, MS2FDataset
 from msfiddle.model_tcn import MS2FNet_tcn
 from msfiddle.optim import Muon, split_matrix_params
@@ -331,8 +331,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     init_random_seed(args.seed)
-    with open(args.config_path, "r") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    config = load_config(args.config_path)
     print("Load the model & training configuration from {}".format(args.config_path))
 
     # Input size is fixed (padded spectra, constant batch), the exact case

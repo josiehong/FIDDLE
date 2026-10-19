@@ -90,6 +90,18 @@ identical) and ``--batch_size`` sets the inference batch (default 32).
             --result_path /path/to/results.csv \
             --device 0
 
+**Mass window and isotope errors:** two ``post_processing`` settings in the
+config control which candidate masses refinement considers.
+
+- ``mass_tolerance`` is the precursor mass error allowed, in ppm of the
+  precursor m/z (5 for Orbitrap, 10 for Q-TOF). It is converted to the neutral
+  mass of each adduct.
+- ``isotope_errors`` lists 13C isotope offsets to try. With ``[0, 1]``,
+  msfiddle also refines as if the precursor m/z were read from the M+1 isotope
+  peak, and subtracts ``isotope_penalty`` (default 0.5) from the rescore of
+  candidates found that way. The results then gain ``Isotope Shift (k)``
+  columns. The default ``[0]`` searches the measured mass only.
+
 Evaluating Predictions
 ----------------------
 

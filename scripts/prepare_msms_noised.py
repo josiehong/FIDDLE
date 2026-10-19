@@ -7,13 +7,13 @@ import random
 import copy
 from tqdm import tqdm
 from pyteomics import mgf
-import yaml
 
 import sys
 
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from msfiddle.config import load_config
 from msfiddle.utils import mgf_key_order
 
 
@@ -151,8 +151,7 @@ if __name__ == "__main__":
     # Load configuration
     config = {}
     if os.path.exists(args.config_path):
-        with open(args.config_path, "r") as f:
-            config = yaml.load(f, Loader=yaml.FullLoader)
+        config = load_config(args.config_path)
     else:
         print(
             f"Warning: Config file {args.config_path} not found. Using default settings."

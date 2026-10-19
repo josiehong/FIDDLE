@@ -34,10 +34,8 @@ from collections import defaultdict
 from multiprocessing import Pool
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
-import yaml
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -46,6 +44,7 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from msfiddle.config import load_config
 from msfiddle.dataset import MS2FDataset
 from msfiddle.model_tcn import MS2FNet_tcn
 from msfiddle.utils import (
@@ -55,6 +54,7 @@ from msfiddle.utils import (
     formula_to_vector,
     monoisotopic_mass_calculator,
 )
+from msfiddle.utils.msms_utils import isotope_mass_shift, precursor_window_da
 
 
 def _refine_worker(args):
@@ -186,26 +186,40 @@ def prepare_rescore_records(data_path, model, device, config, num_workers=8):
     formula_true = [vec2formula(v) for v in np.round(y_true.numpy()) + offsets]
     mass_true = [monoisotopic_mass_calculator(f, mode="f") for f in formula_true]
 
-    # Formula refinement (post-processing) — parallelised across CPU cores
+    # Formula refinement as at inference: the ppm tolerance applies to the
+    # precursor m/z, and each 13C isotope offset k is refined too (its
+    # candidates are decoys here, since the training masses are exact).
+    # Parallelised across CPU cores.
     pp = config["post_processing"]
-    top_k = pp["top_k"]
-
-    worker_args = [
-        (
-            pred_f,
-            m,
-            pp["mass_tolerance"],
-            pp["ppm_mode"],
-            top_k,
-            pp["maxium_miss_atom_num"],
-            pp["time_out"],
-            pp["refine_atom_type"],
-            pp["refine_atom_num"],
+    index_to_adduct = {v: t for t, v in config["encoding"]["precursor_type"].items()}
+    worker_args, owners = [], []
+    for i, (pred_f, m, title) in enumerate(zip(formula_pred, mass_true, spec_ids)):
+        env = pkl_data[title][1]
+        adduct = index_to_adduct[int(env[2])]
+        window = (
+            precursor_window_da(adduct, float(env[0]), pp["mass_tolerance"])
+            if pp["ppm_mode"]
+            else pp["mass_tolerance"]
         )
-        for pred_f, m in zip(formula_pred, mass_true)
-    ]
+        for k in pp["isotope_errors"]:
+            worker_args.append(
+                (
+                    pred_f,
+                    m - isotope_mass_shift(adduct, k),
+                    window,
+                    False,  # window is in Da
+                    pp["top_k"],
+                    pp["maxium_miss_atom_num"],
+                    pp["time_out"],
+                    pp["refine_atom_type"],
+                    pp["refine_atom_num"],
+                )
+            )
+            owners.append((i, k))
 
-    print(f"Post-processing {len(worker_args)} spectra with {num_workers} workers...")
+    print(
+        f"Post-processing {len(worker_args)} refinements with {num_workers} workers..."
+    )
     with Pool(num_workers) as pool:
         results = list(
             tqdm(
@@ -215,37 +229,33 @@ def prepare_rescore_records(data_path, model, device, config, num_workers=8):
             )
         )
 
-    # results[i] is a list of top_k formula strings
-    formula_refined = {
-        f"Refined Formula ({k})": [r[k] for r in results] for k in range(top_k)
-    }
+    # Pool each spectrum's candidates across offsets, keeping the first
+    candidates = [{} for _ in spec_ids]  # formula -> isotope offset
+    for (i, k), formulas in zip(owners, results):
+        for formula in formulas:
+            if formula is not None:
+                candidates[i].setdefault(formula, k)
 
     # Label and collect records
-    res_df = pd.DataFrame({"ID": spec_ids, "Formula": formula_true, **formula_refined})
-
     records = []
-    for k in range(top_k):
-        col = f"Refined Formula ({k})"
-        res_df[f"Label ({k})"] = res_df.apply(
-            lambda row: formula_to_dict(row["Formula"]) == formula_to_dict(row[col]),
-            axis=1,
-        )
-        for label_val, flag in [(1.0, True), (0.0, False)]:
-            sub = res_df[res_df[f"Label ({k})"] == flag].dropna(subset=[col])
-            for _, row in sub.iterrows():
-                title = row["ID"]
-                spec, env = pkl_data[title]
-                records.append(
-                    {
-                        "title": title,
-                        "pred_formula": row[col],
-                        "spec": spec,
-                        "env": env,
-                        "label": label_val,
-                    }
-                )
-            tag = "correct" if label_val == 1.0 else "incorrect"
-            print(f"  k={k} {tag}: {len(sub)}")
+    counts = {"correct": 0, "incorrect": 0, "from isotope offsets": 0}
+    for title, truth, found in zip(spec_ids, formula_true, candidates):
+        spec, env = pkl_data[title]
+        truth = formula_to_dict(truth)
+        for formula, k in found.items():
+            label = float(formula_to_dict(formula) == truth)
+            counts["correct" if label else "incorrect"] += 1
+            counts["from isotope offsets"] += k > 0
+            records.append(
+                {
+                    "title": title,
+                    "pred_formula": formula,
+                    "spec": spec,
+                    "env": env,
+                    "label": label,
+                }
+            )
+    print("  " + ", ".join(f"{name}: {n}" for name, n in counts.items()))
 
     return records
 
@@ -407,8 +417,7 @@ def main():
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    with open(args.config_path) as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    config = load_config(args.config_path)
 
     tolerance = (
         args.tolerance

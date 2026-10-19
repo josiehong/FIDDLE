@@ -5,7 +5,6 @@ import random
 from collections import defaultdict
 from tqdm import tqdm
 from pyteomics import mgf
-import yaml
 import copy
 
 import sys
@@ -13,6 +12,7 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from msfiddle.config import load_config
 from msfiddle.utils import parse_collision_energy, mgf_key_order
 
 
@@ -171,9 +171,8 @@ if __name__ == "__main__":
 
     os.makedirs(args.out_dir, exist_ok=True)
 
-    with open(args.config_path, "r") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
-        encoder = config["encoding"]
+    config = load_config(args.config_path)
+    encoder = config["encoding"]
 
     # load mgf data
     data = mgf.read(args.mgf_data)

@@ -1,7 +1,6 @@
 import os
 import re
 import argparse
-import yaml
 from tqdm import tqdm
 import numpy as np
 import pickle
@@ -19,6 +18,7 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from msfiddle.config import load_config
 from msfiddle.utils import sdf2mgf, filter_spec, mgf_key_order, spec2arr, spec2pair
 
 if __name__ == "__main__":
@@ -98,8 +98,7 @@ if __name__ == "__main__":
         assert os.path.exists(os.path.join(args.raw_dir, "ALL_GNPS_cleaned.csv"))
 
     # load the configurations
-    with open(args.config_path, "r") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    config = load_config(args.config_path)
     # configuration check (later)
 
     # 1. convert original format to mgf

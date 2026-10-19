@@ -1,3 +1,4 @@
+import re
 import numpy as np
 from tqdm import tqdm
 
@@ -433,48 +434,37 @@ def mass_calculator(precursor_type, precursor_mz):
         raise ValueError("Unsupported precursor type: {}".format(precursor_type))
 
 
-if __name__ == "__main__":
-    # test sdf2mgf
-    spectra = sdf2mgf("../data/origin/Agilent_Combined.sdf", "agilent_combine")
-    print("Number of spectra: {}".format(len(spectra)))
-    for spec in spectra:
-        if spec["params"]["precursor_type"] == "[M-H]-":
-            print(spec)
-            break
+def precursor_charge(precursor_type):
+    """Absolute charge of an adduct, e.g. 2 for '[M+2H]2+'."""
+    match = re.search(r"\](\d*)[+-]$", precursor_type)
+    if match is None:
+        raise ValueError("Unsupported precursor type: {}".format(precursor_type))
+    return int(match.group(1) or 1)
 
-    # test filter_spec
-    config = {
-        "instrument_type": "ESI-QTOF",
-        "instrument": ["Unknown"],
-        "ms_level": "2",
-        "atom_type": [
-            "C",
-            "O",
-            "N",
-            "H",
-            "P",
-            "S",
-            "F",
-            "Cl",
-            "B",
-            "Br",
-            "I",
-            "Na",
-            "K",
-        ],
-        "precursor_type": ["[M+H]+", "[M-H]-"],
-        "min_mz": 50,
-        "max_mz": 1500,
-        "min_peak_num": 5,
-        "max_atom_num": 300,
-        "min_atom_num": 10,
-        "ppm_tolerance": 10,
-    }
-    type2charge = {"[M+H]+": 1, "[M-H]-": -1}
-    clean_spectra, smiles_list = filter_spec(spectra, config, type2charge)
-    print("Number of clean spectra: {}".format(len(clean_spectra)))
-    print("Number of smiles: {}".format(len(smiles_list)))
-    for spec in clean_spectra:
-        if spec["params"]["precursor_type"] == "[M-H]-":
-            print(spec)
-            break
+
+def neutral_mass_per_mz(precursor_type):
+    """d(neutral mass)/d(m/z) for an adduct: charge / (number of M), e.g. 1 for
+    '[M+H]+', 2 for '[M+2H]2+' and 0.5 for '[2M+H]+'."""
+    return mass_calculator(precursor_type, 1001.0) - mass_calculator(
+        precursor_type, 1000.0
+    )
+
+
+def precursor_window_da(precursor_type, precursor_mz, ppm):
+    """Neutral-mass window (Da) for a precursor m/z error of `ppm`.
+
+    Instrument error is relative to the measured m/z, so a ppm tolerance is
+    applied there and carried to the neutral mass of the adduct.
+    """
+    return ppm * precursor_mz / 1e6 * neutral_mass_per_mz(precursor_type)
+
+
+def isotope_mass_shift(precursor_type, k):
+    """How much heavier the neutral mass looks when the precursor m/z was read
+    from the k-th 13C isotope peak instead of the monoisotopic one."""
+    return (
+        k
+        * C13_SHIFT
+        / precursor_charge(precursor_type)
+        * neutral_mass_per_mz(precursor_type)
+    )

@@ -27,7 +27,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import yaml
 from sklearn.metrics import roc_auc_score
 from tqdm import tqdm
 
@@ -37,6 +36,7 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from msfiddle.config import load_config
 from msfiddle.model_tcn import MS2FNet_tcn, FormulaEncoder, RescoreHead
 from msfiddle.utils.mol_utils import formula_to_vector
 
@@ -155,8 +155,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    with open(args.config_path, "r") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    config = load_config(args.config_path)
     print(f"Config: {args.config_path}")
 
     device = (

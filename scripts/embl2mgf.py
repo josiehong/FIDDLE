@@ -1,6 +1,5 @@
 import re
 import argparse
-import yaml
 import numpy as np
 from pyteomics import mgf
 import os
@@ -9,6 +8,7 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from msfiddle.config import load_config
 from msfiddle.utils import filter_spec
 
 
@@ -148,8 +148,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # load the configurations
-    with open(args.data_config_path, "r") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    config = load_config(args.data_config_path)
     type2charge = config["encoding"]["type2charge"]
 
     with open(args.raw_path, "r") as file:

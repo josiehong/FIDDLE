@@ -195,8 +195,10 @@ post_processing:
   refine_atom_type: ['C', 'O', 'N', 'H', 'Cl', 'Br', 'F', 'I', 'S', 'P']
   refine_atom_num: [5, 5, 5, -1, 2, 1, 2, 1, 2, 1] # config B (08/2026 sweep): S/P reachable; recall@20 92.3% -> 94.0%
 
-  mass_tolerance: 10.0 # target space
+  mass_tolerance: 10.0 # ppm of the precursor m/z, the unit of the data filters' ppm_tolerance
   ppm_mode: True
+  isotope_errors: [0] # 13C isotope offsets k to search; [0, 1] also tries a precursor read from the M+1 peak
+  isotope_penalty: 0.5 # subtracted from the rescore per unit of k
   time_out: -1 # do not limit the time
   maxium_miss_atom_num: 50 # search space
   top_k: 20 # config B (08/2026 sweep): +2 points of rescorer ceiling over K=10; keep pair-generation and inference matched

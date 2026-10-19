@@ -88,3 +88,29 @@ def test_filter_counts_isotope_errors_separately(capsys):
     assert [s["params"]["title"] for s in kept] == ["ok"]
     out = capsys.readouterr().out
     assert "ppm_tolerance: 1" in out and "isotope_error: 1" in out
+
+
+@pytest.mark.parametrize(
+    "precursor_type, per_mz, charge",
+    [
+        ("[M+H]+", 1.0, 1),
+        ("[M+Na]+", 1.0, 1),
+        ("[M+2H]2+", 2.0, 2),
+        ("[2M+H]+", 0.5, 1),
+    ],
+)
+def test_precursor_window_and_isotope_shift(precursor_type, per_mz, charge):
+    from msfiddle.utils.msms_utils import (
+        C13_SHIFT,
+        isotope_mass_shift,
+        precursor_window_da,
+    )
+
+    # A ppm tolerance applies to the m/z, then scales to the neutral mass
+    assert precursor_window_da(precursor_type, 400.0, 5) == pytest.approx(
+        5 * 400.0 / 1e6 * per_mz
+    )
+    # The k-th isotope peak sits k * 1.00336 / z higher in m/z
+    assert isotope_mass_shift(precursor_type, 2) == pytest.approx(
+        2 * C13_SHIFT / charge * per_mz
+    )

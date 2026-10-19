@@ -1,6 +1,4 @@
 import re
-import argparse
-import yaml
 from collections import deque
 from molmass import Formula
 import time
@@ -291,9 +289,7 @@ def formula_refinement_bfs(
             frontier_count[x] = frontier_count.get(x, 0) + 1
 
     search_deep = 0
-    # print('Init {} candidate formulas from predictions'.format(len(candidate_f)))
-    # print(candidate_f)
-    # print([(fast_mass(f), abs(fast_mass(f) - M)) for f in candidate_f])
+    f = None  # focus formula; every pass after the first sets it at its end
 
     # Search >>>
     while len(refine_f) < K and (
@@ -655,47 +651,3 @@ def formula_refinement(
         refine_f = refine_f + [None] * (K - len(refine_f))
         refine_m = refine_m + [None] * (K - len(refine_m))
     return {"formula": refine_f, "mass": refine_m}
-
-
-if __name__ == "__main__":
-    # Post-process settings
-    # to check `formula_refinement`: python refine_utils.py --config_path ./config/fiddle_tcn.yml
-    parser = argparse.ArgumentParser(
-        description="Mass Spectra to formula (post-process)"
-    )
-    parser.add_argument(
-        "--config_path", type=str, required=True, help="Path to configuration (.yml)"
-    )
-    args = parser.parse_args()
-
-    # Load configuration
-    with open(args.config_path, "r") as f:
-        config = yaml.safe_load(f)
-
-    refine_atom_type = config["post_processing"]["refine_atom_type"]
-    refine_atom_num = config["post_processing"]["refine_atom_num"]
-    mass_tolerance = config["post_processing"]["mass_tolerance"]
-    ppm_mode = config["post_processing"]["ppm_mode"]
-    top_k = config["post_processing"]["top_k"]
-    maxium_miss_atom_num = config["post_processing"]["maxium_miss_atom_num"]
-    time_out = config["post_processing"]["time_out"]
-
-    predicted_formula = ["C6H7O2N2"]
-    target_formula = "C5H9NO4"
-    compound_mass = Formula(target_formula).isotope.mass
-
-    print("predicted formulas:", predicted_formula)
-    print("target formula: {} ({})".format(target_formula, compound_mass))
-
-    result = formula_refinement(
-        predicted_formula,
-        compound_mass,
-        mass_tolerance,
-        ppm_mode,
-        top_k,
-        maxium_miss_atom_num,
-        time_out,
-        refine_atom_type,
-        refine_atom_num,
-    )
-    print("restults:", result)

@@ -8,18 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Isotope-error search ([#8](https://github.com/JosieHong/FIDDLE/issues/8)): `post_processing.isotope_errors` (default `[0]`) lists 13C isotope offsets k to refine at, for precursors read from the M+k isotope peak, and `isotope_penalty` (default 0.5) is subtracted from the rescore per unit of k. Results gain `Isotope Shift (k)` columns when enabled. `prepare_augment_rescore.py` adds the candidates found at those offsets as decoys, so the rescorer is trained on them.
+- `msfiddle.config.load_config`: every config is read through it. It fills defaults, rejects invalid post-processing settings, and warns when a dataset's `ppm_tolerance` is wider than `mass_tolerance`.
 - `scripts/run_buddy_sirius.py` runs msbuddy and SIRIUS on an MGF file, setting `ION` from `PRECURSOR_TYPE` so both tools see the adduct, and `running_scripts/compare.sh` runs FIDDLE alone, with BUDDY, and with BUDDY and SIRIUS for each experiment. The experiment scripts run BUDDY and SIRIUS through it again.
 - `scripts/check_precursor_error.py` classifies each spectrum's precursor mass error as within tolerance, a 13C isotope peak, or other, and flags spectra within tolerance on the m/z but not on the neutral mass. Preprocessing reports isotope-peak precursors as `isotope_error` instead of `ppm_tolerance`; they are still dropped.
 
 ### Changed
 
+- The refinement window `mass_tolerance` is in ppm of the precursor m/z, the unit of the data filters' `ppm_tolerance`, and is converted to each adduct's neutral mass ([#9](https://github.com/JosieHong/FIDDLE/issues/9)). It used to be ppm of the neutral mass, so for adducts lighter than their ion, such as small `[M+Na]+`, spectra the filter admitted could fall outside the window. The CASMI and EMBL configs' windows are raised to their filters' tolerances (10 and 50 ppm), which changes those benchmark results. Rescore training pairs use the same window.
 - Spectra with a stepped or ranged collision energy (`HCD (NCE 20-30-40%)`, `30-50 eV`) are skipped with one warning that gives the count, where `predict` used to drop them without saying why; `predict_from_spectrum` raises a clear error. Preprocessing reports how many it drops. The models were trained on single-energy spectra, so these are not encoded as a mean energy. ([#7](https://github.com/JosieHong/FIDDLE/issues/7))
 - BUDDY and SIRIUS results are looked up by spectrum ID through an index, not by scanning the whole table for every spectrum. Results are unchanged.
 
 ### Removed
 
 - `scripts/train_tcn_gpus.py`; `scripts/train_tcn_gpus_cl.py` trains the TCN.
-- Unused imports and a duplicate collision-energy pattern in the package.
+- Unused imports and a duplicate collision-energy pattern in the package, and the manual test scripts at the end of the `msfiddle/utils` modules.
 
 ## [2.2.1] - 2026-10-19
 

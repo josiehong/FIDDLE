@@ -195,7 +195,9 @@ def test_predict_mgf_loads_native_external_outputs(monkeypatch, tmp_path):
             )
         ]
 
-    def fake_refinement_args(self, prediction, top_k, *, extra_formulas=None):
+    def fake_refinement_args(
+        self, prediction, top_k, *, extra_formulas=None, isotope_shift=0
+    ):
         seen_extra_formulas.extend(extra_formulas or [])
         return (), 146.0
 
@@ -240,3 +242,19 @@ def test_predict_mgf_skips_stepped_collision_energy_with_warning(tmp_path):
     with pytest.warns(UserWarning, match="Skipped 1 spectra with a stepped"):
         encoded = predictor._load_mgf_spectra(path)
     assert [e.id for e in encoded] == ["single"]
+
+
+def test_isotope_offsets_pool_candidates_and_penalize_shifted_ones():
+    parts = [
+        (1, {"formula": ["C7H14O6", "C8H10N4O2"], "mass": [194.08, 194.08]}),
+        (0, {"formula": ["C8H10N4O2", None], "mass": [194.08, None]}),
+    ]
+    merged, shift_of = api._merge_isotope_refinements(parts)
+    assert merged["formula"] == ["C8H10N4O2", "C7H14O6"]  # smallest k kept
+    assert shift_of == {"C8H10N4O2": 0, "C7H14O6": 1}
+
+    rescored = {**merged, "rescore": [0.5, 0.9]}
+    out = api._apply_isotope_penalty(rescored, shift_of, 0.5, top_k=3)
+    assert out["formula"] == ["C8H10N4O2", "C7H14O6", None]  # 0.9 - 0.5 < 0.5
+    assert out["isotope_shift"] == [0, 1, None]
+    assert out["rescore"] == [0.5, 0.9, 0.0]
