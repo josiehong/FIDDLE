@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-10-19
+
 ### Added
 
 - `msfiddle` subcommands: `predict`, `eval` (top-k accuracy per spectrum and per compound, against SMILES or FORMULA in an MGF or a test .pkl), `download` and `paths`. Arguments without a subcommand still go to `predict`, `python -m msfiddle` works without installing, and `msfiddle-download-models` / `msfiddle-checkpoint-paths` remain as aliases.
@@ -18,6 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Removed
 
 - `msfiddle.test_step` and `msfiddle.rescore_candidates`, unused leftovers of the pre-API CLI.
+
+### Known issues
+
+- The Orbitrap refinement window is 5 ppm. For small molecules (below about 200 Da), a precursor error under 1 mDa can exceed 5 ppm, and the true formula is then not generated. Widening the window to 20 ppm lowered held-out top-1 by about 10 points, so it stays at 5 ppm until a ppm-plus-absolute tolerance is added.
 
 ## [2.2.0] - 2026-10-18
 
