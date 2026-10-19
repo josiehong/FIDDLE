@@ -6,7 +6,6 @@ import urllib.request
 import zipfile
 import argparse
 import re
-from pathlib import Path
 from tqdm import tqdm
 
 from importlib.metadata import (

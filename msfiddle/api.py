@@ -29,7 +29,7 @@ from .utils.mol_utils import (
 )
 from .utils.msms_utils import mass_calculator
 from .utils.pkl_utils import generate_ms, parse_collision_energy, unify_precursor_type
-from .utils.refine_utils import formula_refinement
+from .utils.refine_utils import fast_mass, formula_refinement
 
 _INSTRUMENT_TYPES = {"orbitrap", "qtof"}
 _NEUTRAL_FORMULAS = ("CH4O2", "CH2O2", "H2O", "NH3", "CO2")
@@ -199,12 +199,18 @@ class MsFiddlePredictor:
         top_k: int | None = None,
         batch_size: int | None = None,
         num_workers: int = 1,
+        integrate: Sequence[float] | None = None,
     ) -> pd.DataFrame:
         """Predict formulas for spectra in an MGF file.
 
         ``buddy_path`` and ``sirius_path`` may point to either native/original
         BUDDY/msbuddy and SIRIUS formula-identification outputs or legacy
-        msfiddle-normalized CSV files.
+        msfiddle-normalized CSV files. Their candidates join refinement.
+
+        ``integrate`` = (w_fiddle, w_buddy, w_sirius) also ranks the candidates
+        by w_fiddle * rescore + w_buddy * BUDDY probability + w_sirius * SIRIUS
+        probability, adding ``Integrated Score (k)`` columns. A tool that did
+        not propose a candidate contributes 0 for it.
 
         ``num_workers`` > 1 runs formula refinement (CPU-bound, per spectrum)
         in that many processes; results are identical to a single process.
@@ -223,32 +229,39 @@ class MsFiddlePredictor:
         encoded = self._load_mgf_spectra(test_data_path)
         predictions = self._predict_encoded(encoded, batch_size=batch_size)
 
-        buddy_df = load_buddy_results(buddy_path) if buddy_path else None
-        sirius_df = load_sirius_results(sirius_path) if sirius_path else None
+        buddy_df = _index_by_id(load_buddy_results(buddy_path)) if buddy_path else None
+        sirius_df = (
+            _index_by_id(load_sirius_results(sirius_path)) if sirius_path else None
+        )
+        weights = _validate_integrate(integrate, buddy_df, sirius_df)
 
         refined_formula = {f"Refined Formula ({k})": [] for k in range(top_k)}
         refined_mass = {f"Refined Mass ({k})": [] for k in range(top_k)}
         refined_rescore = {f"Rescore ({k})": [] for k in range(top_k)}
+        integrated_score = {f"Integrated Score ({k})": [] for k in range(top_k)}
         running_time: list[float] = []
         neutral_masses: list[float] = []
 
+        external = [
+            (
+                _external_candidates(buddy_df, prediction.spectrum.id, "BUDDY"),
+                _external_candidates(sirius_df, prediction.spectrum.id, "SIRIUS"),
+            )
+            for prediction in predictions
+        ]
         jobs = [
             self._refinement_args(
                 prediction,
                 top_k,
-                extra_formulas=self._external_formula_candidates(
-                    prediction.spectrum.id,
-                    buddy_df=buddy_df,
-                    sirius_df=sirius_df,
-                ),
+                extra_formulas=self._seed_formulas(*candidates),
             )
-            for prediction in predictions
+            for prediction, candidates in zip(predictions, external)
         ]
         refined = _run_refinement(
             [refine_args for refine_args, _ in jobs], num_workers, self.verbose
         )
 
-        rescore_jobs = zip(predictions, jobs, refined)
+        rescore_jobs = zip(predictions, jobs, refined, external)
         if self.verbose:
             from tqdm import tqdm
 
@@ -257,11 +270,19 @@ class MsFiddlePredictor:
             prediction,
             (_, neutral_mass),
             (refined_results, refine_time),
+            (buddy, sirius),
         ) in rescore_jobs:
             start_time = time.time()
+            if weights is not None:
+                # Tool candidates outside FIDDLE's refinement window still count
+                refined_results = _with_external(refined_results, buddy + sirius)
             results = self._rescore_candidates(
                 prediction.rescore_embedding, refined_results, top_k
             )
+            if weights is not None:
+                results = _integrate_scores(
+                    results, buddy, sirius, weights, top_k, neutral_mass
+                )
             neutral_masses.append(neutral_mass)
             running_time.append(
                 prediction.prediction_time + refine_time + time.time() - start_time
@@ -273,6 +294,10 @@ class MsFiddlePredictor:
                 refined_formula[f"Refined Formula ({idx})"].append(formula)
                 refined_mass[f"Refined Mass ({idx})"].append(mass)
                 refined_rescore[f"Rescore ({idx})"].append(score)
+                if weights is not None:
+                    integrated_score[f"Integrated Score ({idx})"].append(
+                        results["integrated"][idx]
+                    )
 
         base_columns = {
             "ID": [prediction.spectrum.id for prediction in predictions],
@@ -284,9 +309,10 @@ class MsFiddlePredictor:
             "Pred H/C Num": [prediction.pred_hc_count for prediction in predictions],
             "Running Time": running_time,
         }
-        return pd.DataFrame(
-            {**base_columns, **refined_formula, **refined_mass, **refined_rescore}
-        )
+        columns = {**base_columns, **refined_formula, **refined_mass, **refined_rescore}
+        if weights is not None:
+            columns.update(integrated_score)
+        return pd.DataFrame(columns)
 
     def _encode_spectrum_record(
         self,
@@ -788,73 +814,140 @@ class MsFiddlePredictor:
             metadata["running_time"] = running_time
         return metadata
 
-    def _external_formula_candidates(
+    def _seed_formulas(
         self,
-        spec_id: str,
-        *,
-        buddy_df: pd.DataFrame | None,
-        sirius_df: pd.DataFrame | None,
+        buddy: Sequence[tuple[str, float, float]],
+        sirius: Sequence[tuple[str, float, float]],
     ) -> list[str]:
-        candidates: list[str] = []
-        if buddy_df is not None:
-            rows = buddy_df.loc[buddy_df["ID"] == spec_id]
-            if len(rows) > 0:
-                row = rows.iloc[0]
-                formulas = row[
-                    [
-                        "Pred Formula (1)",
-                        "Pred Formula (2)",
-                        "Pred Formula (3)",
-                        "Pred Formula (4)",
-                        "Pred Formula (5)",
-                    ]
-                ].tolist()
-                scores = row[
-                    [
-                        "BUDDY Score (1)",
-                        "BUDDY Score (2)",
-                        "BUDDY Score (3)",
-                        "BUDDY Score (4)",
-                        "BUDDY Score (5)",
-                    ]
-                ].tolist()
-                candidates.extend(
-                    formula
-                    for formula, score in zip(formulas, scores)
-                    if _is_external_formula(formula)
-                    and pd.notna(score)
-                    and score < self.config["post_processing"]["buddy_fdr_thr"]
-                )
-        if sirius_df is not None:
-            rows = sirius_df.loc[sirius_df["ID"] == spec_id]
-            if len(rows) > 0:
-                row = rows.iloc[0]
-                formulas = row[
-                    [
-                        "Pred Formula (1)",
-                        "Pred Formula (2)",
-                        "Pred Formula (3)",
-                        "Pred Formula (4)",
-                        "Pred Formula (5)",
-                    ]
-                ].tolist()
-                scores = row[
-                    [
-                        "SIRIUS Score (1)",
-                        "SIRIUS Score (2)",
-                        "SIRIUS Score (3)",
-                        "SIRIUS Score (4)",
-                        "SIRIUS Score (5)",
-                    ]
-                ].tolist()
-                candidates.extend(
-                    formula
-                    for formula, score in zip(formulas, scores)
-                    if _is_external_formula(formula)
-                    and pd.notna(score)
-                    and score > self.config["post_processing"]["sirius_score_thr"]
-                )
-        return candidates
+        """External candidates confident enough to seed refinement."""
+        pp = self.config["post_processing"]
+        return [f for f, fdr, _ in buddy if fdr < pp["buddy_fdr_thr"]] + [
+            f for f, score, _ in sirius if score > pp["sirius_score_thr"]
+        ]
+
+
+def _index_by_id(df: pd.DataFrame) -> pd.DataFrame:
+    return df.drop_duplicates("ID").set_index("ID")
+
+
+def _external_candidates(
+    df: pd.DataFrame | None, spec_id: str, tool: str
+) -> list[tuple[str, float, float]]:
+    """(formula, tool score, probability) for each candidate the tool proposed.
+
+    Candidates without a score are left out, as before; a missing
+    probability is NaN.
+    """
+    if df is None or spec_id not in df.index:
+        return []
+    row = df.loc[spec_id]
+    candidates = []
+    for k in range(1, 6):
+        formula, score = row[f"Pred Formula ({k})"], row[f"{tool} Score ({k})"]
+        if _is_external_formula(formula) and pd.notna(score):
+            candidates.append((formula, float(score), float(row[f"{tool} Prob ({k})"])))
+    return candidates
+
+
+def _validate_integrate(
+    integrate: Sequence[float] | None,
+    buddy_df: pd.DataFrame | None,
+    sirius_df: pd.DataFrame | None,
+) -> tuple[float, float, float] | None:
+    if integrate is None:
+        return None
+    weights = tuple(float(w) for w in integrate) or (1.0, 1.0, 1.0)
+    if len(weights) != 3:
+        raise ValueError("integrate takes three weights: fiddle, buddy, sirius")
+    if buddy_df is None and sirius_df is None:
+        raise ValueError("integrate needs buddy_path and/or sirius_path")
+    if (
+        sirius_df is not None
+        and weights[2]
+        and sirius_df.filter(like="SIRIUS Prob").isna().all(axis=None)
+    ):
+        warnings.warn(
+            "SIRIUS results have no SiriusScore column, so SIRIUS does not "
+            "contribute to the integrated score",
+            stacklevel=3,
+        )
+    return weights
+
+
+def _integrate_scores(
+    results: dict[str, list[Any]],
+    buddy: Sequence[tuple[str, float, float]],
+    sirius: Sequence[tuple[str, float, float]],
+    weights: tuple[float, float, float],
+    top_k: int,
+    neutral_mass: float,
+) -> dict[str, list[Any]]:
+    """Re-rank rescored candidates by the weighted sum of FIDDLE, BUDDY and
+    SIRIUS probabilities; a tool that did not propose a candidate adds 0, and
+    a candidate more than _MASS_PPM from the neutral mass gets
+    _MASS_MISMATCH_PENALTY."""
+    w_fiddle, w_buddy, w_sirius = weights
+
+    def probs(candidates):
+        out: dict[tuple, float] = {}
+        for formula, _, prob in candidates:
+            if not math.isnan(prob):
+                key = _formula_key(formula)  # SIRIUS lists a formula per adduct
+                out[key] = out.get(key, 0.0) + prob
+        return out
+
+    buddy_prob, sirius_prob = probs(buddy), probs(sirius)
+    ranked = []
+    for formula, mass, rescore in zip(
+        results["formula"], results["mass"], results["rescore"]
+    ):
+        if formula is None:
+            continue
+        key = _formula_key(formula)
+        score = (
+            w_fiddle * rescore
+            + w_buddy * buddy_prob.get(key, 0.0)
+            + w_sirius * sirius_prob.get(key, 0.0)
+        )
+        if abs(mass - neutral_mass) > _MASS_PPM * neutral_mass / 1e6:
+            score += _MASS_MISMATCH_PENALTY
+        ranked.append((score, formula, mass, rescore))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    ranked = ranked[:top_k]
+    pad = [None] * (top_k - len(ranked))
+    return {
+        "formula": [r[1] for r in ranked] + pad,
+        "mass": [r[2] for r in ranked] + pad,
+        "rescore": [r[3] for r in ranked] + [0.0] * len(pad),
+        "integrated": [r[0] for r in ranked] + [0.0] * len(pad),
+    }
+
+
+# The rescorer never sees the precursor mass, so integration penalizes external
+# candidates that do not match it. Looser than the refinement windows: the
+# tools already applied their own tolerance.
+_MASS_PPM = 20.0
+_MASS_MISMATCH_PENALTY = -1.0
+
+
+def _with_external(
+    refined: dict[str, list[Any]], external: Sequence[tuple[str, float, float]]
+) -> dict[str, list[Any]]:
+    """Refined candidates plus the external ones refinement did not produce."""
+    formulas = [f for f in refined["formula"] if f is not None]
+    masses = [m for f, m in zip(refined["formula"], refined["mass"]) if f is not None]
+    seen = {_formula_key(f) for f in formulas}
+    for formula, _, _ in external:
+        key = _formula_key(formula)
+        if key not in seen:
+            seen.add(key)
+            formulas.append(formula)
+            masses.append(fast_mass(formula))
+    return {"formula": formulas, "mass": masses}
+
+
+def _formula_key(formula: str) -> tuple:
+    return tuple(sorted(formula_to_dict(formula).items()))
 
 
 def _timed_refinement(refine_args: tuple) -> tuple[dict[str, list[Any]], float]:
@@ -967,8 +1060,10 @@ def predict_from_mgf(
     top_k: int | None = None,
     batch_size: int = 32,
     num_workers: int = 1,
+    integrate: Sequence[float] | None = None,
 ) -> pd.DataFrame:
-    """Predict formulas for spectra in an MGF file."""
+    """Predict formulas for spectra in an MGF file. See
+    :meth:`MsFiddlePredictor.predict_mgf` for ``integrate``."""
 
     predictor = MsFiddlePredictor(
         instrument_type=instrument_type,
@@ -987,6 +1082,7 @@ def predict_from_mgf(
         top_k=top_k,
         batch_size=batch_size,
         num_workers=num_workers,
+        integrate=integrate,
     )
 
 

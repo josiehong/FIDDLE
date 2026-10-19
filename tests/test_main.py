@@ -10,7 +10,7 @@ from msfiddle import main as cli
     "argv",
     [
         ["--demo", "--result_path", "out.csv"],  # pre-subcommand form
-        ["predict", "--demo", "--result_path", "out.csv", "--eval"],
+        ["predict", "--demo", "--result_path", "out.csv", "--eval", "--integrate"],
     ],
 )
 def test_predict_is_the_default_subcommand(monkeypatch, argv):
@@ -19,6 +19,7 @@ def test_predict_is_the_default_subcommand(monkeypatch, argv):
     cli.main(argv)
     assert seen["demo"] and seen["result_path"] == "out.csv"
     assert seen["eval"] == ("--eval" in argv)
+    assert seen["integrate"] == ([] if "--integrate" in argv else None)
 
 
 def test_evaluate_prints_and_saves_table(tmp_path, capsys):

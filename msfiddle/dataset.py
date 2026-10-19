@@ -3,8 +3,6 @@ import copy
 import pickle
 
 import numpy as np
-import pandas as pd
-import torch
 from pyteomics import mgf
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -259,7 +257,6 @@ class MGFDataset(Dataset):
 
             # filter out invalid data
             maxium_mz = np.max(spectrum["m/z array"])
-            minium_mz = np.min(spectrum["m/z array"])
             if (
                 maxium_mz < general_filter_config["min_mz"]
                 or maxium_mz > general_filter_config["max_mz"]

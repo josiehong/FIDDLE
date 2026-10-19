@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `msfiddle predict --integrate [W_FIDDLE W_BUDDY W_SIRIUS]` (and `integrate=` in `predict_mgf` / `predict_from_mgf`): rank candidates by the weighted sum of the FIDDLE rescore, the msbuddy candidate probability and the SIRIUS probability (softmax of `SiriusScore`), with `Integrated Score (k)` output columns. BUDDY and SIRIUS candidates outside FIDDLE's refinement window are scored too when within 20 ppm of the neutral mass.
+- `scripts/run_buddy_sirius.py` runs msbuddy and SIRIUS on an MGF file, setting `ION` from `PRECURSOR_TYPE` so both tools see the adduct, and `running_scripts/compare.sh` runs FIDDLE alone, with BUDDY, with BUDDY and SIRIUS, and integrated, for each experiment.
+
 ## [2.2.1] - 2026-10-19
 
 ### Added
@@ -19,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Research evaluation uses the package CLI (`python -m msfiddle predict --eval`), so reported accuracy comes from the same code users run. `scripts/run_fiddle.py` and `scripts/eval_topk.py` are removed. The package computes the neutral mass from the full-precision precursor m/z, which can swap a decoy candidate at the edge of the mass window; top-k accuracy is unchanged on a 300-spectrum check.
 - New FIDDLE logo, with a dark-mode variant, in the README and docs. The README opens with a quick start.
 - Faster rescoring: the rescorer's spectrum embedding is computed in the batched model pass, not once more per spectrum. `predict` shows a "Rescore" progress bar. `scripts/train_rescore.py` also embeds each spectrum once, not once per candidate pair.
-- The experiment scripts in `running_scripts/` run again: they called scripts and flags that no longer existed. The benchmark, chimeric and noise experiments use the released models, and the NIST23 experiment trains on its own split. The BUDDY and SIRIUS runner steps are removed; FIDDLE + BUDDY runs read existing BUDDY output.
+- The experiment scripts in `running_scripts/` run again: they called scripts and flags that no longer existed. The benchmark, chimeric and noise experiments use the released models, and the NIST23 experiment trains on its own split. The BUDDY and SIRIUS steps run through `scripts/run_buddy_sirius.py`.
 
 ### Fixed
 

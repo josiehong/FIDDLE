@@ -62,7 +62,7 @@ msfiddle download -d ./check_point
 
 The benchmark, chimeric and noise experiments use the released models; the chimeric and noise ones also need the data built by `train_release_v2.2.sh`.
 
-To train from scratch, see `scripts/train_tcn_gpus.py`, `scripts/train_tcn_gpus_cl.py` and `scripts/train_rescore.py` with the configs in [`msfiddle/config/`](https://github.com/JosieHong/FIDDLE/tree/main/msfiddle/config).
+To train from scratch, see `scripts/train_tcn_gpus_cl.py` and `scripts/train_rescore.py` with the configs in [`msfiddle/config/`](https://github.com/JosieHong/FIDDLE/tree/main/msfiddle/config).
 
 ## Citation
 

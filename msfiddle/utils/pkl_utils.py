@@ -4,10 +4,8 @@ from decimal import Decimal
 from tqdm import tqdm
 import pandas as pd
 import random
-import copy
 
 from rdkit import Chem, RDLogger
-from rdkit.Chem import AllChem
 from rdkit.Chem.rdMolDescriptors import CalcMolFormula
 
 RDLogger.DisableLog("rdApp.*")
@@ -17,7 +15,6 @@ from .mol_utils import (
     formula_to_dict,
     formula_to_vector,
     dict_to_formula,
-    ATOMS_INDEX,
 )
 
 # ------------------------ Main Functions ------------------------
@@ -374,7 +371,6 @@ def parse_collision_energy(ce_str, precursor_mz, charge=1):
             x.split()[1].rstrip("ev")
         ),
         # MassBank
-        r"^[\d]+[.]?[\d]*[ ]?V$": lambda x: float(x.rstrip(" V")),
         r"^hcd[\d]+[.]?[\d]*$": lambda x: float(x.lstrip("hcd")),
         r"^[\d]+HCD$": lambda x: float(x.rstrip("HCD")),  # 35HCD
     }

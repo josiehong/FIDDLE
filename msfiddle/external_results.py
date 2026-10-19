@@ -7,6 +7,7 @@ import warnings
 from pathlib import Path
 from typing import Iterable
 
+import numpy as np
 import pandas as pd
 
 _NORMALIZED_CSV_DEPRECATION = (
@@ -17,11 +18,13 @@ _NORMALIZED_CSV_DEPRECATION = (
 
 BUDDY_FORMULA_COLUMNS = tuple(f"Pred Formula ({idx})" for idx in range(1, 6))
 BUDDY_SCORE_COLUMNS = tuple(f"BUDDY Score ({idx})" for idx in range(1, 6))
+BUDDY_PROB_COLUMNS = tuple(f"BUDDY Prob ({idx})" for idx in range(1, 6))
 BUDDY_COLUMNS = ("ID", "Adduct", *BUDDY_FORMULA_COLUMNS, *BUDDY_SCORE_COLUMNS)
 
 SIRIUS_FORMULA_COLUMNS = tuple(f"Pred Formula ({idx})" for idx in range(1, 6))
 SIRIUS_ADDUCT_COLUMNS = tuple(f"Pred Adduct ({idx})" for idx in range(1, 6))
 SIRIUS_SCORE_COLUMNS = tuple(f"SIRIUS Score ({idx})" for idx in range(1, 6))
+SIRIUS_PROB_COLUMNS = tuple(f"SIRIUS Prob ({idx})" for idx in range(1, 6))
 SIRIUS_COLUMNS = (
     "ID",
     *(
@@ -114,7 +117,8 @@ def load_sirius_results(path: str | Path) -> pd.DataFrame:
             DeprecationWarning,
             stacklevel=2,
         )
-        return _normalize_sirius(df)
+        # The pre-native msfiddle pipeline exported SiriusScore.
+        return _normalize_sirius(df, log_scores=True)
     return _normalize_sirius_native(df)
 
 
@@ -155,7 +159,22 @@ def _normalize_buddy(df: pd.DataFrame) -> pd.DataFrame:
         normalized[column] = normalized[column].map(_clean_formula)
     for column in BUDDY_SCORE_COLUMNS:
         normalized[column] = pd.to_numeric(normalized[column], errors="coerce")
+    normalized[list(BUDDY_PROB_COLUMNS)] = _buddy_probs(normalized)
     return normalized.dropna(subset=["ID"]).reset_index(drop=True)
+
+
+def _buddy_probs(df: pd.DataFrame) -> np.ndarray:
+    """Per-candidate probabilities recovered from msbuddy's FDR column.
+
+    msbuddy's FDR for rank k is cumulative, 1 - mean(p_1..p_k) over its
+    normalized candidate probabilities, so p_k = k(1 - FDR_k) -
+    (k - 1)(1 - FDR_(k-1)). A missing FDR leaves that rank and those below
+    it without a probability.
+    """
+    fdr = df[list(BUDDY_SCORE_COLUMNS)].to_numpy(dtype=float, na_value=np.nan)
+    cumulative = np.arange(1, 6) * (1.0 - fdr)
+    previous = np.hstack([np.zeros((len(df), 1)), cumulative[:, :-1]])
+    return np.clip(cumulative - previous, 0.0, 1.0)
 
 
 def _load_msbuddy_directory(path: Path) -> pd.DataFrame:
@@ -276,7 +295,10 @@ def _find_sirius_formula_file(path: Path) -> Path:
     return sorted(candidates, key=priority)[0]
 
 
-def _normalize_sirius(df: pd.DataFrame) -> pd.DataFrame:
+def _normalize_sirius(df: pd.DataFrame, *, log_scores: bool) -> pd.DataFrame:
+    """``log_scores``: the scores are SiriusScore log-scores, so a softmax over
+    each spectrum's candidates gives ``SIRIUS Prob (k)``; otherwise those
+    columns stay empty."""
     normalized = df.loc[:, SIRIUS_COLUMNS].copy()
     normalized["ID"] = normalized["ID"].map(_clean_identifier)
     for column in SIRIUS_FORMULA_COLUMNS:
@@ -285,7 +307,24 @@ def _normalize_sirius(df: pd.DataFrame) -> pd.DataFrame:
         normalized[column] = normalized[column].map(_clean_text)
     for column in SIRIUS_SCORE_COLUMNS:
         normalized[column] = pd.to_numeric(normalized[column], errors="coerce")
+    scores = normalized[list(SIRIUS_SCORE_COLUMNS)].to_numpy(dtype=float)
+    normalized[list(SIRIUS_PROB_COLUMNS)] = (
+        _softmax_rows(scores) if log_scores else np.nan
+    )
     return normalized.dropna(subset=["ID"]).reset_index(drop=True)
+
+
+def _softmax_rows(scores: np.ndarray) -> np.ndarray:
+    """Softmax over each row's non-missing entries; missing entries stay NaN."""
+    present = ~np.isnan(scores)
+    shifted = np.where(present, scores, -np.inf)
+    row_max = shifted.max(axis=1, keepdims=True)
+    row_max[~np.isfinite(row_max)] = 0.0
+    weights = np.exp(shifted - row_max)
+    totals = weights.sum(axis=1, keepdims=True)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        probs = weights / totals
+    return np.where(present, probs, np.nan)
 
 
 def _normalize_sirius_native(df: pd.DataFrame) -> pd.DataFrame:
@@ -326,7 +365,10 @@ def _normalize_sirius_native(df: pd.DataFrame) -> pd.DataFrame:
             out[f"Pred Adduct ({idx})"] = row["_msfiddle_adduct"]
             out[f"SIRIUS Score ({idx})"] = row["_msfiddle_score"]
         rows.append(out)
-    return _normalize_sirius(pd.DataFrame(rows, columns=SIRIUS_COLUMNS))
+    return _normalize_sirius(
+        pd.DataFrame(rows, columns=SIRIUS_COLUMNS),
+        log_scores=_canonical_column(score_column) == "siriusscore",
+    )
 
 
 def _first_existing(df: pd.DataFrame, candidates: Iterable[str]) -> str | None:

@@ -2,7 +2,9 @@
 # NIST23 hold-out: compounds new in NIST23 form the test set; train the TCN and
 # rescore models on the rest and evaluate on it. Run from the repository root;
 # raw data as for train_release_v2.2.sh. GPU indices are for one machine.
+# The test sets are also run with BUDDY and SIRIUS.
 set -e
+source running_scripts/compare.sh
 
 DATA=./data/nist23_pkl
 
@@ -27,7 +29,6 @@ for spec in "qtof agilent nist20 nist23 mona waters gnps" "orbitrap nist20 nist2
         --test_data $DATA/${INST}_rescore_test.pkl \
         --config_path $CONFIG --resume_path $TCN --checkpoint_path $RESCORE --device 0
 
-    python -m msfiddle predict --test_data $DATA/${INST}_test.mgf \
-        --config_path $CONFIG --resume_path $TCN --rescore_resume_path $RESCORE \
-        --num_workers 8 --eval --result_path ./result/fiddle_${INST}_nist23.csv
+    compare $DATA/${INST}_test.mgf $INST ${INST}_nist23 \
+        --config_path $CONFIG --resume_path $TCN --rescore_resume_path $RESCORE
 done

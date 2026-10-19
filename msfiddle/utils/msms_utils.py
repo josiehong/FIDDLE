@@ -1,9 +1,7 @@
 import numpy as np
-import re
 from tqdm import tqdm
 
 from rdkit import Chem, RDLogger
-from rdkit.Chem import AllChem
 from rdkit.Chem.rdMolDescriptors import CalcMolFormula
 
 RDLogger.DisableLog("rdApp.*")

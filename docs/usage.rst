@@ -170,6 +170,39 @@ individual SIRIUS formula summary file directly. If only one external tool is
 available, omit the other option. See :doc:`formats` for the native formats
 and the deprecated msfiddle-normalized schemas.
 
+Integrated scoring
+~~~~~~~~~~~~~~~~~~
+
+By default, BUDDY and SIRIUS candidates only join FIDDLE's refinement, and the
+FIDDLE rescore alone ranks them. ``--integrate`` ranks the candidates by all
+three tools' scores together:
+
+.. code-block:: bash
+
+   msfiddle predict --test_data /path/to/data.mgf \
+            --buddy_path /path/to/buddy_output \
+            --sirius_path /path/to/sirius_output \
+            --integrate 1 1 1 \
+            --result_path /path/to/results.csv
+
+Each candidate scores ``W_FIDDLE * rescore + W_BUDDY * p_BUDDY + W_SIRIUS *
+p_SIRIUS`` (weights default to ``1 1 1``), and the results gain
+``Integrated Score (k)`` columns. A tool that did not propose a candidate adds
+0 for it.
+
+- ``p_BUDDY`` is msbuddy's normalized candidate probability, recovered from its
+  cumulative ``estimated_fdr``. Pass the full msbuddy output directory (run with
+  ``-d``): the summary file alone has it for rank 1 only.
+- ``p_SIRIUS`` is the softmax of ``SiriusScore`` over the spectrum's SIRIUS
+  candidates, so export a top-k summary (``--top-k-summary``); with only the
+  top hit it would always be 1. Summaries scored by another column do not
+  contribute.
+- BUDDY and SIRIUS candidates outside FIDDLE's refinement window are scored
+  too, if within 20 ppm of the neutral mass.
+
+``scripts/run_buddy_sirius.py`` in the repository runs both tools on an MGF
+file with these settings.
+
 Python API
 ----------
 

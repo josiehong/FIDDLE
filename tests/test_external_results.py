@@ -1,3 +1,5 @@
+import math
+
 import pandas as pd
 import pytest
 
@@ -161,3 +163,50 @@ def test_legacy_normalized_csv_is_deprecated_but_loads(tmp_path, loader, tool, c
     assert result.loc[0, "Pred Formula (1)"] == "C4H6N4O3"
     assert result.loc[0, f"{tool} Score (1)"] == pytest.approx(0.1)
     assert pd.isna(result.loc[0, "Pred Formula (2)"])
+
+
+def test_buddy_probability_is_recovered_from_cumulative_fdr(tmp_path):
+    # msbuddy: FDR_k = 1 - mean(p_1..p_k); for p = (0.6, 0.3, 0.1)
+    _write_msbuddy_summary(
+        tmp_path / "msbuddy_result_summary.tsv",
+        [("spec-1", 100.0, ["C4H6N4O3"], 0.4)],
+    )
+    detail_dir = tmp_path / "spec-1_mz_100.0_rt_NA"
+    detail_dir.mkdir()
+    pd.DataFrame(
+        {
+            "rank": [1, 2, 3],
+            "formula": ["C4H6N4O3", "C5H7NO2", "C6H12O6"],
+            "estimated_fdr": [0.4, 0.55, 1 - 1 / 3],
+        }
+    ).to_csv(detail_dir / "formula_results.tsv", sep="\t", index=False)
+
+    row = load_buddy_results(tmp_path).iloc[0]
+
+    assert [row[f"BUDDY Prob ({k})"] for k in (1, 2, 3)] == pytest.approx(
+        [0.6, 0.3, 0.1]
+    )
+    assert pd.isna(row["BUDDY Prob (4)"])
+
+
+def test_sirius_probability_is_softmax_of_sirius_score_only(tmp_path):
+    path = tmp_path / "formula_identifications_top-5.tsv"
+    rows = [("C4H6N4O3", 7.0), ("C5H7NO2", 5.0)]
+    pd.DataFrame(
+        [
+            {"name": "s", "molecularFormula": f, "adduct": "[M-H]-", "SiriusScore": x}
+            for f, x in rows
+        ]
+    ).to_csv(path, sep="\t", index=False)
+    row = load_sirius_results(path).iloc[0]
+    assert row["SIRIUS Prob (1)"] == pytest.approx(1 / (1 + math.exp(-2)))
+    assert row["SIRIUS Prob (1)"] + row["SIRIUS Prob (2)"] == pytest.approx(1.0)
+
+    # Other score columns have unknown scales: no probability
+    pd.DataFrame(
+        [
+            {"name": "s", "molecularFormula": f, "adduct": "[M-H]-", "rankingScore": x}
+            for f, x in rows
+        ]
+    ).to_csv(path, sep="\t", index=False)
+    assert pd.isna(load_sirius_results(path).loc[0, "SIRIUS Prob (1)"])
