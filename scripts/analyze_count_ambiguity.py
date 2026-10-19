@@ -1,7 +1,7 @@
 """Analyze count-prediction ambiguity and error anatomy from a result CSV.
 
 Reads the `Y Pred` float vectors and `Pred Formula` from a train-export or
-run_fiddle result CSV, ground truth from the test pkl, and reports:
+`msfiddle predict` result CSV, ground truth from the test pkl, and reports:
   - distribution of distance-to-nearest-integer (the ~0.5 ambiguity)
   - ambiguity split by correct vs wrong predictions
   - exact / H-only / heavy-atom error anatomy

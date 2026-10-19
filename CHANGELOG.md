@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `msfiddle` subcommands: `predict`, `eval` (top-k accuracy per spectrum and per compound, against SMILES or FORMULA in an MGF or a test .pkl), `download` and `paths`. Arguments without a subcommand still go to `predict`, `python -m msfiddle` works without installing, and `msfiddle-download-models` / `msfiddle-checkpoint-paths` remain as aliases.
+- `--num_workers` for `msfiddle predict` and `num_workers` for `predict_mgf` / `predict_from_mgf`: formula refinement in parallel processes, with identical results.
+
+### Changed
+
+- Research evaluation uses the package CLI (`python -m msfiddle predict` / `eval`), so reported accuracy comes from the same code users run. `scripts/run_fiddle.py` and `scripts/eval_topk.py` are removed. The package computes the neutral mass from the full-precision precursor m/z, which can swap a decoy candidate at the edge of the mass window; top-k accuracy is unchanged on a 300-spectrum check.
+
+### Removed
+
+- `msfiddle.test_step` and `msfiddle.rescore_candidates`, unused leftovers of the pre-API CLI.
+
 ## [2.2.0] - 2026-10-18
 
 ### Added

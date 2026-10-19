@@ -196,12 +196,16 @@ class MsFiddlePredictor:
         sirius_path: str | os.PathLike[str] | None = "",
         top_k: int | None = None,
         batch_size: int | None = None,
+        num_workers: int = 1,
     ) -> pd.DataFrame:
         """Predict formulas for spectra in an MGF file.
 
         ``buddy_path`` and ``sirius_path`` may point to either native/original
         BUDDY/msbuddy and SIRIUS formula-identification outputs or legacy
         msfiddle-normalized CSV files.
+
+        ``num_workers`` > 1 runs formula refinement (CPU-bound, per spectrum)
+        in that many processes; results are identical to a single process.
 
         The returned DataFrame uses the same result columns as the CLI CSV.
         """
@@ -226,26 +230,33 @@ class MsFiddlePredictor:
         running_time: list[float] = []
         neutral_masses: list[float] = []
 
-        prediction_iter = predictions
-        if self.verbose and predictions:
-            from tqdm import tqdm
-
-            prediction_iter = tqdm(predictions, total=len(predictions), desc="Post")
-
-        for prediction in prediction_iter:
-            start_time = time.time()
-            extra_formulas = self._external_formula_candidates(
-                prediction.spectrum.id,
-                buddy_df=buddy_df,
-                sirius_df=sirius_df,
-            )
-            results, neutral_mass = self._refine_and_rescore(
+        jobs = [
+            self._refinement_args(
                 prediction,
                 top_k,
-                extra_formulas=extra_formulas,
+                extra_formulas=self._external_formula_candidates(
+                    prediction.spectrum.id,
+                    buddy_df=buddy_df,
+                    sirius_df=sirius_df,
+                ),
+            )
+            for prediction in predictions
+        ]
+        refined = _run_refinement(
+            [refine_args for refine_args, _ in jobs], num_workers, self.verbose
+        )
+
+        for prediction, (_, neutral_mass), (refined_results, refine_time) in zip(
+            predictions, jobs, refined
+        ):
+            start_time = time.time()
+            results = self._rescore_candidates(
+                prediction.spectrum, refined_results, top_k
             )
             neutral_masses.append(neutral_mass)
-            running_time.append(prediction.prediction_time + time.time() - start_time)
+            running_time.append(
+                prediction.prediction_time + refine_time + time.time() - start_time
+            )
 
             for idx, (formula, mass, score) in enumerate(
                 zip(results["formula"], results["mass"], results["rescore"])
@@ -608,6 +619,26 @@ class MsFiddlePredictor:
         *,
         extra_formulas: Sequence[str] | None = None,
     ) -> tuple[dict[str, list[Any]], float]:
+        refine_args, neutral_mass = self._refinement_args(
+            prediction, top_k, extra_formulas=extra_formulas
+        )
+        return (
+            self._rescore_candidates(
+                prediction.spectrum,
+                formula_refinement(*refine_args),
+                top_k,
+            ),
+            neutral_mass,
+        )
+
+    def _refinement_args(
+        self,
+        prediction: _ModelPrediction,
+        top_k: int,
+        *,
+        extra_formulas: Sequence[str] | None = None,
+    ) -> tuple[tuple, float]:
+        """Positional arguments of formula_refinement for one prediction."""
         neutral_mass = float(
             mass_calculator(
                 prediction.spectrum.precursor_type,
@@ -628,7 +659,7 @@ class MsFiddlePredictor:
                 refine_atom_type.append(atom)
                 refine_atom_num.append(max(1, int(count)))
 
-        refined_results = formula_refinement(
+        refine_args = (
             f0_list,
             neutral_mass,
             self.config["post_processing"]["mass_tolerance"],
@@ -639,14 +670,7 @@ class MsFiddlePredictor:
             refine_atom_type,
             refine_atom_num,
         )
-        return (
-            self._rescore_candidates(
-                prediction.spectrum,
-                refined_results,
-                top_k,
-            ),
-            neutral_mass,
-        )
+        return refine_args, neutral_mass
 
     def _rescore_candidates(
         self,
@@ -828,6 +852,34 @@ class MsFiddlePredictor:
         return candidates
 
 
+def _timed_refinement(refine_args: tuple) -> tuple[dict[str, list[Any]], float]:
+    start_time = time.time()
+    return formula_refinement(*refine_args), time.time() - start_time
+
+
+def _run_refinement(
+    jobs: Sequence[tuple], num_workers: int, verbose: bool
+) -> list[tuple[dict[str, list[Any]], float]]:
+    """Refine every job, in num_workers processes when > 1, preserving order."""
+    if verbose and jobs:
+        from tqdm import tqdm
+
+        def progress(it):
+            return tqdm(it, total=len(jobs), desc="Refine")
+
+    else:
+
+        def progress(it):
+            return it
+
+    if num_workers > 1 and len(jobs) > 1:
+        from multiprocessing import Pool
+
+        with Pool(num_workers) as pool:
+            return list(progress(pool.imap(_timed_refinement, jobs, chunksize=16)))
+    return [_timed_refinement(job) for job in progress(jobs)]
+
+
 def predict_from_spectrum(
     mz_array: Sequence[float],
     intensity_array: Sequence[float],
@@ -909,6 +961,7 @@ def predict_from_mgf(
     download_models: bool = False,
     top_k: int | None = None,
     batch_size: int = 32,
+    num_workers: int = 1,
 ) -> pd.DataFrame:
     """Predict formulas for spectra in an MGF file."""
 
@@ -928,6 +981,7 @@ def predict_from_mgf(
         sirius_path=sirius_path,
         top_k=top_k,
         batch_size=batch_size,
+        num_workers=num_workers,
     )
 
 

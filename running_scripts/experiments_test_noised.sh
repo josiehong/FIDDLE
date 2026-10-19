@@ -28,14 +28,14 @@ python mgf_instances.py --input_path ./data/noised/noised_orbitrap_test.mgf \
 # II. Test on noised spectra (FIDDLE)
 # ----------------------------------------
 # For QTOF
-python scripts/run_fiddle.py --test_data ./data/noised/noised_qtof_test.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/noised/noised_qtof_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
 --result_path ./result/fiddle_qtof_noised_100724.csv --device 6
 
 # For Orbitrap
-python scripts/run_fiddle.py --test_data ./data/noised/noised_orbitrap_test.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/noised/noised_orbitrap_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_031826.pt \

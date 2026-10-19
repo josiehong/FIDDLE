@@ -75,23 +75,23 @@ END IONS
 **Run FIDDLE!**
 
 ```bash
-python scripts/run_fiddle.py --test_data ./msfiddle/demo/input_msms.mgf \
-                    --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
-                    --resume_path ./check_point/fiddle_tcn_orbitrap.pt \
-                    --rescore_resume_path ./check_point/fiddle_rescore_orbitrap.pt \
-                    --result_path ./msfiddle/demo/output_fiddle.csv --device 0
+msfiddle predict --test_data ./msfiddle/demo/input_msms.mgf \
+                 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
+                 --resume_path ./check_point/fiddle_tcn_orbitrap.pt \
+                 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap.pt \
+                 --result_path ./msfiddle/demo/output_fiddle.csv --device 0
 ```
 
 If you'd like to integrate the results from SIRIUS and BUDDY, please organize the results in the format shown in `./msfiddle/demo/buddy_output.csv` and `./msfiddle/demo/sirius_output.csv`, and provide them to run FIDDLE:
 
 ```bash
-python scripts/run_fiddle.py --test_data ./msfiddle/demo/input_msms.mgf \
-                    --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
-                    --resume_path ./check_point/fiddle_tcn_orbitrap.pt \
-                    --rescore_resume_path ./check_point/fiddle_rescore_orbitrap.pt \
-                    --buddy_path ./msfiddle/demo/output_buddy.csv \
-                    --sirius_path ./msfiddle/demo/output_sirius.csv \
-                    --result_path ./msfiddle/demo/output_fiddle_all.csv --device 0
+msfiddle predict --test_data ./msfiddle/demo/input_msms.mgf \
+                 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
+                 --resume_path ./check_point/fiddle_tcn_orbitrap.pt \
+                 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap.pt \
+                 --buddy_path ./msfiddle/demo/output_buddy.csv \
+                 --sirius_path ./msfiddle/demo/output_sirius.csv \
+                 --result_path ./msfiddle/demo/output_fiddle_all.csv --device 0
 ```
 
 See [`scripts/test_caffeine.py`](https://github.com/JosieHong/FIDDLE/blob/main/scripts/test_caffeine.py) for a worked example running FIDDLE on a caffeine Orbitrap spectrum fetched live from GNPS.

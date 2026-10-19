@@ -87,14 +87,14 @@ python scripts/train_rescore.py --train_data ./data/cl_pkl_031826/orbitrap_resco
 # IV. Test on QTOF
 # --------------------------
 # FIDDLES
-python scripts/run_fiddle.py --test_data ./data/cl_pkl_031826/qtof_maxmin_test.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/cl_pkl_031826/qtof_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
 --result_path ./result/fiddle_qtof_031826.csv --device 5
 
 # FIDDLE + BUDDY
-python scripts/run_fiddle.py --test_data ./data/cl_pkl_031826/qtof_maxmin_test.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/cl_pkl_031826/qtof_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
@@ -107,14 +107,14 @@ python scripts/run_fiddle.py --test_data ./data/cl_pkl_031826/qtof_maxmin_test.m
 # V. Test on Orbitrap
 # --------------------------
 # FIDDLES
-python scripts/run_fiddle.py --test_data ./data/cl_pkl_031826/orbitrap_maxmin_test.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/cl_pkl_031826/orbitrap_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_031826.pt \
 --result_path ./result/fiddle_orbitrap_031826.csv --device 4
 
 # FIDDLE + BUDDY
-python scripts/run_fiddle.py --test_data ./data/cl_pkl_031826/orbitrap_maxmin_test.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/cl_pkl_031826/orbitrap_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_031826.pt \
@@ -126,18 +126,18 @@ python scripts/run_fiddle.py --test_data ./data/cl_pkl_031826/orbitrap_maxmin_te
 # --------------------------
 # VI. Test on CASMI and EMBL
 # --------------------------
-python scripts/run_fiddle.py --test_data ./data/casmi2016.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/casmi2016.mgf \
                 --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --result_path ./result/fiddle_casmi16_exnist23.csv 
-python scripts/run_fiddle.py --test_data ./data/casmi2016.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/casmi2016.mgf \
                 --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --buddy_path ./run_buddy/buddy_casmi2016.csv \
                 --result_path ./result/two_casmi16_exnist23.csv 
-python scripts/run_fiddle.py --test_data ./data/casmi2016.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/casmi2016.mgf \
                 --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
@@ -145,18 +145,18 @@ python scripts/run_fiddle.py --test_data ./data/casmi2016.mgf \
                 --sirius_path ./run_sirius/sirius_casmi2016.csv \
                 --result_path ./result/all_casmi16_exnist23.csv 
 
-python scripts/run_fiddle.py --test_data ./data/casmi2017.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/casmi2017.mgf \
                 --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --result_path ./result/fiddle_casmi17_exnist23.csv 
-python scripts/run_fiddle.py --test_data ./data/casmi2017.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/casmi2017.mgf \
                 --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --buddy_path ./run_buddy/buddy_casmi2017.csv \
                 --result_path ./result/two_casmi17_exnist23.csv 
-python scripts/run_fiddle.py --test_data ./data/casmi2017.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/casmi2017.mgf \
                 --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
@@ -164,18 +164,18 @@ python scripts/run_fiddle.py --test_data ./data/casmi2017.mgf \
                 --sirius_path ./run_sirius/sirius_casmi2017.csv \
                 --result_path ./result/all_casmi17_exnist23.csv 
 
-python scripts/run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/embl_mcf_2.0.mgf \
                 --config_path ./msfiddle/config/fiddle_tcn_embl.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --result_path ./result/fiddle_embl_exnist23.csv 
-python scripts/run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/embl_mcf_2.0.mgf \
                 --config_path ./msfiddle/config/fiddle_tcn_embl.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
                 --buddy_path ./run_buddy/buddy_embl.csv \
                 --result_path ./result/two_embl_exnist23.csv 
-python scripts/run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/embl_mcf_2.0.mgf \
                 --config_path ./msfiddle/config/fiddle_tcn_embl.yml \
                 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
                 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \

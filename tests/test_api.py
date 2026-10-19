@@ -237,18 +237,21 @@ def test_predict_mgf_loads_native_external_outputs(monkeypatch, tmp_path):
             )
         ]
 
-    def fake_refine_and_rescore(self, prediction, top_k, *, extra_formulas=None):
+    def fake_refinement_args(self, prediction, top_k, *, extra_formulas=None):
         seen_extra_formulas.extend(extra_formulas or [])
-        return (
-            {"formula": ["C4H6N4O3"], "mass": [146.0], "rescore": [0.9]},
-            146.0,
-        )
+        return (), 146.0
+
+    def fake_run_refinement(jobs, num_workers, verbose):
+        return [({"formula": ["C4H6N4O3"], "mass": [146.0]}, 0.0) for _ in jobs]
+
+    def fake_rescore(self, spectrum, refined_results, top_k):
+        return {**refined_results, "rescore": [0.9]}
 
     monkeypatch.setattr(MsFiddlePredictor, "_load_mgf_spectra", fake_load_mgf_spectra)
     monkeypatch.setattr(MsFiddlePredictor, "_predict_encoded", fake_predict_encoded)
-    monkeypatch.setattr(
-        MsFiddlePredictor, "_refine_and_rescore", fake_refine_and_rescore
-    )
+    monkeypatch.setattr(MsFiddlePredictor, "_refinement_args", fake_refinement_args)
+    monkeypatch.setattr(api, "_run_refinement", fake_run_refinement)
+    monkeypatch.setattr(MsFiddlePredictor, "_rescore_candidates", fake_rescore)
 
     result = predictor.predict_mgf(
         tmp_path / "unused.mgf",

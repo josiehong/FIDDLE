@@ -272,22 +272,22 @@ done
 # ============================================================================
 
 (
-python scripts/run_fiddle.py --test_data $PKL_DIR/qtof_maxmin_test.mgf \
+python -m msfiddle predict --num_workers 8 --test_data $PKL_DIR/qtof_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path $TCN_QTOF \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_$TAG.pt \
 --result_path ./result/fiddle_qtof_$TAG.csv --device $DEV1_QTOF
-python scripts/eval_topk.py --result ./result/fiddle_qtof_$TAG.csv \
+python -m msfiddle eval --result ./result/fiddle_qtof_$TAG.csv \
 --test_data $PKL_DIR/qtof_maxmin_test.pkl --topk 20
 ) > eval_qtof_$TAG.log 2>&1 &
 
 (
-python scripts/run_fiddle.py --test_data $PKL_DIR/orbitrap_maxmin_test.mgf \
+python -m msfiddle predict --num_workers 8 --test_data $PKL_DIR/orbitrap_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path $TCN_ORBITRAP \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_$TAG.pt \
 --result_path ./result/fiddle_orbitrap_$TAG.csv --device $DEV1_ORBITRAP
-python scripts/eval_topk.py --result ./result/fiddle_orbitrap_$TAG.csv \
+python -m msfiddle eval --result ./result/fiddle_orbitrap_$TAG.csv \
 --test_data $PKL_DIR/orbitrap_maxmin_test.pkl --topk 20
 ) > eval_orbitrap_$TAG.log 2>&1 &
 
@@ -295,4 +295,4 @@ wait
 echo "v2.2 release cycle complete; see eval_qtof_$TAG.log / eval_orbitrap_$TAG.log"
 
 # Post-eval checks:
-# - Compare eval_topk numbers against the v2.1 release (Q-TOF top-1 70.2%).
+# - Compare the eval tables against the v2.1 release (Q-TOF top-1 70.2%).

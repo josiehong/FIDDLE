@@ -30,12 +30,6 @@ def __getattr__(name):
         globals()["FormulaEncoder"] = FormulaEncoder
         globals()["RescoreHead"] = RescoreHead
         return globals()[name]
-    if name in ("test_step", "rescore_candidates"):
-        from .main import rescore_candidates, test_step
-
-        globals()["test_step"] = test_step
-        globals()["rescore_candidates"] = rescore_candidates
-        return globals()[name]
     raise AttributeError(f"module 'msfiddle' has no attribute {name!r}")
 
 
@@ -52,8 +46,6 @@ __all__ = [
     "mass_calculator",
     "vector_to_formula",
     "formula_to_vector",
-    "test_step",
-    "rescore_candidates",
     "download_models",
     "check_models_exist",
     "get_model_path",

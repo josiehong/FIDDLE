@@ -36,38 +36,38 @@ python mgf_instances.py --input_path ./data/chimeric/orbitrap_test_chimeric50.mg
 # II. Test on chimeric spectra (FIDDLE)
 # --------------------------
 # For QTOF
-python scripts/run_fiddle.py --test_data ./data/chimeric/qtof_test_chimeric90.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/chimeric/qtof_test_chimeric90.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
 --result_path ./result/fiddle_qtof_chimeric90_100724.csv --device 6 
 
-python scripts/run_fiddle.py --test_data ./data/chimeric/qtof_test_chimeric70.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/chimeric/qtof_test_chimeric70.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
 --result_path ./result/fiddle_qtof_chimeric70_100724.csv --device 6
 
-python scripts/run_fiddle.py --test_data ./data/chimeric/qtof_test_chimeric50.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/chimeric/qtof_test_chimeric50.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_031826.pt \
 --result_path ./result/fiddle_qtof_chimeric50_100724.csv --device 6
 
 # For Orbitrap
-python scripts/run_fiddle.py --test_data ./data/chimeric/orbitrap_test_chimeric90.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/chimeric/orbitrap_test_chimeric90.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_031826.pt \
 --result_path ./result/fiddle_orbitrap_chimeric90_100724.csv --device 6
 
-python scripts/run_fiddle.py --test_data ./data/chimeric/orbitrap_test_chimeric70.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/chimeric/orbitrap_test_chimeric70.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_031826.pt \
 --result_path ./result/fiddle_orbitrap_chimeric70_100724.csv --device 6
 
-python scripts/run_fiddle.py --test_data ./data/chimeric/orbitrap_test_chimeric50.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/chimeric/orbitrap_test_chimeric50.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_031826.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_031826.pt \

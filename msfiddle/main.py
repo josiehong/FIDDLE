@@ -26,113 +26,6 @@ def validate_checkpoint_paths(resume_path, rescore_resume_path):
         raise FileNotFoundError(_checkpoint_error_message(missing_paths))
 
 
-def test_step(model, loader, device):
-    import torch
-    from tqdm import tqdm
-
-    model.eval()
-    spec_ids = []
-    y_pred = []
-    exp_precursor_mz = []
-    exp_precursor_type = []
-    mass_pred = []
-    atomnum_pred = []
-    hcnum_pred = []
-    with tqdm(total=len(loader)) as bar:
-        for _, batch in enumerate(loader):
-            spec_id, exp_pre_type, x, env, neutral_add = batch
-            x = x.to(device, dtype=torch.float32)
-            env = env.to(device, dtype=torch.float32)
-            neutral_add = neutral_add.to(device, dtype=torch.float32)
-            exp_pre_mz = env[:, 0]
-
-            with torch.no_grad():
-                _, pred_f, pred_mass, pred_atomnum, pred_hcnum = model(x, env)
-            pred_f = pred_f - neutral_add  # add the neutral adduct
-
-            bar.set_description("Eval")
-            bar.update(1)
-
-            spec_ids = spec_ids + list(spec_id)
-            y_pred.append(pred_f.detach().cpu())
-            exp_precursor_mz.append(exp_pre_mz.detach().cpu())
-            exp_precursor_type = exp_precursor_type + list(exp_pre_type)
-            mass_pred.append(pred_mass.detach().cpu())
-            atomnum_pred.append(pred_atomnum.detach().cpu())
-            hcnum_pred.append(pred_hcnum.detach().cpu())
-
-    y_pred = torch.cat(y_pred, dim=0)
-    exp_precursor_mz = torch.cat(exp_precursor_mz, dim=0)
-    mass_pred = torch.cat(mass_pred, dim=0)
-    atomnum_pred = torch.cat(atomnum_pred, dim=0)
-    hcnum_pred = torch.cat(hcnum_pred, dim=0)
-    return (
-        spec_ids,
-        y_pred,
-        exp_precursor_mz,
-        exp_precursor_type,
-        mass_pred,
-        atomnum_pred,
-        hcnum_pred,
-    )
-
-
-def rescore_candidates(
-    spec_encoder, formula_encoder, rescore_head, spec, env, refined_results, device, K
-):
-    """Rescore candidates using the Siamese interaction head.
-
-    Score = sigmoid(RescoreHead(z_spec ⊙ FormulaEncoder(formula_vec))).
-    Candidates are ranked by rescore score directly.
-    """
-    import numpy as np
-    import torch
-    import torch.nn.functional as F
-
-    from .utils.mol_utils import formula_to_vector
-
-    formula_encoder.eval()
-    rescore_head.eval()
-    spec_encoder.eval()
-
-    refine_f = [f for f in refined_results["formula"] if f is not None]
-    refine_m = [m for m in refined_results["mass"] if m is not None]
-    if not refine_f:
-        refined_results["rescore"] = [0.0] * K
-        return refined_results
-
-    f_vecs = torch.from_numpy(np.array([formula_to_vector(s) for s in refine_f]))
-    spec_t = spec.to(device, dtype=torch.float32)
-    env_t = env.to(device, dtype=torch.float32).clone()
-    env_t[:, 0] = 0.0  # zero out precursor_mz to match training
-
-    with torch.no_grad():
-        z_spec, _, _, _, _ = spec_encoder(spec_t, env_t)
-        z_spec = F.normalize(z_spec, dim=1)  # (1, D)
-        z_spec_rep = z_spec.expand(len(refine_f), -1)  # (K, D)
-
-        f_t = f_vecs.to(device, dtype=torch.float32)
-        z_form = formula_encoder(f_t)  # (K, D)
-
-        interaction = z_spec_rep * z_form  # (K, D)
-        logits = rescore_head(interaction)  # (K,)
-        rescore_scores = torch.sigmoid(logits).cpu().numpy()
-
-    ranked = sorted(
-        zip(rescore_scores, refine_f, refine_m),
-        key=lambda x: x[0],
-        reverse=True,
-    )
-    sorted_rescore, sorted_f, sorted_m = map(list, zip(*ranked))
-
-    while len(sorted_f) < K:
-        sorted_f.append(None)
-        sorted_rescore.append(0.0)
-        sorted_m.append(None)
-
-    return {"formula": sorted_f, "mass": sorted_m, "rescore": sorted_rescore}
-
-
 def init_random_seed(seed):
     import numpy as np
 
@@ -147,9 +40,10 @@ def init_random_seed(seed):
     return
 
 
-def main():
-    parser = argparse.ArgumentParser(description="msfiddle")
+SUBCOMMANDS = ("predict", "eval", "download", "paths")
 
+
+def _add_predict_args(parser):
     # Define two exclusive argument groups
     mode_group = parser.add_mutually_exclusive_group(required=True)
     mode_group.add_argument(
@@ -204,6 +98,15 @@ def main():
         help="Which GPUs to use if any (default: [0]). Accepts multiple values separated by space.",
     )
     parser.add_argument("--no_cuda", action="store_true", help="Disables CUDA")
+    parser.add_argument(
+        "--batch_size", type=int, default=32, help="Spectra per inference batch"
+    )
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=1,
+        help="Processes for formula refinement (default: 1)",
+    )
 
     # Add advanced arguments for custom configurations
     advanced_group = parser.add_argument_group("Advanced options")
@@ -219,8 +122,8 @@ def main():
         help="Custom path to pretrained rescore model",
     )
 
-    args = parser.parse_args()
 
+def _predict(args, parser):
     # Initialize random seed
     init_random_seed(args.seed)
 
@@ -278,17 +181,93 @@ def main():
         resume_path=resume_path,
         rescore_resume_path=rescore_resume_path,
         download_models=False,
+        batch_size=args.batch_size,
         verbose=True,
     )
     res_df = predictor.predict_mgf(
         test_data_path,
         buddy_path=args.buddy_path,
         sirius_path=args.sirius_path,
+        num_workers=args.num_workers,
     )
 
     print("\nSaving predicted results...")
     res_df.to_csv(args.result_path, index=False)
     print(f"Done! Results saved to {args.result_path}")
+
+
+def _eval(args, parser):
+    import pandas as pd
+
+    from .evaluate import load_truth, topk_accuracy
+
+    try:
+        result = topk_accuracy(
+            pd.read_csv(args.result), load_truth(args.test_data), args.topk
+        )
+    except ValueError as exc:
+        parser.exit(status=1, message=f"{exc}\n")
+    print("Eval: {}  vs  {}".format(args.result, args.test_data))
+    print(result.format())
+
+
+def _download(args, parser):
+    from .download import download_models
+
+    download_models(destination=args.destination, models=args.models)
+
+
+def _paths(args, parser):
+    from .download import print_checkpoint_paths
+
+    print_checkpoint_paths()
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog="msfiddle",
+        description=(
+            "msfiddle: chemical formula prediction from MS/MS spectra. "
+            "Without a subcommand, the arguments are passed to 'predict'."
+        ),
+    )
+    sub = parser.add_subparsers(dest="command", metavar="{predict,eval,download,paths}")
+
+    p = sub.add_parser("predict", help="Predict formulas for an MGF file")
+    _add_predict_args(p)
+    p.set_defaults(func=_predict)
+
+    p = sub.add_parser("eval", help="Top-k accuracy of a result CSV")
+    p.add_argument("--result", required=True, help="Result CSV from 'predict'")
+    p.add_argument(
+        "--test_data",
+        required=True,
+        help="Known formulas: MGF (SMILES or FORMULA field) or test .pkl",
+    )
+    p.add_argument("--topk", type=int, default=10, help="Largest k to report")
+    p.set_defaults(func=_eval)
+
+    p = sub.add_parser("download", help="Download the pre-trained models")
+    p.add_argument("-d", "--destination", help="Directory to save the models")
+    p.add_argument("-m", "--models", nargs="+", help="Model names (default: all)")
+    p.set_defaults(func=_download)
+
+    p = sub.add_parser("paths", help="Show the checkpoint directory and models")
+    p.set_defaults(func=_paths)
+    return parser
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # Keep the pre-subcommand form working: `msfiddle --test_data ...`
+    if argv and argv[0] not in SUBCOMMANDS and argv[0] not in ("-h", "--help"):
+        argv = ["predict"] + argv
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.command is None:
+        parser.print_help()
+        parser.exit(status=1)
+    args.func(args, parser)
 
 
 if __name__ == "__main__":

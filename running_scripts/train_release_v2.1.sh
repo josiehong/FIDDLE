@@ -90,12 +90,12 @@ python scripts/train_rescore.py \
 # ============================================================================
 
 # --- 2a. Held-out test + top-k accuracy (per spectrum & per compound): QTOF --
-python scripts/run_fiddle.py --test_data ./data/cl_pkl_060526/qtof_maxmin_test.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/cl_pkl_060526/qtof_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_060526.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_060526.pt \
 --result_path ./result/fiddle_qtof_060526.csv --device 5
-python scripts/eval_topk.py --result ./result/fiddle_qtof_060526.csv \
+python -m msfiddle eval --result ./result/fiddle_qtof_060526.csv \
 --test_data ./data/cl_pkl_060526/qtof_maxmin_test.pkl --topk 5
 # Joined: 12627 spectra / 1540 compounds  (matched 12627/12627 result rows)
 #             top-1   top-2   top-3   top-4   top-5 
@@ -103,26 +103,26 @@ python scripts/eval_topk.py --result ./result/fiddle_qtof_060526.csv \
 # compound   72.8%   77.3%   78.2%   78.5%   78.7%
 
 # --- 2b. Held-out test + top-k accuracy (per spectrum & per compound): Orbitrap
-python scripts/run_fiddle.py --test_data ./data/cl_pkl_060526/orbitrap_maxmin_test.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/cl_pkl_060526/orbitrap_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_060526.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_060526.pt \
 --result_path ./result/fiddle_orbitrap_060526.csv --device 4
-python scripts/eval_topk.py --result ./result/fiddle_orbitrap_060526.csv \
+python -m msfiddle eval --result ./result/fiddle_orbitrap_060526.csv \
 --test_data ./data/cl_pkl_060526/orbitrap_maxmin_test.pkl --topk 5
 
 # --- 2c. External test: CASMI and EMBL (QTOF model) --------------------------
-python scripts/run_fiddle.py --test_data ./data/casmi2016.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/casmi2016.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_060526.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_060526.pt \
 --result_path ./result/fiddle_casmi16_060526.csv
-python scripts/run_fiddle.py --test_data ./data/casmi2017.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/casmi2017.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_casmi.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_060526.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_060526.pt \
 --result_path ./result/fiddle_casmi17_060526.csv
-python scripts/run_fiddle.py --test_data ./data/embl_mcf_2.0.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/embl_mcf_2.0.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_embl.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_060526.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_060526.pt \
@@ -169,12 +169,12 @@ python scripts/train_rescore.py \
 --resume_path ./check_point/fiddle_tcn_qtof_060526_cek8.pt \
 --checkpoint_path ./check_point/fiddle_rescore_qtof_060526_cek8.pt --device 5
 
-python scripts/run_fiddle.py --test_data ./data/cl_pkl_060526/qtof_maxmin_test.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/cl_pkl_060526/qtof_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_qtof_060526_cek8.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_060526_cek8.pt \
 --result_path ./result/fiddle_qtof_060526_cek8.csv --device 5
-python scripts/eval_topk.py --result ./result/fiddle_qtof_060526_cek8.csv \
+python -m msfiddle eval --result ./result/fiddle_qtof_060526_cek8.csv \
 --test_data ./data/cl_pkl_060526/qtof_maxmin_test.pkl --topk 5
 # Compare against PART 2a (baseline). Per-compound row is the headline.
 
@@ -205,12 +205,12 @@ python scripts/train_rescore.py \
 --resume_path ./check_point/fiddle_tcn_orbitrap_060526_cek16.pt \
 --checkpoint_path ./check_point/fiddle_rescore_orbitrap_060526_cek16.pt --device 4
 
-python scripts/run_fiddle.py --test_data ./data/cl_pkl_060526/orbitrap_maxmin_test.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/cl_pkl_060526/orbitrap_maxmin_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
 --resume_path ./check_point/fiddle_tcn_orbitrap_060526_cek16.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_060526_cek16.pt \
 --result_path ./result/fiddle_orbitrap_060526_cek16.csv --device 4
-python scripts/eval_topk.py --result ./result/fiddle_orbitrap_060526_cek16.csv \
+python -m msfiddle eval --result ./result/fiddle_orbitrap_060526_cek16.csv \
 --test_data ./data/cl_pkl_060526/orbitrap_maxmin_test.pkl --topk 5
 # Compare against PART 2b (baseline).
 

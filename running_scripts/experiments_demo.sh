@@ -44,7 +44,7 @@ nohup python scripts/train_rescore.py --train_data ./data/demo_cl_pkl/qtof_rando
 --device 4 5 > fiddle_rescore_demo_qtof_cl.out
 
 # FIDDLES (test)
-python scripts/run_fiddle.py --test_data ./data/demo_cl_pkl/qtof_random_test.mgf \
+python -m msfiddle predict --num_workers 8 --test_data ./data/demo_cl_pkl/qtof_random_test.mgf \
 --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \
 --resume_path ./check_point/fiddle_tcn_demo_qtof_cl.pt \
 --rescore_resume_path ./check_point/fiddle_rescore_demo_qtof_cl.pt \

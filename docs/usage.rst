@@ -40,6 +40,24 @@ To inspect current model paths:
 
    msfiddle-checkpoint-paths
 
+Commands
+--------
+
+``msfiddle`` has four subcommands:
+
+.. code-block:: text
+
+   msfiddle predict   predict formulas for an MGF file
+   msfiddle eval      top-k accuracy of a result CSV against known formulas
+   msfiddle download  download the pre-trained models
+   msfiddle paths     show the checkpoint directory and downloaded models
+
+Arguments without a subcommand go to ``predict``, so ``msfiddle --test_data ...``
+still works. ``python -m msfiddle ...`` is equivalent, and also works from a
+source checkout without installing the package. ``msfiddle-download-models``
+and ``msfiddle-checkpoint-paths`` remain as aliases for ``download`` and
+``paths``.
+
 Running Predictions
 --------------------
 
@@ -58,7 +76,9 @@ Running Predictions
             --result_path /path/to/results.csv \
             --device 0
 
-``--instrument_type`` accepts ``orbitrap`` (default) or ``qtof``.
+``--instrument_type`` accepts ``orbitrap`` (default) or ``qtof``. For large
+files, ``--num_workers N`` runs formula refinement in N processes (results are
+identical) and ``--batch_size`` sets the inference batch (default 32).
 
 **Custom model paths:**
 
@@ -70,6 +90,21 @@ Running Predictions
             --rescore_resume_path /path/to/rescore_model.pt \
             --result_path /path/to/results.csv \
             --device 0
+
+Evaluating Predictions
+----------------------
+
+If the true formulas are known, ``msfiddle eval`` reports cumulative top-1 to
+top-k accuracy, per spectrum and per compound (each compound weighted equally):
+
+.. code-block:: bash
+
+   msfiddle eval --result /path/to/results.csv \
+                 --test_data /path/to/data.mgf \
+                 --topk 10
+
+Spectra are matched by ``TITLE``. The truth is read from each spectrum's
+``SMILES`` field, or its ``FORMULA`` field when there is no SMILES.
 
 Integration with BUDDY and SIRIUS
 -----------------------------------
