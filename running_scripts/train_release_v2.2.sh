@@ -12,6 +12,9 @@
 #   - MSE formula loss. The Poisson count-likelihood arm was trained and
 #     evaluated 09/2026 and lost decisively (Q-TOF top-1 53.7% vs 68.2%);
 #     poisson support was removed from the code afterwards.
+#   - Muon optimizer (msfiddle/optim.py) for the TCN's matrix weights, AdamW
+#     for the rest. The release Q-TOF model trained in fp32; Orbitrap trained
+#     with --amp to fit its epochs into the available GPU time.
 #
 # PREREQUISITES
 #   (a) Config B/E post-processing is committed in
@@ -46,12 +49,12 @@ if [ "$qtof_ckpt_done" = false ] || [ "$orbitrap_ckpt_done" = false ]; then
         exit 1
     fi
 
-    # Each CL training holds its noise-augmented dataset in RAM (~77GB Q-TOF,
-    # ~200GB Orbitrap with the current x3 augmentation). Refuse to start without
-    # headroom rather than push the node into swap.
+    # Each CL training holds its dataset in RAM (Orbitrap: ~54GB train + ~7GB
+    # test as float32). Refuse to start without headroom rather than push the
+    # node into swap.
     need_ram_gb=0
     [ "$qtof_ckpt_done" = false ] && need_ram_gb=$((need_ram_gb + 100))
-    [ "$orbitrap_ckpt_done" = false ] && need_ram_gb=$((need_ram_gb + 220))
+    [ "$orbitrap_ckpt_done" = false ] && need_ram_gb=$((need_ram_gb + 80))
     avail_ram_gb=$(free -g | awk '/^Mem:/ {print $7}')
     if [ "$avail_ram_gb" -lt "$need_ram_gb" ]; then
         echo "Only ${avail_ram_gb}GB RAM available — need ~${need_ram_gb}GB for the pending trainings."
@@ -60,17 +63,9 @@ if [ "$qtof_ckpt_done" = false ] || [ "$orbitrap_ckpt_done" = false ]; then
     fi
 fi
 
-# Workaround for the degraded GPU driver on carnot (since 08/14): NCCL cannot
-# initialize its default transports in multi-GPU jobs ("NCCL Error 3: internal
-# error" in broadcast_coalesced, then glibc heap corruption). Disabling the
-# P2P/SHM transports and fencing each job to its own GPU pair via
-# CUDA_VISIBLE_DEVICES lets DataParallel run. Safe to remove after the node
-# reboot restores GPU6/NVML; costs some broadcast bandwidth on healthy nodes.
-export NCCL_P2P_DISABLE=1
-export NCCL_SHM_DISABLE=1
-
-# Fenced jobs see only their own GPUs, so the in-process device indices are
-# always 0..n-1 regardless of the physical indices in DEVICE_*.
+# Each training job is fenced to its own GPUs via CUDA_VISIBLE_DEVICES, so the
+# in-process device indices are always 0..n-1 regardless of the physical
+# indices in DEVICE_*.
 DEVICE_QTOF_CSV=${DEVICE_QTOF// /,}
 DEVICE_ORBITRAP_CSV=${DEVICE_ORBITRAP// /,}
 DEVICE_QTOF_LOCAL=$(seq -s' ' 0 $(($(echo $DEVICE_QTOF | wc -w) - 1)))
@@ -175,7 +170,7 @@ else
     --config_path ./msfiddle/config/fiddle_tcn_orbitrap.yml \
     --checkpoint_path ./check_point/fiddle_tcn_orbitrap_$TAG.pt \
     --result_path ./result/fiddle_tcn_orbitrap_$TAG.csv \
-    --device $DEVICE_ORBITRAP_LOCAL > tcn_orbitrap_$TAG.log 2>&1 &
+    --device $DEVICE_ORBITRAP_LOCAL --amp > tcn_orbitrap_$TAG.log 2>&1 &
 fi
 
 wait
@@ -275,7 +270,7 @@ python scripts/run_fiddle.py --test_data $PKL_DIR/qtof_maxmin_test.mgf \
 --rescore_resume_path ./check_point/fiddle_rescore_qtof_$TAG.pt \
 --result_path ./result/fiddle_qtof_$TAG.csv --device $DEV1_QTOF
 python scripts/eval_topk.py --result ./result/fiddle_qtof_$TAG.csv \
---test_data $PKL_DIR/qtof_maxmin_test.pkl --topk 10
+--test_data $PKL_DIR/qtof_maxmin_test.pkl --topk 20
 ) > eval_qtof_$TAG.log 2>&1 &
 
 (
@@ -285,13 +280,11 @@ python scripts/run_fiddle.py --test_data $PKL_DIR/orbitrap_maxmin_test.mgf \
 --rescore_resume_path ./check_point/fiddle_rescore_orbitrap_$TAG.pt \
 --result_path ./result/fiddle_orbitrap_$TAG.csv --device $DEV1_ORBITRAP
 python scripts/eval_topk.py --result ./result/fiddle_orbitrap_$TAG.csv \
---test_data $PKL_DIR/orbitrap_maxmin_test.pkl --topk 10
+--test_data $PKL_DIR/orbitrap_maxmin_test.pkl --topk 20
 ) > eval_orbitrap_$TAG.log 2>&1 &
 
 wait
 echo "v2.2 release cycle complete; see eval_qtof_$TAG.log / eval_orbitrap_$TAG.log"
 
 # Post-eval checks:
-# - top_k sensitivity: rerun eval_topk with --topk 10 and --topk 20 on the
-#   result CSVs; confirm accuracy peaks at (or before) K=20.
 # - Compare eval_topk numbers against the v2.1 release (Q-TOF top-1 70.2%).
