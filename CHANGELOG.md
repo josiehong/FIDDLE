@@ -6,12 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-18
+
+### Added
+
+- `msfiddle/optim.py`: Muon optimizer (momentum + Newton-Schulz orthogonalisation) for the TCN's matrix weights, with AdamW for biases, weight-norm gains and embeddings. CL training now uses it.
+- Gradient accumulation for CL training (`grad_accum_steps` in the config), so an effective batch of 512 fits on 11 GB GPUs.
+- `scripts/plot_training_log.py`: plots a training log and estimates the remaining time.
+- `scripts/analyze_count_ambiguity.py`: error anatomy (exact / H-only / heavy-atom) of a result CSV.
+
 ### Changed
 
+- Formula refinement: the best-first search is replaced by a complete bounded enumeration of every formula within the caps, ranked by heavy-atom edit distance from the prediction and then mass error. Faster, and the true formula reaches the candidate set more often.
+- Post-processing configs: S/P refinement caps, `top_k` 10 → 20 for both instruments, Orbitrap `mass_tolerance` 20 → 5 ppm to match the data filters.
+- Training: fused Siamese forward pass, optional mixed precision (`--amp`), cuDNN autotuning, ReduceLROnPlateau instead of StepLR, and early stopping on validation MAE with a minimum-epoch floor and a rolling last-epoch checkpoint.
+- Preprocessing: faster binning, O(n) pair generation, and parallel filtering/encoding.
+- Released Q-TOF and Orbitrap models retrained from scratch with Muon on rebuilt data, with rescore models retrained on enumeration-generated candidates. Held-out top-1 (per spectrum / per compound): Q-TOF 78.8% / 82.9%, Orbitrap 63.2% / 68.7%.
 - Merged the [msfiddle](https://pypi.org/project/msfiddle/) PyPI package repository into this repo. The `msfiddle/` package directory is now the single source of truth for the shared core (`model_tcn.py`, `dataset.py`, `utils/`, `config/`, `demo/`); the research scripts import from it and the former top-level copies are removed. Packaging (`setup.py`), docs (readthedocs), package tests, and the PyPI publish workflow now live here. Pre-merge package release history is appended at the bottom of this file.
 - The package picks up fixes that had only landed on the research side: `fast_mass` refinement speedup, the `generate_ms` per-bin m/z fix, the Python 3.11 `random.sample` fix, and the halogen-extended refinement configs.
 - `msfiddle/utils/refine_utils.py`: refinement search internals optimised (deque frontier with O(1) membership, `f0_list` parsed once per call, hydrogen adjustment without string round-trips) — ~3.4× faster, output verified identical against the previous implementation on 400 randomised cases.
 - Research scripts moved from the repo root into `scripts/` (shell drivers stay in `running_scripts/`, with paths updated). Each script bootstraps the repo root onto `sys.path` and the conda environments now install the package in editable mode, so `msfiddle` imports resolve regardless of working directory; scripts should still be run from the repo root so their relative default paths resolve.
+
+### Fixed
+
+- Preprocessing: contrastive augmentation paired the wrong spectra when `noised_times >= 2`; precursor-isotope removal stepped downward and deleted real fragments; the NCE feature mixed fraction and percent scales; `[M+H-2H2O]+` losses were unparsed (formula labels off by 2 H2O); GNPS adduct handling dropped or corrupted some spectra; plus crash guards for missing molecules, SDF properties, unsupported adducts and peaks at exactly `max_mz`.
+- `dataset.py`: padding no longer upcasts spectra to float64, halving the training set's memory.
+- `prepare_augment_rescore.py`: each split is loaded once instead of twice.
+
+### Removed
+
+- The Poisson count-likelihood formula loss and `--formula_loss`: an ablation on the rebuilt data showed MSE ahead at every k, so MSE is the only loss.
 
 ## [2.1.0] - 2026-06-13
 
