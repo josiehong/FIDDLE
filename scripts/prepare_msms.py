@@ -33,9 +33,6 @@ if __name__ == "__main__":
         "--pkl_dir", type=str, default="./data/", help="Path to pkl data"
     )
     parser.add_argument(
-        "--test_title_list", type=str, default="", help="Path to test title list"
-    )
-    parser.add_argument(
         "--test_smiles_list",
         type=str,
         default="",
@@ -90,9 +87,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     assert args.train_ratio < 1.0
-    assert not (
-        args.test_title_list and args.test_smiles_list
-    ), "--test_title_list and --test_smiles_list are exclusive"
 
     if not args.report_only:
         os.makedirs(args.pkl_dir, exist_ok=True)
@@ -312,17 +306,6 @@ if __name__ == "__main__":
                     "comes from a test pkl built with the same RDKit version"
                 )
             del spectra, smiles_list
-        elif args.test_title_list:
-            with open(args.test_title_list, "r") as f:
-                test_title_list = f.readlines()
-                test_title_list = [t.strip() for t in test_title_list]
-
-            for _, spectrum in enumerate(tqdm(spectra)):
-                if spectrum["params"]["title"] in test_title_list:
-                    test_spectra.append(spectrum)
-                else:
-                    train_spectra.append(spectrum)
-            del spectra, smiles_list, test_title_list
         else:
             if args.maxmin_pick:
                 print(

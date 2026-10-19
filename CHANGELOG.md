@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Removed
 
 - `scripts/train_tcn_gpus.py`; `scripts/train_tcn_gpus_cl.py` trains the TCN.
+- `--test_title_list` in `prepare_msms.py` and `prepare_msms_nist23.py`; nothing used it, and `--test_smiles_list` keeps a split by compound.
 - Unused imports and a duplicate collision-energy pattern in the package, and the manual test scripts at the end of the `msfiddle/utils` modules.
 
 ## [2.2.1] - 2026-10-19
