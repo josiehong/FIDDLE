@@ -6,15 +6,13 @@
 set -e
 source running_scripts/compare.sh
 
-# The test spectra must come from the data build the released models were
-# trained on, or test compounds may be training compounds. v2.2: 082426 for
-# both; v2.3: 102026 for both.
-QTOF_DATA=${QTOF_DATA:-./data/cl_pkl_082426}
-ORBITRAP_DATA=${ORBITRAP_DATA:-./data/cl_pkl_082426}
+# The test spectra must come from the data build the models were trained on,
+# or test compounds may be training compounds: DATA_TAG 082426 for the v2.2
+# models, 102026 for v2.3. Test v2.3 before its release with
+#   DATA_TAG=102026 MODEL_TAG=102026_muon bash <this script>
+DATA=./data/cl_pkl_${DATA_TAG:-082426}
 
 for INST in qtof orbitrap; do
-    DATA=$QTOF_DATA
-    [ $INST = orbitrap ] && DATA=$ORBITRAP_DATA
     python scripts/prepare_msms_chimeric.py \
         --mgf_data $DATA/${INST}_maxmin_test.mgf \
         --config_path ./msfiddle/config/fiddle_tcn_$INST.yml \

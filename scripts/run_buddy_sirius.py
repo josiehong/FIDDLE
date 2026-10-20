@@ -42,6 +42,10 @@ if __name__ == "__main__":
     parser.add_argument("--out_dir", type=str, required=True)
     args = parser.parse_args()
 
+    # Start clean: SIRIUS adds to an existing project, so results for spectra
+    # of an earlier run (e.g. an older test set) would be pooled in
+    for old in ("buddy", "sirius", "sirius_project"):
+        shutil.rmtree(os.path.join(args.out_dir, old), ignore_errors=True)
     os.makedirs(args.out_dir, exist_ok=True)
     input_mgf = os.path.join(args.out_dir, "input.mgf")
     mgf.write(with_ion(args.mgf), input_mgf, file_mode="w")

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # External benchmarks (CASMI 2016, CASMI 2017, EMBL-MCF 2.0) with the released
 # Q-TOF models, alone and combined with BUDDY and SIRIUS. Run from the
-# repository root after `msfiddle download`.
+# repository root after `msfiddle download`; MODEL_TAG=102026_muon tests the
+# v2.3 models from train_release_v2.3.sh instead (see compare.sh).
 #
 # Raw data:
 #   data/benchmark/casmi2016/MoNA-export-CASMI_2016.sdf
