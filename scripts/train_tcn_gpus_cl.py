@@ -191,8 +191,12 @@ def train_step(
                     scaler.step(optimizer)
                     scaler.update()
                 else:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                    optimizer.step()
+                    grad_norm = torch.nn.utils.clip_grad_norm_(
+                        model.parameters(), max_norm=1.0
+                    )
+                    # Skip a step with NaN/inf gradients, as GradScaler does
+                    if torch.isfinite(grad_norm):
+                        optimizer.step()
 
                 # Update the learning rate during warm-up phase (counted in
                 # optimizer steps). After warm-up phase, the learning rate
@@ -518,6 +522,12 @@ if __name__ == "__main__":
                 valid_mae, valid_mass_mae
             )
         )
+        if not np.isfinite(valid_mae):
+            sys.exit(
+                "Validation error is NaN: training diverged. Lower the learning "
+                "rate and restart from scratch or the best checkpoint, not "
+                "from the _last.pt checkpoint."
+            )
         formula_true = [vector_to_formula(y) for y in y_true]
         formula_pred = [vector_to_formula(y) for y in y_pred_dec]
         print("Exp samples: {}, \nmass: {}".format(formula_true[:5], mass_true[:5]))

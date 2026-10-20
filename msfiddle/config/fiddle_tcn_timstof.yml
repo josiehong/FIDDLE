@@ -110,6 +110,7 @@ train:
   grad_accum_steps: 1
   num_workers: 8
   lr: 0.002 # as Q-TOF; 0.001 when fine-tuning from a Q-TOF checkpoint
+  muon_lr: 0.005 # Muon's rate for weight matrices; the default 0.02 diverged on timsTOF
   weight_decay: 0.01
   warmup_ratio: 0.1
   early_stop_step: 15
