@@ -1,3 +1,4 @@
+import random
 import re
 import numpy as np
 from tqdm import tqdm
@@ -279,6 +280,39 @@ def filter_spec(spectra, config, type2charge, num_workers=0):
     return clean_spectra, smiles_list
 
 
+def split_by_scaffold(smiles_list, train_ratio, val_ratio, seed=42):
+    """Split compounds into (train, validation, test) SMILES sets, keeping every
+    Bemis-Murcko scaffold in one split. The test set is the 1 - train_ratio
+    share of the compounds and the validation set the val_ratio share, like
+    the random and MaxMin splits in scripts/prepare_msms.py; unlike MaxMin it
+    is fast enough for 100k+ compounds."""
+    from rdkit.Chem.Scaffolds import MurckoScaffold
+
+    groups = {}
+    for smiles in sorted(set(smiles_list)):
+        mol = Chem.MolFromSmiles(smiles)
+        key = (
+            MurckoScaffold.MurckoScaffoldSmiles(mol=mol, includeChirality=False)
+            if mol is not None
+            else ""
+        )
+        groups.setdefault(key or smiles, []).append(smiles)  # acyclic: own group
+    buckets = list(groups.values())
+    random.Random(seed).shuffle(buckets)
+
+    n = sum(len(b) for b in buckets)
+    sizes = [int(round(n * (1.0 - train_ratio))), int(round(n * val_ratio))]
+    test, val, train = set(), set(), set()
+    for bucket in buckets:
+        if len(test) < sizes[0]:
+            test.update(bucket)
+        elif len(val) < sizes[1]:
+            val.update(bucket)
+        else:
+            train.update(bucket)
+    return train, val, test
+
+
 def simulate_experimental_mz(theoretical_mz, relative_mass_tolerance_ppm):
     """Simulate experimental precursor m/z by shifting the theoretical value
     within a Gaussian distribution of mass deviations.
@@ -354,6 +388,12 @@ def precursor_mz_calculator(precursor_type, mass):
         return mass - ATOMS_WEIGHT["H"] - (ATOMS_WEIGHT["C"] + ATOMS_WEIGHT["O"] * 2)
     elif precursor_type == "[M-H-H2O]-" or precursor_type == "[M-H2O-H]-":
         return mass - ATOMS_WEIGHT["H"] - (ATOMS_WEIGHT["H"] * 2 + ATOMS_WEIGHT["O"])
+    elif precursor_type == "[M+CH2O2-H]-":  # formate adduct, [M+FA-H]-
+        return (
+            mass
+            - ATOMS_WEIGHT["H"]
+            + (ATOMS_WEIGHT["C"] + ATOMS_WEIGHT["H"] * 2 + ATOMS_WEIGHT["O"] * 2)
+        )
     else:
         raise ValueError("Unsupported precursor type: {}".format(precursor_type))
 
@@ -432,6 +472,12 @@ def mass_calculator(precursor_type, precursor_mz):
             precursor_mz
             + ATOMS_WEIGHT["H"]
             + (ATOMS_WEIGHT["H"] * 2 + ATOMS_WEIGHT["O"])
+        )
+    elif precursor_type == "[M+CH2O2-H]-":  # formate adduct, [M+FA-H]-
+        return (
+            precursor_mz
+            + ATOMS_WEIGHT["H"]
+            - (ATOMS_WEIGHT["C"] + ATOMS_WEIGHT["H"] * 2 + ATOMS_WEIGHT["O"] * 2)
         )
     else:
         raise ValueError("Unsupported precursor type: {}".format(precursor_type))

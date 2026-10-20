@@ -37,24 +37,29 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run BUDDY and SIRIUS on an MGF")
     parser.add_argument("--mgf", type=str, required=True)
     parser.add_argument(
-        "--instrument_type", type=str, required=True, choices=["qtof", "orbitrap"]
+        "--instrument_type",
+        type=str,
+        required=True,
+        choices=["qtof", "orbitrap", "timstof"],
+        help="timstof uses the qtof profiles of BUDDY and SIRIUS",
     )
     parser.add_argument("--out_dir", type=str, required=True)
     args = parser.parse_args()
 
+    profile = "qtof" if args.instrument_type == "timstof" else args.instrument_type
     os.makedirs(args.out_dir, exist_ok=True)
     input_mgf = os.path.join(args.out_dir, "input.mgf")
     mgf.write(with_ion(args.mgf), input_mgf, file_mode="w")
 
     run(
         ["msbuddy", "-mgf", input_mgf, "-output", os.path.join(args.out_dir, "buddy")]
-        + ["-ms", args.instrument_type, "-d", "-p"]
+        + ["-ms", profile, "-d", "-p"]
     )
 
     project = os.path.join(args.out_dir, "sirius_project")
     if run(
         ["sirius", "--input", input_mgf, "--project", project]
-        + ["formulas", "--profile", args.instrument_type]
+        + ["formulas", "--profile", profile]
     ):
         run(
             ["sirius", "--project", project, "summaries", "--top-k-summary=5"]

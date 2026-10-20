@@ -36,11 +36,15 @@ from .utils.pkl_utils import (
     generate_ms,
     is_stepped_collision_energy,
     parse_collision_energy,
+    resolve_collision_energy,
     unify_precursor_type,
 )
 from .utils.refine_utils import formula_refinement
 
-_INSTRUMENT_TYPES = {"orbitrap", "qtof"}
+_INSTRUMENT_TYPES = {"orbitrap", "qtof", "timstof"}
+# Instruments with checkpoints on the GitHub release; the others need
+# resume_path and rescore_resume_path (see running_scripts/train_release_v2.3.sh)
+_RELEASED_INSTRUMENT_TYPES = {"orbitrap", "qtof"}
 _NEUTRAL_FORMULAS = ("CH4O2", "CH2O2", "H2O", "NH3", "CO2")
 
 
@@ -363,11 +367,15 @@ class MsFiddlePredictor:
                 f"{adjusted_precursor_type}"
             )
 
-        ce_str = _collision_energy_to_string(collision_energy)
-        if is_stepped_collision_energy(ce_str):
+        ce_str = resolve_collision_energy(
+            _collision_energy_to_string(collision_energy),
+            encoder.get("stepped_collision_energy", "drop"),
+        )
+        if ce_str is None:
             raise ValueError(
                 f"Stepped collision energy {collision_energy!r} is not supported: "
-                "FIDDLE was trained on single-energy spectra"
+                "this model was trained on single-energy spectra (the timsTOF "
+                "config sets encoding.stepped_collision_energy to 'mean')"
             )
         ce, nce = parse_collision_energy(
             ce_str=ce_str,
@@ -411,6 +419,7 @@ class MsFiddlePredictor:
             if self.config["encoding"]["use_simulated_precursor_mz"]
             else "precursor_mz"
         )
+        stepped_mode = self.config["encoding"].get("stepped_collision_energy", "drop")
         encoded: list[_EncodedSpectrum] = []
         invalid_count = 0
         stepped: list[str] = []
@@ -437,7 +446,9 @@ class MsFiddlePredictor:
                         f"('title', '{precursor_mz_key}', 'precursor_type', 'collision_energy')"
                     )
                 continue
-            if is_stepped_collision_energy(params["collision_energy"]):
+            if stepped_mode == "drop" and is_stepped_collision_energy(
+                params["collision_energy"]
+            ):
                 stepped.append(str(params["collision_energy"]))
                 invalid_count += 1
                 continue
@@ -566,6 +577,14 @@ class MsFiddlePredictor:
             for path in (self.resume_path, self.rescore_resume_path)
             if not path.exists()
         ]
+        if missing_paths and self.instrument_type not in _RELEASED_INSTRUMENT_TYPES:
+            missing = ", ".join(str(path) for path in missing_paths)
+            raise FileNotFoundError(
+                f"Missing msfiddle checkpoint file(s): {missing}. No checkpoints "
+                f"are released for {self.instrument_type!r}: train them with "
+                "running_scripts/train_release_v2.3.sh and pass resume_path and "
+                "rescore_resume_path."
+            )
         if missing_paths and self.download_models:
             download_pretrained_models(
                 models=[

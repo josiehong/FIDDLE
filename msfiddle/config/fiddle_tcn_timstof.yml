@@ -1,0 +1,140 @@
+# ------------------------
+# timsTOF train & validation
+# ------------------------
+# The only large public timsTOF MS/MS library is the Enveda CASMI 2026 training
+# set (Kaggle train.parquet; the enveda-180 subset is also on Zenodo, record
+# 20436851): 1.15M spectra of 183k compounds in the enveda-180 and
+# enveda-np-examples libraries, read by prepare_msms.py --dataset casmi2026
+# through msfiddle.utils.casmi2026 (instrument_type and ingest_lib come from
+# the file's columns; the filters below apply after that).
+casmi2026_timstof:
+  instrument_type: ['timsTOF']
+  ms_level: 'MS2'
+  atom_type: ['C', 'O', 'N', 'H', 'P', 'S', 'F', 'Cl', 'B', 'Br', 'I', 'Na', 'K']
+  # [M+NH4]+ is folded into [M+H]+ (+NH3) and the formate adduct
+  # [M+CH2O2-H]- into [M-H]- (+CH2O2) by melt_neutral_precursor, so the
+  # model sees the same six adduct indices as the Q-TOF model. Dropped, with
+  # their share of the timsTOF spectra: [2M+Na]+ (16%; no encoding for
+  # sodiated dimers), [M+Cl]- (0.2%), [M+K]+ (0.1%), acetate [M+C2H4O2-H]-
+  # and [2M+CH2O2-H]- (0.1%). The CASMI 2026 test set has no dimers.
+  precursor_type: ['[M+H]+', '[M+Na]+', '[2M+H]+', '[M+NH4]+', '[M+H+NH3]+',
+                   '[M+H-H2O]+', '[M-H2O+H]+',
+                   '[M-H]-', '[2M-H]-', '[M+CH2O2-H]-', '[M-H-H2O]-', '[M-H2O-H]-']
+  min_mz: 50
+  max_mz: 1500
+  min_peak_num: 5
+  max_atom_num: 300
+  min_atom_num: 10
+  ppm_tolerance: 10
+
+# ------------------------
+# model settings
+# ------------------------
+# Identical to fiddle_tcn_qtof.yml (same adduct indices, same architecture).
+# The timsTOF model trains from scratch (958k spectra, 181k compounds); the
+# shared settings also allow fine-tuning from a Q-TOF checkpoint
+# (train_tcn_gpus_cl.py --transfer --resume_path <fiddle_tcn_qtof.pt>).
+encoding:
+  resolution: 0.2
+  max_mz: 1500
+  max_atom_num: 300
+  use_simulated_precursor_mz: False
+  # timsTOF libraries (and the CASMI 2026 test set) also hold spectra merged
+  # over several collision energies ('20,40,60' eV). 'mean' encodes them at
+  # the mean energy; 'drop' (the default elsewhere) skips them.
+  stepped_collision_energy: mean
+
+  precursor_type:
+    '[M+H]+': 1
+    '[M-H]-': 2
+    '[M+Na]+': 3
+    '[M+2H]2+': 4
+    '[2M+H]+': 5
+    '[2M-H]-': 6
+
+  type2charge:
+    '[M+H]+': '+1'
+    '[M-H]-': '-1'
+    '[M+Na]+': '+1'
+    '[M+2H]2+': '+2'
+    '[2M+H]+': '+1'
+    '[2M-H]-': '-1'
+
+    '[M+H-H2O]+': '+1'
+    '[M-H2O+H]+': '+1'
+    '[M+H-2H2O]+': '+1'
+    '[M+H-NH3]+': '+1'
+    '[M+H+NH3]+': '+1'
+    '[M+NH4]+': '+1'
+    '[M+H-CH2O2]+': '+1'
+    '[M+H-CH4O2]+': '+1'
+
+    '[M-H-CO2]-': '-1'
+    '[M-CHO2]-': '-1'
+    '[M-H-H2O]-': '-1'
+    '[M-H2O-H]-': '-1'
+    '[M+CH2O2-H]-': '-1'
+
+model:
+  resolution: 0.2
+  max_mz: 1500
+  padding_dim: 20 # 1500 / 0.2 = 7500; 7500 / 2**5 (# pooling layer) = 234.375; 235 * (2**5) = 7520
+  num_add: 6
+  input_channels: 1
+
+  tcn_channels: [32, 32, 64, 128, 256, 512]
+  tcn_dilations: [1, 2, 4, 8, 8, 8]
+  tcn_kernel_sizes: [45, 43, 41, 39, 37, 35]
+  tcn_dropout: 0.2
+
+  add_embedding_dim: 4
+  ce_embedding_dim: 4
+  mass_embedding_dim: 4
+  embedding_dim: 512
+  formula_dim: 64
+
+  formula_decoder_layers: [416, 208, 104, 52, 26, 13]
+  mass_decoder_layers: [416, 208, 104, 26, 13, 1]
+  atomnum_decoder_layers: [416, 208, 104, 26, 13, 1]
+  hcnum_decoder_layers: [416, 208, 104, 26, 13, 1]
+  output_dim: 13
+
+  fdr_decoder_layers: [416, 208, 104, 26, 13]
+
+# ------------------------
+# training settings
+# ------------------------
+train:
+  epochs: 200
+  batch_size: 512 # about 25 GB with --amp on one 48 GB GPU; use 256 x grad_accum_steps 2 on a shared card
+  grad_accum_steps: 1
+  num_workers: 8
+  lr: 0.002 # as Q-TOF; 0.001 when fine-tuning from a Q-TOF checkpoint
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  early_stop_step: 15
+  early_stop_min_epochs: 5
+  patience: 5
+  noised_times: 0 # 1M+ timsTOF spectra: no need to triple the data in RAM
+
+train_rescore:
+  epochs: 20
+  batch_size: 128
+  num_workers: 8
+  lr: 0.0001
+  early_stop_step: 5
+
+# ------------------------
+# postprocessing settings
+# ------------------------
+post_processing:
+  refine_atom_type: ['C', 'O', 'N', 'H', 'Cl', 'Br', 'F', 'I', 'S', 'P']
+  refine_atom_num: [5, 5, 5, -1, 2, 1, 2, 1, 2, 1]
+
+  mass_tolerance: 10.0 # ppm; timsTOF precursor errors in CASMI 2026 are mostly < 6 ppm
+  ppm_mode: True
+  time_out: -1
+  maxium_miss_atom_num: 50
+  top_k: 20
+  buddy_fdr_thr: 0.6
+  sirius_score_thr: -5

@@ -28,7 +28,7 @@ msfiddle predict --demo --result_path demo.csv        # 21 bundled example spect
 msfiddle predict --test_data spectra.mgf --instrument_type orbitrap --result_path results.csv
 ```
 
-Use `--instrument_type qtof` for Q-TOF data. Each spectrum needs `TITLE`, `PRECURSOR_MZ`, `PRECURSOR_TYPE` and `COLLISION_ENERGY`. The results list ranked candidates per spectrum in `Refined Formula (0)`, `Refined Formula (1)`, … with their scores in `Rescore (k)`.
+Use `--instrument_type qtof` for Q-TOF data and `--instrument_type timstof` for timsTOF data (no released checkpoints yet; `INSTRUMENTS=timstof bash running_scripts/train_release_v2.3.sh` trains them from the Enveda CASMI 2026 library). Each spectrum needs `TITLE`, `PRECURSOR_MZ`, `PRECURSOR_TYPE` and `COLLISION_ENERGY`. The results list ranked candidates per spectrum in `Refined Formula (0)`, `Refined Formula (1)`, … with their scores in `Rescore (k)`.
 
 When the true formulas are known (a `SMILES` or `FORMULA` field in each spectrum), add `--eval` to also report top-k accuracy, saved as `results_eval.csv`.
 
@@ -54,7 +54,7 @@ msfiddle download -d ./check_point
 
 | Script | Description |
 |---|---|
-| `running_scripts/train_release_v2.3.sh` | Build the data, train the release models (TCN and rescore) and evaluate them |
+| `running_scripts/train_release_v2.3.sh` | Build the data, train the release models (TCN and rescore) for Q-TOF, Orbitrap and timsTOF in parallel and evaluate them; `INSTRUMENTS=timstof` runs one of them. timsTOF trains on the Enveda CASMI 2026 library at `data/origin/casmi2026/train.parquet` |
 | `running_scripts/experiments_test_benchmark.sh` | Evaluate on external benchmarks (CASMI 2016, CASMI 2017, EMBL-MCF 2.0) |
 | `running_scripts/experiments_test_nist23.sh` | Train and evaluate with compounds new in NIST23 held out |
 | `running_scripts/experiments_test_chimeric.sh` | Evaluate on chimeric spectra |

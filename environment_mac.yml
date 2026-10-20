@@ -8,6 +8,7 @@ dependencies:
   - pytorch::pytorch=2.2          # CPU build; no torchvision/torchaudio needed
   - numpy<2
   - pandas
+  - pyarrow                      # parquet input (CASMI 2026 timsTOF library)
   - scipy
   - scikit-learn
   - rdkit

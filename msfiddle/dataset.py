@@ -8,7 +8,12 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from .utils.mol_utils import ATOMS_INDEX, formula_to_dict
-from .utils.pkl_utils import generate_ms, parse_collision_energy, unify_precursor_type
+from .utils.pkl_utils import (
+    generate_ms,
+    parse_collision_energy,
+    resolve_collision_energy,
+    unify_precursor_type,
+)
 
 
 # Used for training and evaluation
@@ -333,8 +338,14 @@ class MGFDataset(Dataset):
                 )
                 continue
 
+            ce_str = resolve_collision_energy(
+                spectrum["params"]["collision_energy"],
+                encoder.get("stepped_collision_energy", "drop"),
+            )
+            if ce_str is None:  # stepped collision energy
+                continue
             ce, nce = parse_collision_energy(
-                ce_str=spectrum["params"]["collision_energy"],
+                ce_str=ce_str,
                 precursor_mz=float(spectrum["params"][self.precursor_mz_key]),
                 charge=abs(
                     int(encoder["type2charge"][spectrum["params"]["precursor_type"]])
