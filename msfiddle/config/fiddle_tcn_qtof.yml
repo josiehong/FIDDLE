@@ -132,6 +132,7 @@ encoding:
     '[M-CHO2]-': '-1' 
     '[M-H-H2O]-': '-1'
     '[M-H2O-H]-': '-1'
+    '[M+CH2O2-H]-': '-1'  # formate adduct, folded into [M-H]-
 
 model: 
   resolution: 0.2

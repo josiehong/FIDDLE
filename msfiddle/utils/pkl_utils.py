@@ -31,6 +31,36 @@ def is_stepped_collision_energy(ce_str):
     return bool(_STEPPED_CE.search(str(ce_str)))
 
 
+_CE_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+
+
+def mean_collision_energy(ce_str):
+    """The mean of the energies in a stepped collision energy string, as a
+    single-energy string parse_collision_energy reads ('20,40,60' -> '40.0',
+    'HCD (NCE 20-30-40%)' -> '30.0 nce'). None when no number is found."""
+    numbers = [float(n) for n in _CE_NUMBER.findall(str(ce_str))]
+    if not numbers:
+        return None
+    mean = sum(numbers) / len(numbers)
+    text = str(ce_str).lower()
+    return f"{mean} nce" if "%" in text or "nce" in text else str(mean)
+
+
+def resolve_collision_energy(ce_str, mode="drop"):
+    """Apply an encoder's ``stepped_collision_energy`` policy to a collision
+    energy string: 'drop' returns None for a stepped energy, 'mean' replaces it
+    with its mean energy (timsTOF libraries merge 20/40/60 eV spectra). Single
+    energies pass through unchanged."""
+    ce_str = str(ce_str)
+    if not is_stepped_collision_energy(ce_str):
+        return ce_str
+    if mode == "mean":
+        return mean_collision_energy(ce_str)
+    if mode == "drop":
+        return None
+    raise ValueError(f"Unknown stepped_collision_energy mode {mode!r}")
+
+
 def spec2arr(spectra, encoder, num_workers=0):
     """data format
     [
@@ -68,12 +98,13 @@ def spec2arr(spectra, encoder, num_workers=0):
         else:
             bad_data.append(spectrum["params"]["title"])
 
-    n_stepped = sum(
-        is_stepped_collision_energy(s["params"].get("collision_energy", ""))
-        for s in spectra
-    )
-    if n_stepped:
-        print(f"Dropped {n_stepped} spectra with a stepped collision energy")
+    if encoder.get("stepped_collision_energy", "drop") == "drop":
+        n_stepped = sum(
+            is_stepped_collision_energy(s["params"].get("collision_energy", ""))
+            for s in spectra
+        )
+        if n_stepped:
+            print(f"Dropped {n_stepped} spectra with a stepped collision energy")
     return data, bad_data
 
 
@@ -187,15 +218,19 @@ def spec2arr_single(spectrum, encoder):
         print("Failed to generate mass spectra: {}".format(spectrum["params"]["title"]))
         return None  # invalid spectra
 
-    if is_stepped_collision_energy(spectrum["params"]["collision_energy"]):
-        return None  # counted in spec2arr
+    ce_str = resolve_collision_energy(
+        spectrum["params"]["collision_energy"],
+        encoder.get("stepped_collision_energy", "drop"),
+    )
+    if ce_str is None:
+        return None  # stepped collision energy, counted in spec2arr
 
     # env array
     adjust_formula, adjust_precursor_type = melt_neutral_precursor(
         formula, spectrum["params"]["precursor_type"]
     )
     ce, nce = parse_collision_energy(
-        ce_str=spectrum["params"]["collision_energy"],
+        ce_str=ce_str,
         precursor_mz=float(spectrum["params"]["theoretical_precursor_mz"]),
         charge=abs(charge),
     )
@@ -512,6 +547,8 @@ def unify_precursor_type(precursor_type):
     # '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+'
     # -1+-neutrue
     # '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-'
+    if precursor_type in ("[M+FA-H]-", "[M+HCOO]-", "[M+HCO2]-", "[M+HCOOH-H]-"):
+        return "[M+CH2O2-H]-"  # formate adduct
     if precursor_type == "[M+NH4]+":
         return "[M+H+NH3]+"
     elif precursor_type == "[M-CHO2]-":

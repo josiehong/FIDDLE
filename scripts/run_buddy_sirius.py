@@ -37,11 +37,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run BUDDY and SIRIUS on an MGF")
     parser.add_argument("--mgf", type=str, required=True)
     parser.add_argument(
-        "--instrument_type", type=str, required=True, choices=["qtof", "orbitrap"]
+        "--instrument_type",
+        type=str,
+        required=True,
+        choices=["qtof", "orbitrap", "timstof"],
+        help="timstof uses the qtof profiles of BUDDY and SIRIUS",
     )
     parser.add_argument("--out_dir", type=str, required=True)
     args = parser.parse_args()
 
+    profile = "qtof" if args.instrument_type == "timstof" else args.instrument_type
     # Start clean: SIRIUS adds to an existing project, so results for spectra
     # of an earlier run (e.g. an older test set) would be pooled in
     for old in ("buddy", "sirius", "sirius_project"):
@@ -52,13 +57,13 @@ if __name__ == "__main__":
 
     run(
         ["msbuddy", "-mgf", input_mgf, "-output", os.path.join(args.out_dir, "buddy")]
-        + ["-ms", args.instrument_type, "-d", "-p"]
+        + ["-ms", profile, "-d", "-p"]
     )
 
     project = os.path.join(args.out_dir, "sirius_project")
     if run(
         ["sirius", "--input", input_mgf, "--project", project]
-        + ["formulas", "--profile", args.instrument_type]
+        + ["formulas", "--profile", profile]
     ):
         run(
             ["sirius", "--project", project, "summaries", "--top-k-summary=5"]
