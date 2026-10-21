@@ -39,6 +39,8 @@ MODEL_URLS = {
     "fiddle_rescore_qtof": f"https://github.com/JosieHong/FIDDLE/releases/download/{FIDDLE_RELEASE}/fiddle_rescore_qtof.zip",
     "fiddle_tcn_orbitrap": f"https://github.com/JosieHong/FIDDLE/releases/download/{FIDDLE_RELEASE}/fiddle_tcn_orbitrap.zip",
     "fiddle_rescore_orbitrap": f"https://github.com/JosieHong/FIDDLE/releases/download/{FIDDLE_RELEASE}/fiddle_rescore_orbitrap.zip",
+    "fiddle_tcn_timstof": f"https://github.com/JosieHong/FIDDLE/releases/download/{FIDDLE_RELEASE}/fiddle_tcn_timstof.zip",
+    "fiddle_rescore_timstof": f"https://github.com/JosieHong/FIDDLE/releases/download/{FIDDLE_RELEASE}/fiddle_rescore_timstof.zip",
 }
 
 

@@ -42,9 +42,6 @@ from .utils.pkl_utils import (
 from .utils.refine_utils import formula_refinement
 
 _INSTRUMENT_TYPES = {"orbitrap", "qtof", "timstof"}
-# Instruments with checkpoints on the GitHub release; the others need
-# resume_path and rescore_resume_path (see running_scripts/train_release_v2.3.sh)
-_RELEASED_INSTRUMENT_TYPES = {"orbitrap", "qtof"}
 _NEUTRAL_FORMULAS = ("CH4O2", "CH2O2", "H2O", "NH3", "CO2")
 
 
@@ -577,14 +574,6 @@ class MsFiddlePredictor:
             for path in (self.resume_path, self.rescore_resume_path)
             if not path.exists()
         ]
-        if missing_paths and self.instrument_type not in _RELEASED_INSTRUMENT_TYPES:
-            missing = ", ".join(str(path) for path in missing_paths)
-            raise FileNotFoundError(
-                f"Missing msfiddle checkpoint file(s): {missing}. No checkpoints "
-                f"are released for {self.instrument_type!r}: train them with "
-                "running_scripts/train_release_v2.3.sh and pass resume_path and "
-                "rescore_resume_path."
-            )
         if missing_paths and self.download_models:
             download_pretrained_models(
                 models=[

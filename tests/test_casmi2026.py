@@ -5,8 +5,9 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from msfiddle import main as cli
+from msfiddle import api, main as cli
 from msfiddle.api import MsFiddlePredictor, _normalize_instrument_type
+from msfiddle.download import MODEL_URLS
 from msfiddle.settings import load_config
 from msfiddle.utils import filter_spec, spec2arr, split_by_scaffold
 from msfiddle.utils.casmi2026 import (
@@ -256,8 +257,9 @@ def test_timstof_model_matches_qtof_for_transfer():
     assert timstof["encoding"]["type2charge"]["[M+CH2O2-H]-"] == "-1"
 
 
-def test_api_accepts_timstof_and_explains_missing_checkpoints(tmp_path):
+def test_api_accepts_timstof_and_downloads_its_checkpoints(monkeypatch, tmp_path):
     assert _normalize_instrument_type("TimsTOF") == "timstof"
+    assert {"fiddle_tcn_timstof", "fiddle_rescore_timstof"} <= set(MODEL_URLS)
     predictor = MsFiddlePredictor(
         instrument_type="timstof",
         resume_path=tmp_path / "tcn.pt",
@@ -265,10 +267,13 @@ def test_api_accepts_timstof_and_explains_missing_checkpoints(tmp_path):
         download_models=True,
     )
     assert predictor.config_path.name == "fiddle_tcn_timstof.yml"
-    with pytest.raises(
-        FileNotFoundError, match="No checkpoints are released for 'timstof'"
-    ):
+    requested = []
+    monkeypatch.setattr(
+        api, "download_pretrained_models", lambda models: requested.extend(models)
+    )
+    with pytest.raises(FileNotFoundError):
         predictor._ensure_model_files()
+    assert requested == ["fiddle_tcn_timstof", "fiddle_rescore_timstof"]
 
 
 def test_api_encodes_merged_energy_and_formate_with_timstof_config(tmp_path):
@@ -291,10 +296,8 @@ def test_api_encodes_merged_energy_and_formate_with_timstof_config(tmp_path):
     assert list(formate.neutral_add[:3]) == [1, 2, 2]  # C, H, O of CH2O2
 
 
-def test_cli_accepts_timstof_and_explains_missing_checkpoints(monkeypatch, tmp_path):
+def test_cli_accepts_timstof(monkeypatch):
     seen = {}
     monkeypatch.setattr(cli, "_predict", lambda args, parser: seen.update(vars(args)))
     cli.main(["--demo", "--instrument_type", "timstof", "--result_path", "o.csv"])
     assert seen["instrument_type"] == "timstof"
-    with pytest.raises(FileNotFoundError, match="No timsTOF checkpoints"):
-        cli.validate_checkpoint_paths(tmp_path / "a.pt", tmp_path / "b.pt", "timstof")

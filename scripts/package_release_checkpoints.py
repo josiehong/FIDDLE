@@ -1,4 +1,4 @@
-"""Package trained checkpoints as release zips for msfiddle-download-models.
+r"""Package trained checkpoints as release zips for msfiddle-download-models.
 
 Each training checkpoint check_point/fiddle_<model>_<tag>.pt is reduced to the
 weights inference needs (TCN: model_state_dict without the DataParallel
@@ -9,8 +9,11 @@ single fiddle_<model>.pt, the layout download.py expects, and each zip is
 reloaded and compared against its source before the script reports success.
 
 Usage:
-  python scripts/package_release_checkpoints.py --tag 082426_muon \
-      --out_dir ./release_v2.2.0
+  python scripts/package_release_checkpoints.py --tag 102026_muon \
+      --out_dir ./release_v2.3.0
+  # one instrument at a time, e.g. on the server that trained it
+  python scripts/package_release_checkpoints.py --tag 102026_muon \
+      --out_dir ./release_v2.3.0 --models tcn_timstof rescore_timstof
   # checkpoints already named fiddle_<model>.pt: omit --tag
   python scripts/package_release_checkpoints.py \
       --checkpoint_dir ./release_v2.0.0 --out_dir ./release_v2.0.0
@@ -24,7 +27,11 @@ import zipfile
 
 import torch
 
-MODELS = ["tcn_qtof", "rescore_qtof", "tcn_orbitrap", "rescore_orbitrap"]
+MODELS = [
+    f"{kind}_{inst}"
+    for inst in ("qtof", "orbitrap", "timstof")
+    for kind in ("tcn", "rescore")
+]
 WEIGHT_KEYS = {
     "tcn": ["model_state_dict"],
     "rescore": ["formula_encoder_state_dict", "rescore_head_state_dict"],
@@ -96,7 +103,7 @@ def main():
     ap.add_argument(
         "--tag",
         default="",
-        help="checkpoint suffix, e.g. 082426_muon (omit for fiddle_<model>.pt)",
+        help="checkpoint suffix, e.g. 102026_muon (omit for fiddle_<model>.pt)",
     )
     ap.add_argument("--checkpoint_dir", default="./check_point")
     ap.add_argument("--out_dir", required=True, help="where the zips are written")

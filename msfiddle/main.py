@@ -6,16 +6,8 @@ from .download import get_checkpoint_dir
 from .api import MsFiddlePredictor
 
 
-def _checkpoint_error_message(missing_paths, instrument_type=None):
+def _checkpoint_error_message(missing_paths):
     missing = "\n".join(f"  - {path}" for path in missing_paths)
-    if instrument_type == "timstof":
-        return (
-            "Required msfiddle checkpoint file(s) were not found:\n"
-            f"{missing}\n\n"
-            "No timsTOF checkpoints are released yet. Train them with\n"
-            "  INSTRUMENTS=timstof bash running_scripts/train_release_v2.3.sh\n"
-            "and pass --resume_path and --rescore_resume_path."
-        )
     return (
         "Required msfiddle checkpoint file(s) were not found:\n"
         f"{missing}\n\n"
@@ -26,14 +18,12 @@ def _checkpoint_error_message(missing_paths, instrument_type=None):
     )
 
 
-def validate_checkpoint_paths(resume_path, rescore_resume_path, instrument_type=None):
+def validate_checkpoint_paths(resume_path, rescore_resume_path):
     missing_paths = [
         path for path in (resume_path, rescore_resume_path) if not os.path.exists(path)
     ]
     if missing_paths:
-        raise FileNotFoundError(
-            _checkpoint_error_message(missing_paths, instrument_type)
-        )
+        raise FileNotFoundError(_checkpoint_error_message(missing_paths))
 
 
 def init_random_seed(seed):
@@ -67,11 +57,7 @@ def _add_predict_args(parser):
         type=str,
         choices=["qtof", "orbitrap", "timstof"],
         default="orbitrap",
-        help=(
-            "Instrument type: qtof, orbitrap or timstof (default: orbitrap). "
-            "No timstof checkpoints are released yet; pass --resume_path and "
-            "--rescore_resume_path"
-        ),
+        help="Instrument type: qtof, orbitrap or timstof (default: orbitrap)",
     )
 
     # Add other required arguments
@@ -191,9 +177,7 @@ def _predict(args, parser):
     print(f"Using rescore model: {rescore_resume_path}")
 
     try:
-        validate_checkpoint_paths(
-            resume_path, rescore_resume_path, args.instrument_type
-        )
+        validate_checkpoint_paths(resume_path, rescore_resume_path)
     except FileNotFoundError as exc:
         sys.stdout.flush()
         parser.exit(status=1, message=f"{exc}\n")

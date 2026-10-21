@@ -28,7 +28,7 @@ msfiddle predict --demo --result_path demo.csv        # 21 bundled example spect
 msfiddle predict --test_data spectra.mgf --instrument_type orbitrap --result_path results.csv
 ```
 
-Use `--instrument_type qtof` for Q-TOF data and `--instrument_type timstof` for timsTOF data (no released checkpoints yet; `INSTRUMENTS=timstof bash running_scripts/train_release_v2.3.sh` trains them from the Enveda CASMI 2026 library). Each spectrum needs `TITLE`, `PRECURSOR_MZ`, `PRECURSOR_TYPE` and `COLLISION_ENERGY`. The results list ranked candidates per spectrum in `Refined Formula (0)`, `Refined Formula (1)`, … with their scores in `Rescore (k)`.
+Use `--instrument_type qtof` for Q-TOF data and `--instrument_type timstof` for timsTOF data. Each spectrum needs `TITLE`, `PRECURSOR_MZ`, `PRECURSOR_TYPE` and `COLLISION_ENERGY`. The results list ranked candidates per spectrum in `Refined Formula (0)`, `Refined Formula (1)`, … with their scores in `Rescore (k)`.
 
 When the true formulas are known (a `SMILES` or `FORMULA` field in each spectrum), add `--eval` to also report top-k accuracy, saved as `results_eval.csv`.
 

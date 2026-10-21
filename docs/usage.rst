@@ -76,11 +76,9 @@ Running Predictions
             --device 0
 
 ``--instrument_type`` accepts ``orbitrap`` (default), ``qtof`` or ``timstof``.
-No timsTOF checkpoints are released yet: ``INSTRUMENTS=timstof bash
-running_scripts/train_release_v2.3.sh`` trains them on the Enveda CASMI 2026
-library (``data/origin/casmi2026/train.parquet``); pass the result as
-``--resume_path`` and ``--rescore_resume_path``. The timsTOF config encodes spectra merged over
-several collision energies (``20,40,60``) at their mean energy. For large
+The timsTOF models are trained on the Enveda CASMI 2026 library, and the
+timsTOF config encodes spectra merged over several collision energies
+(``20,40,60``) at their mean energy. For large
 files, ``--num_workers N`` runs formula refinement in N processes (results are
 identical) and ``--batch_size`` sets the inference batch (default 32).
 
