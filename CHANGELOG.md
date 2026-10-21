@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `scripts/run_buddy_sirius.py` runs msbuddy and SIRIUS on an MGF file, setting `ION` from `PRECURSOR_TYPE` so both tools see the adduct, and `running_scripts/compare.sh` runs FIDDLE alone, with BUDDY, and with BUDDY and SIRIUS for each experiment. The experiment scripts run BUDDY and SIRIUS through it again.
 - `scripts/check_precursor_error.py` classifies each spectrum's precursor mass error as within tolerance, a 13C isotope peak, or other, and flags spectra within tolerance on the m/z but not on the neutral mass. Preprocessing reports isotope-peak precursors as `isotope_error` instead of `ppm_tolerance`; they are still dropped.
 - The experiment scripts take `MODEL_TAG` to evaluate locally trained checkpoints (`check_point/fiddle_{tcn,rescore}_<instrument>_<MODEL_TAG>.pt`) instead of the released ones, and the noised and chimeric scripts take `DATA_TAG` for the matching test sets.
+- Rescore checkpoints record a hash of the weights of the TCN they were trained with, and prediction warns when it is given a different TCN, whose embeddings the rescore model cannot read.
 
 ### Changed
 
@@ -26,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - The refinement window `mass_tolerance` is in ppm of the precursor m/z, the unit of the data filters' `ppm_tolerance`, and is converted to each adduct's neutral mass ([#9](https://github.com/JosieHong/FIDDLE/issues/9)). It used to be ppm of the neutral mass, so for adducts lighter than their ion, such as small `[M+Na]+`, spectra the filter admitted could fall outside the window. The CASMI and EMBL configs' windows are raised to their filters' tolerances (10 and 50 ppm), which changes those benchmark results. Rescore training pairs use the same window.
 - Spectra with a stepped or ranged collision energy (`HCD (NCE 20-30-40%)`, `30-50 eV`) are skipped with one warning that gives the count, where `predict` used to drop them without saying why; `predict_from_spectrum` raises a clear error. Preprocessing reports how many it drops. The models were trained on single-energy spectra, so these are not encoded as a mean energy. ([#7](https://github.com/JosieHong/FIDDLE/issues/7))
 - BUDDY and SIRIUS results are looked up by spectrum ID through an index, not by scanning the whole table for every spectrum. Results are unchanged.
+- Each instrument's TCN and rescore model are released in one zip, `fiddle_<instrument>.zip`, so the pair that belongs together is always downloaded together. `msfiddle download` and `msfiddle-download-models` take `--instruments` instead of `--models`, and `download_models(instruments=...)` instead of `models=`; the checkpoint files on disk keep their names. `package_release_checkpoints.py` packages per instrument and adds the TCN hash to older rescore checkpoints.
 
 ### Fixed
 

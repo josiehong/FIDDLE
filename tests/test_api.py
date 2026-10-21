@@ -1,3 +1,5 @@
+import warnings
+
 import pytest
 import numpy as np
 import pandas as pd
@@ -258,3 +260,38 @@ def test_isotope_offsets_pool_candidates_and_penalize_shifted_ones():
     assert out["formula"] == ["C8H10N4O2", "C7H14O6", None]  # 0.9 - 0.5 < 0.5
     assert out["isotope_shift"] == [0, 1, None]
     assert out["rescore"] == [0.5, 0.9, 0.0]
+
+
+@pytest.mark.parametrize("matching", [True, False])
+def test_warns_when_the_rescore_model_belongs_to_another_tcn(tmp_path, matching):
+    torch = pytest.importorskip("torch")
+    from msfiddle.model_tcn import (
+        FormulaEncoder,
+        MS2FNet_tcn,
+        RescoreHead,
+        tcn_hash,
+    )
+
+    predictor = MsFiddlePredictor(
+        instrument_type="qtof",
+        resume_path=tmp_path / "tcn.pt",
+        rescore_resume_path=tmp_path / "rescore.pt",
+        device="cpu",
+    )
+    model_config = predictor.config["model"]
+    tcn = MS2FNet_tcn(model_config).state_dict()
+    torch.save({"model_state_dict": tcn}, predictor.resume_path)
+    torch.save(
+        {
+            "formula_encoder_state_dict": FormulaEncoder(model_config).state_dict(),
+            "rescore_head_state_dict": RescoreHead(model_config).state_dict(),
+            "tcn_hash": tcn_hash(tcn) if matching else "0" * 16,
+        },
+        predictor.rescore_resume_path,
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        predictor._ensure_models_loaded()
+    mismatch = [w for w in caught if "different TCN" in str(w.message)]
+    assert len(mismatch) == (0 if matching else 1)

@@ -43,7 +43,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from msfiddle.settings import load_config
-from msfiddle.model_tcn import MS2FNet_tcn, FormulaEncoder, RescoreHead
+from msfiddle.model_tcn import MS2FNet_tcn, FormulaEncoder, RescoreHead, tcn_hash
 from msfiddle.utils.mol_utils import formula_to_vector
 
 # ---------------------------------------------------------------------------
@@ -190,6 +190,7 @@ if __name__ == "__main__":
     state_dict = torch.load(args.resume_path, map_location=device)["model_state_dict"]
     state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
     spec_encoder.load_state_dict(state_dict, strict=False)
+    weights_hash = tcn_hash(state_dict)
     spec_encoder.eval()
     print(f"Loaded frozen spectrum encoder from {args.resume_path}")
 
@@ -247,6 +248,7 @@ if __name__ == "__main__":
                     "optimizer_state_dict": optimizer.state_dict(),
                     "best_val_top1": best_top1,
                     "seed": args.seed,
+                    "tcn_hash": weights_hash,
                 },
                 args.checkpoint_path,
             )

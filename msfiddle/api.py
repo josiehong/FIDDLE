@@ -575,12 +575,7 @@ class MsFiddlePredictor:
             if not path.exists()
         ]
         if missing_paths and self.download_models:
-            download_pretrained_models(
-                models=[
-                    f"fiddle_tcn_{self.instrument_type}",
-                    f"fiddle_rescore_{self.instrument_type}",
-                ]
-            )
+            download_pretrained_models(instruments=[self.instrument_type])
             missing_paths = [
                 path
                 for path in (self.resume_path, self.rescore_resume_path)
@@ -617,7 +612,7 @@ class MsFiddlePredictor:
         assert torch is not None
         assert nn is not None
 
-        from .model_tcn import FormulaEncoder, MS2FNet_tcn, RescoreHead
+        from .model_tcn import FormulaEncoder, MS2FNet_tcn, RescoreHead, tcn_hash
 
         self.device, self.device_ids = _resolve_torch_device(
             torch,
@@ -665,6 +660,15 @@ class MsFiddlePredictor:
         )
         formula_encoder.load_state_dict(ckpt["formula_encoder_state_dict"])
         rescore_head.load_state_dict(ckpt["rescore_head_state_dict"])
+        expected = ckpt.get("tcn_hash")  # absent in older checkpoints
+        if expected and expected != tcn_hash(state_dict):
+            warnings.warn(
+                f"The rescore model {self.rescore_resume_path} was trained with a "
+                f"different TCN than {self.resume_path}; its scores are not "
+                "meaningful with this TCN. Use the two checkpoints of one release "
+                "or training run.",
+                stacklevel=2,
+            )
         formula_encoder.eval()
         rescore_head.eval()
 

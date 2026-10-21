@@ -7,7 +7,7 @@ import pytest
 
 from msfiddle import api, main as cli
 from msfiddle.api import MsFiddlePredictor, _normalize_instrument_type
-from msfiddle.download import MODEL_URLS
+from msfiddle.download import INSTRUMENTS
 from msfiddle.settings import load_config
 from msfiddle.utils import filter_spec, spec2arr, split_by_scaffold
 from msfiddle.utils.casmi2026 import (
@@ -259,7 +259,7 @@ def test_timstof_model_matches_qtof_for_transfer():
 
 def test_api_accepts_timstof_and_downloads_its_checkpoints(monkeypatch, tmp_path):
     assert _normalize_instrument_type("TimsTOF") == "timstof"
-    assert {"fiddle_tcn_timstof", "fiddle_rescore_timstof"} <= set(MODEL_URLS)
+    assert "timstof" in INSTRUMENTS
     predictor = MsFiddlePredictor(
         instrument_type="timstof",
         resume_path=tmp_path / "tcn.pt",
@@ -269,11 +269,13 @@ def test_api_accepts_timstof_and_downloads_its_checkpoints(monkeypatch, tmp_path
     assert predictor.config_path.name == "fiddle_tcn_timstof.yml"
     requested = []
     monkeypatch.setattr(
-        api, "download_pretrained_models", lambda models: requested.extend(models)
+        api,
+        "download_pretrained_models",
+        lambda instruments: requested.extend(instruments),
     )
     with pytest.raises(FileNotFoundError):
         predictor._ensure_model_files()
-    assert requested == ["fiddle_tcn_timstof", "fiddle_rescore_timstof"]
+    assert requested == ["timstof"]
 
 
 def test_api_encodes_merged_energy_and_formate_with_timstof_config(tmp_path):

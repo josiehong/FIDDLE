@@ -26,9 +26,8 @@ Model weights must be downloaded before running predictions:
    # Download to the default location (~/.msfiddle/check_point/<release tag>)
    msfiddle-download-models
 
-   # Download specific models to a custom location
-   msfiddle-download-models --destination /path/to/models \
-                             --models fiddle_tcn_qtof fiddle_rescore_qtof
+   # Download one instrument's models to a custom location
+   msfiddle-download-models --destination /path/to/models --instruments qtof
 
 Each release keeps its checkpoints in its own directory (for 2.2.x,
 ``~/.msfiddle/check_point/v2.2.0``), so run ``msfiddle-download-models`` again
@@ -92,6 +91,10 @@ identical) and ``--batch_size`` sets the inference batch (default 32).
             --rescore_resume_path /path/to/rescore_model.pt \
             --result_path /path/to/results.csv \
             --device 0
+
+A rescore model works only with the TCN it was trained on. Rescore
+checkpoints record a hash of that TCN's weights, and prediction warns when
+``--resume_path`` is a different TCN.
 
 **Mass window and isotope errors:** two ``post_processing`` settings in the
 config control which candidate masses refinement considers.

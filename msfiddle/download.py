@@ -34,14 +34,24 @@ try:
 except _PackageNotFoundError:
     FIDDLE_RELEASE = "v0.0.0"
 
-MODEL_URLS = {
-    "fiddle_tcn_qtof": f"https://github.com/JosieHong/FIDDLE/releases/download/{FIDDLE_RELEASE}/fiddle_tcn_qtof.zip",
-    "fiddle_rescore_qtof": f"https://github.com/JosieHong/FIDDLE/releases/download/{FIDDLE_RELEASE}/fiddle_rescore_qtof.zip",
-    "fiddle_tcn_orbitrap": f"https://github.com/JosieHong/FIDDLE/releases/download/{FIDDLE_RELEASE}/fiddle_tcn_orbitrap.zip",
-    "fiddle_rescore_orbitrap": f"https://github.com/JosieHong/FIDDLE/releases/download/{FIDDLE_RELEASE}/fiddle_rescore_orbitrap.zip",
-    "fiddle_tcn_timstof": f"https://github.com/JosieHong/FIDDLE/releases/download/{FIDDLE_RELEASE}/fiddle_tcn_timstof.zip",
-    "fiddle_rescore_timstof": f"https://github.com/JosieHong/FIDDLE/releases/download/{FIDDLE_RELEASE}/fiddle_rescore_timstof.zip",
-}
+INSTRUMENTS = ("qtof", "orbitrap", "timstof")
+
+
+def model_files(instrument):
+    """The TCN and rescore checkpoint file names of an instrument."""
+    return [f"fiddle_tcn_{instrument}.pt", f"fiddle_rescore_{instrument}.pt"]
+
+
+def release_asset_urls(instrument, release=None):
+    """URLs of the zips holding an instrument's checkpoints. From v2.3.0 on, one
+    zip holds both, so the pair that belongs together is always installed
+    together; earlier releases have a zip per model."""
+    release = release or FIDDLE_RELEASE
+    base = f"https://github.com/JosieHong/FIDDLE/releases/download/{release}"
+    version = tuple(int(n) for n in re.findall(r"\d+", release)[:2])
+    if version >= (2, 3):
+        return [f"{base}/fiddle_{instrument}.zip"]
+    return [f"{base}/{name[:-3]}.zip" for name in model_files(instrument)]
 
 
 class DownloadProgressBar(tqdm):
@@ -74,88 +84,56 @@ def get_checkpoint_dir():
     )
 
 
-def download_models(destination=None, models=None):
+def download_models(destination=None, instruments=None):
     """
     Download pre-trained models for msfiddle.
 
     Args:
-        destination (str, optional): Path to save the models. If None, uses the package directory.
-        models (list, optional): List of model names to download. If None, downloads all models.
+        destination (str, optional): Path to save the models. If None, uses the
+            release's checkpoint directory (get_checkpoint_dir()).
+        instruments (list, optional): Instruments whose TCN and rescore models
+            to download ('qtof', 'orbitrap', 'timstof'). If None, all of them.
     """
-    if destination is None:
-        destination = get_checkpoint_dir()
-    else:
-        destination = os.path.abspath(destination)
-
-    # Create the destination directory if it doesn't exist
+    destination = os.path.abspath(destination or get_checkpoint_dir())
     os.makedirs(destination, exist_ok=True)
-
     print(f"Models will be downloaded to: {destination}")
 
-    # Determine which models to download
-    if models is None:
-        models = list(MODEL_URLS.keys())
-
-    # Create a temporary directory for downloads
-    with tempfile.TemporaryDirectory() as temp_dir:
-        for model_name in models:
-            if model_name not in MODEL_URLS:
-                print(f"Warning: Unknown model '{model_name}', skipping.")
-                continue
-
-            url = MODEL_URLS[model_name]
-            zip_path = os.path.join(temp_dir, f"{model_name}.zip")
-
-            # Download the model
-            print(f"Downloading {model_name} model...")
-            try:
-                download_url(url, zip_path)
-            except Exception as e:
-                print(f"Error downloading {model_name}: {e}")
-                print(f"You can manually download it from {url}")
-                continue
-
-            # Extract the model
-            try:
-                with zipfile.ZipFile(zip_path, "r") as zip_ref:
-                    zip_ref.extractall(temp_dir)
-
-                # Move the model file to the destination
-                model_file = f"{model_name}.pt"
+    for instrument in instruments or INSTRUMENTS:
+        if instrument not in INSTRUMENTS:
+            print(f"Warning: Unknown instrument '{instrument}', skipping.")
+            continue
+        with tempfile.TemporaryDirectory() as temp_dir:
+            for url in release_asset_urls(instrument):
+                zip_path = os.path.join(temp_dir, url.rsplit("/", 1)[-1])
+                print(f"Downloading {url.rsplit('/', 1)[-1]}...")
+                try:
+                    download_url(url, zip_path)
+                    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                        zip_ref.extractall(temp_dir)
+                except Exception as e:
+                    print(f"Error downloading {url}: {e}")
+                    print(f"You can manually download and extract it from {url}")
+            for model_file in model_files(instrument):
                 src_path = os.path.join(temp_dir, model_file)
-                dest_path = os.path.join(destination, model_file)
-
                 if os.path.exists(src_path):
+                    dest_path = os.path.join(destination, model_file)
                     shutil.move(src_path, dest_path)
                     print(f"Installed {model_file} to {dest_path}")
                 else:
-                    print(
-                        f"Warning: Model file {model_file} not found after extraction"
-                    )
-            except Exception as e:
-                print(f"Error extracting {model_name}: {e}")
-                print(f"You can manually download and extract it from {url}")
+                    print(f"Warning: {model_file} not found in the download")
 
     print("\nDownload complete!")
     print(f"Models are installed in: {destination}")
 
 
 def check_models_exist():
-    """Check if models exist in the package directory."""
+    """Check if all models exist in the checkpoint directory."""
     model_dir = get_checkpoint_dir()
-
-    if not os.path.exists(model_dir):
-        return False
-
-    # Check if all model files exist
-    all_exist = True
-    for model_name in MODEL_URLS.keys():
-        model_path = os.path.join(model_dir, f"{model_name}.pt")
-        if not os.path.exists(model_path):
-            all_exist = False
-            break
-
-    return all_exist
+    return all(
+        os.path.exists(os.path.join(model_dir, name))
+        for instrument in INSTRUMENTS
+        for name in model_files(instrument)
+    )
 
 
 def get_model_path(model_name):
@@ -171,12 +149,12 @@ def print_checkpoint_paths():
 
     if os.path.exists(checkpoint_dir):
         print("\nAvailable models:")
-        for model_name in MODEL_URLS.keys():
-            model_path = os.path.join(checkpoint_dir, f"{model_name}.pt")
-            if os.path.exists(model_path):
-                print(f"  [+] {model_name}.pt")
-            else:
-                print(f"  [-] {model_name}.pt (not downloaded)")
+        for instrument in INSTRUMENTS:
+            for name in model_files(instrument):
+                if os.path.exists(os.path.join(checkpoint_dir, name)):
+                    print(f"  [+] {name}")
+                else:
+                    print(f"  [-] {name} (not downloaded)")
     else:
         print("\nCheckpoint directory does not exist. No models are downloaded.")
         print("Run 'msfiddle-download-models' to download the models.")
@@ -193,15 +171,14 @@ def download_models_cli():
         help="Path to save the models (optional, defaults to package directory)",
     )
     parser.add_argument(
-        "-m",
-        "--models",
+        "-i",
+        "--instruments",
         nargs="+",
-        help="Specific model names to download (optional, defaults to all models)",
+        choices=INSTRUMENTS,
+        help="Instruments whose models to download (default: all)",
     )
     args = parser.parse_args()
-
-    # If destination is not provided, it will be None and download_models will use get_checkpoint_dir()
-    download_models(destination=args.destination, models=args.models)
+    download_models(destination=args.destination, instruments=args.instruments)
 
 
 # Command-line interface for the print_checkpoint_paths function

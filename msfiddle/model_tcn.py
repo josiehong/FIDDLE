@@ -1,3 +1,5 @@
+import hashlib
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -328,3 +330,18 @@ class RescoreHead(nn.Module):
             Scalar logit tensor (B,). Apply sigmoid externally.
         """
         return self.net(interaction).squeeze(1)
+
+
+def tcn_hash(state_dict):
+    """SHA-256 hash of TCN weights, cut to 16 hex digits. A rescore model works only with the TCN whose
+    embeddings it was trained on, so rescore checkpoints record this hash and
+    prediction warns when the TCN given does not match. A DataParallel
+    "module." prefix does not change the hash."""
+    h = hashlib.sha256()
+    for key, value in sorted(
+        (k[len("module.") :] if k.startswith("module.") else k, v)
+        for k, v in state_dict.items()
+    ):
+        h.update(key.encode())
+        h.update(value.detach().cpu().contiguous().view(-1).view(torch.uint8).numpy())
+    return h.hexdigest()[:16]
