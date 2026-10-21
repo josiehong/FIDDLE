@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `msfiddle.settings.load_config`: every config is read through it. It fills defaults, rejects invalid post-processing settings, and warns when a dataset's `ppm_tolerance` is wider than `mass_tolerance`.
 - `scripts/run_buddy_sirius.py` runs msbuddy and SIRIUS on an MGF file, setting `ION` from `PRECURSOR_TYPE` so both tools see the adduct, and `running_scripts/compare.sh` runs FIDDLE alone, with BUDDY, and with BUDDY and SIRIUS for each experiment. The experiment scripts run BUDDY and SIRIUS through it again.
 - `scripts/check_precursor_error.py` classifies each spectrum's precursor mass error as within tolerance, a 13C isotope peak, or other, and flags spectra within tolerance on the m/z but not on the neutral mass. Preprocessing reports isotope-peak precursors as `isotope_error` instead of `ppm_tolerance`; they are still dropped.
+- The experiment scripts take `MODEL_TAG` to evaluate locally trained checkpoints (`check_point/fiddle_{tcn,rescore}_<instrument>_<MODEL_TAG>.pt`) instead of the released ones, and the noised and chimeric scripts take `DATA_TAG` for the matching test sets.
 
 ### Changed
 
@@ -29,6 +30,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Preprocessing dropped every spectrum of a library passed in as a one-pass MGF reader: `filter_spec` read its input twice, and the second pass was empty. One Q-TOF training library was affected; data built since the August 2026 preprocessing speed-up, including the 2.2 release data, lacks its spectra.
+- Resuming TCN training reset the learning rate to its initial value, discarding the halvings restored with the optimizer state.
+- fp32 TCN training skips a step with NaN or infinite gradients, as AMP training already did, and stops with a message when the validation error turns NaN.
+- `run_buddy_sirius.py` clears its earlier outputs first: SIRIUS adds to an existing project, so results from an earlier MGF were pooled in.
 
 ### Removed
 
