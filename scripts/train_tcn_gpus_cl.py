@@ -197,7 +197,7 @@ def train_step(
                 # Update the learning rate during warm-up phase (counted in
                 # optimizer steps). After warm-up phase, the learning rate
                 # ctrled by warmup_scheduler is fixed and we won't use it
-                if warmup_scheduler.last_epoch < warmup_steps:
+                if warmup_scheduler and warmup_scheduler.last_epoch < warmup_steps:
                     warmup_scheduler.step()
 
             # (tmp) for debug
@@ -464,9 +464,15 @@ if __name__ == "__main__":
             len(train_set) / effective_batch_size * config["train"]["warmup_ratio"]
         )  # 10% of the optimizer steps in the first epoch
 
-    # Create the warm-up scheduler
+    # Create the warm-up scheduler. Not when resuming: creating it sets the
+    # learning rate back to its initial value, undoing the plateau halvings
+    # restored with the optimizer state
     warmup_start_lr = 1e-6
-    warmup_scheduler = WarmUpScheduler(optimizer, warmup_steps, warmup_start_lr)
+    warmup_scheduler = (
+        WarmUpScheduler(optimizer, warmup_steps, warmup_start_lr)
+        if warmup_steps > 0
+        else None
+    )
     print(
         "Warm-up steps: {}, Warm-up start lr: {}".format(warmup_steps, warmup_start_lr)
     )
