@@ -1,15 +1,11 @@
 #!/usr/bin/env bash
-# Robustness to noise: add 1-5x random noise peaks to held-out test spectra
-# and predict with the released models, alone and combined with BUDDY and
-# SIRIUS. Run from the repository root after `msfiddle download` and the data
-# step of the release training script.
+# Robustness to noise: add random noise peaks to held-out test spectra and
+# predict, alone and with BUDDY and SIRIUS. Run from the repository root.
 set -e
 source running_scripts/compare.sh
 
-# The test spectra must come from the data build the models were trained on,
-# or test compounds may be training compounds: DATA_TAG 082426 for the v2.2
-# models, 102026 for v2.3. Test v2.3 before its release with
-#   DATA_TAG=102026 MODEL_TAG=102026_muon bash <this script>
+# DATA_TAG must name the data build the models were trained on, so the test
+# compounds stay unseen; MODEL_TAG selects local checkpoints (see compare.sh).
 DATA=./data/cl_pkl_${DATA_TAG:-082426}
 
 for INST in qtof orbitrap; do
