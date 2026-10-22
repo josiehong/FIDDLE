@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `scripts/check_precursor_error.py` classifies each spectrum's precursor mass error as within tolerance, a 13C isotope peak, or other, and flags spectra within tolerance on the m/z but not on the neutral mass. Preprocessing reports isotope-peak precursors as `isotope_error` instead of `ppm_tolerance`; they are still dropped.
 - The experiment scripts take `MODEL_TAG` to evaluate locally trained checkpoints (`check_point/fiddle_{tcn,rescore}_<instrument>_<MODEL_TAG>.pt`) instead of the released ones, and the noised and chimeric scripts take `DATA_TAG` for the matching test sets.
 - Rescore checkpoints record a hash of the weights of the TCN they were trained with, and prediction warns when it is given a different TCN, whose embeddings the rescore model cannot read.
+- A benchmarks page in the documentation, and `scripts/remove_training_compounds.py`, which removes the compounds of a model's training data from benchmark MGF files. `experiments_test_benchmark.sh` reports each benchmark on all compounds and on the unseen ones.
 
 ### Changed
 

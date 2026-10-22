@@ -7,7 +7,7 @@ msfiddle
 
 - Formula prediction from MS/MS spectra via pre-trained TCN models
 - Candidate refinement by bounded formula enumeration, ranked by a rescore model
-- Support for Orbitrap and Q-TOF instruments
+- Support for Orbitrap, Q-TOF and timsTOF instruments
 - Optional integration with BUDDY and SIRIUS
 
 .. rubric:: Contents
@@ -17,6 +17,7 @@ msfiddle
 
    usage
    formats
+   benchmarks
    api
 
 .. rubric:: Reference

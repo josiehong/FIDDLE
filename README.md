@@ -32,7 +32,7 @@ Use `--instrument_type qtof` for Q-TOF data and `--instrument_type timstof` for 
 
 When the true formulas are known (a `SMILES` or `FORMULA` field in each spectrum), add `--eval` to also report top-k accuracy, saved as `results_eval.csv`.
 
-The [documentation](https://msfiddle.readthedocs.io) covers the Python API, BUDDY and SIRIUS integration, custom checkpoints, and all output columns.
+The [documentation](https://msfiddle.readthedocs.io) covers the Python API, BUDDY and SIRIUS integration, custom checkpoints, all output columns, and [benchmark results](https://msfiddle.readthedocs.io/en/latest/benchmarks.html).
 
 ## Reproduce the paper
 
