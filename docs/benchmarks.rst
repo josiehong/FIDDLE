@@ -9,9 +9,11 @@ Each benchmark is run with the models of its instrument type. CASMI 2016
 (Q Exactive) uses the Orbitrap models with their release config, as
 ``--instrument_type orbitrap`` would. EMBL-MCF 2.0 (Orbitrap Exploris 240)
 also uses the Orbitrap models, with a 50 ppm refinement window in
-``fiddle_tcn_embl.yml`` because its precursor m/z errors are large. CASMI 2017
-uses the Q-TOF models with ``fiddle_tcn_casmi.yml``. Each benchmark is run
-three ways:
+``fiddle_tcn_embl.yml`` because its precursor m/z errors are large. Its
+spectra were acquired with stepped normalized collision energies (30, 50 and
+70%), which ``scripts/embl2mgf.py`` averages and writes as NCE (``50 nce``).
+CASMI 2017 uses the Q-TOF models with ``fiddle_tcn_casmi.yml``. Each benchmark
+is run three ways:
 
 - **FIDDLE**: FIDDLE's own candidates.
 - **FIDDLE + BUDDY**: BUDDY's candidates added to FIDDLE's, all ranked by the
