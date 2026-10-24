@@ -131,8 +131,8 @@ model:
 # ------------------------
 train: 
   epochs: 500
-  batch_size: 512 # 128 fits an 11GB GPU; contrastive training runs two forward passes
-  grad_accum_steps: 1 # optimizer step every N batches; effective batch = batch_size x N
+  batch_size: 256 # 128 fits an 11GB GPU; contrastive training runs two forward passes
+  grad_accum_steps: 2 # optimizer step every N batches; effective batch = batch_size x N
   num_workers: 8
   lr: 0.001
   weight_decay: 0.01
