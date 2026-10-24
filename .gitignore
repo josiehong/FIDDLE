@@ -176,3 +176,6 @@ output_demo.csv
 msfiddle/check_point/
 logs/
 MERGE_PLAN.md
+
+# SIRIUS install (running_scripts/install_sirius.sh)
+tools/

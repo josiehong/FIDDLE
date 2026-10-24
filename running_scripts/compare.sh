@@ -5,6 +5,10 @@
 #   and SIRIUS, writing ./result/{fiddle,fiddle_buddy,fiddle_buddy_sirius}_NAME.csv.
 #   MODEL_TAG uses ./check_point/fiddle_{tcn,rescore}_INSTRUMENT_MODEL_TAG.pt
 #   instead of the released models.
+
+# SIRIUS installed by install_sirius.sh
+export PATH="$PWD/tools/sirius/bin:$PWD/tools/sirius.app/Contents/MacOS:$PATH"
+
 compare() {
     local mgf=$1 inst=$2 name=$3
     shift 3

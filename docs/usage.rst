@@ -129,64 +129,87 @@ msfiddle predicts for adducts with a neutral loss such as ``[M+H-H2O]+``.
 Integration with BUDDY and SIRIUS
 -----------------------------------
 
-Candidate formulas from the `BUDDY/msbuddy command-line tool
-<https://msbuddy.readthedocs.io/en/latest/cmdapi.html>`_ and the
-`SIRIUS command-line interface <https://v6.docs.sirius-ms.io/cli/>`_ can be
-incorporated to improve refinement results. ``--buddy_path`` and
-``--sirius_path`` accept native/original tool outputs. The older
-msfiddle-normalized CSV files are still accepted but are deprecated and will be
-removed in ``msfiddle`` 3.0.0.
+msfiddle can rank candidate formulas from the
+`BUDDY/msbuddy command-line tool <https://msbuddy.readthedocs.io/en/latest/cmdapi.html>`_
+and the `SIRIUS command-line interface <https://v6.docs.sirius-ms.io/cli/>`_
+together with its own.
+Neither tool comes with msfiddle; install them separately. The steps below run
+both on ``data.mgf`` and compare FIDDLE alone, FIDDLE + BUDDY and
+FIDDLE + BUDDY + SIRIUS.
 
-First, run BUDDY/msbuddy with the same MGF file:
+**1. Prepare the input for the tools.** Both tools read the precursor m/z from
+``PEPMASS``, the charge from ``CHARGE`` and the adduct from ``ION``, and SIRIUS
+needs the MS level as a number. SIRIUS also takes a ``FORMULA``, ``SMILES`` or
+``INCHI`` field as the known answer, so remove them when the file holds
+reference annotations, as test data does. This writes ``tools.mgf`` from an
+msfiddle input file:
+
+.. code-block:: python
+
+   import re
+   from pyteomics import mgf
+
+   def for_tools(spectra):
+       for spec in spectra:
+           p = spec["params"]
+           for key in ("smiles", "inchi", "inchikey", "inchi_key", "formula"):
+               p.pop(key, None)
+           p["pepmass"] = float(p["precursor_mz"])
+           p["ion"] = p["precursor_type"]
+           n, sign = re.search(r"\](\d*)([+-])$", p["ion"]).groups()
+           p["charge"] = (n or "1") + sign
+           p["ms_level"] = "2"
+           yield spec
+
+   mgf.write(for_tools(mgf.read("data.mgf")), "tools.mgf", file_mode="w")
+
+**2. Run BUDDY.** Use ``-ms orbitrap`` or ``-ms qtof`` (also for timsTOF data):
 
 .. code-block:: bash
 
-   msbuddy -mgf /path/to/data.mgf \
-           -output /path/to/buddy_output \
-           -ms orbitrap \
-           -d
+   msbuddy -mgf tools.mgf -output buddy_output -ms orbitrap -d -p
 
-``msbuddy`` writes ``msbuddy_result_summary.tsv`` in the output directory.
-When ``-d`` is used, it also writes per-spectrum ``formula_results.tsv`` files
-with per-candidate FDR scores. Passing the full output directory to
-``msfiddle`` is preferred because those detailed scores can be used directly.
-If only ``msbuddy_result_summary.tsv`` is passed, only rank 1 has an FDR score
-and lower ranks are not used by the FDR threshold. See the
-`msbuddy command-line API <https://msbuddy.readthedocs.io/en/latest/cmdapi.html>`_
-for the full option list.
+``-d`` writes per-spectrum ``formula_results.tsv`` files with a score for
+every candidate, which msfiddle uses; without it only the top candidate has a
+score. msbuddy's models need ``lightgbm`` and ``scikit-learn``, which it does
+not install itself.
 
-Next, run SIRIUS and export formula summaries:
+**3. Run SIRIUS** with the matching profile and export the top five
+candidates per spectrum:
 
 .. code-block:: bash
 
-   sirius --input /path/to/data.mgf \
-          --project /path/to/sirius_project \
+   sirius --input tools.mgf --project sirius_project.sirius \
           formulas --profile orbitrap
+   sirius --project sirius_project.sirius \
+          summaries --top-k-summary=5 --output sirius_output
 
-   sirius --project /path/to/sirius_project \
-          summaries --top-k-summary=5 \
-          --output /path/to/sirius_output
+SIRIUS 6 requires ``sirius login`` before computing formulas. It skips spectra
+it cannot read and still exits normally, so check that
+``sirius_output/formula_identifications_top-5.tsv`` has rows. It adds to an
+existing project, so delete ``sirius_project.sirius`` before running it on a
+new file.
 
-SIRIUS writes formula summary files such as
-``formula_identifications.tsv`` or ``formula_identifications_top-5.tsv``.
-SIRIUS 6 may require ``sirius login`` before formula computation. See the
-`SIRIUS command-line interface <https://v6.docs.sirius-ms.io/cli/>`_ for
-workflow details and the full option list.
-
-Then pass those native/original outputs to ``msfiddle``:
+**4. Run FIDDLE** alone and with each tool's candidates. Give FIDDLE the
+original file; with ``--eval`` it reads the true formulas from it:
 
 .. code-block:: bash
 
-   msfiddle --test_data /path/to/data.mgf \
-            --buddy_path /path/to/buddy_output \
-            --sirius_path /path/to/sirius_output \
-            --result_path /path/to/results.csv \
-            --device 0
+   msfiddle --test_data data.mgf --instrument_type orbitrap \
+            --result_path fiddle.csv --eval
+   msfiddle --test_data data.mgf --instrument_type orbitrap \
+            --buddy_path buddy_output \
+            --result_path fiddle_buddy.csv --eval
+   msfiddle --test_data data.mgf --instrument_type orbitrap \
+            --buddy_path buddy_output --sirius_path sirius_output \
+            --result_path fiddle_buddy_sirius.csv --eval
 
-You can also pass ``/path/to/buddy_output/msbuddy_result_summary.tsv`` or an
-individual SIRIUS formula summary file directly. If only one external tool is
-available, omit the other option. See :doc:`formats` for the native formats
-and the deprecated msfiddle-normalized schemas.
+Each run writes its candidates to the result CSV and, with ``--eval``, the
+top-k accuracy to ``<result>_eval.csv``. Leave out ``--eval`` for data without
+known formulas, and either path to use one tool only.
+``--buddy_path`` also accepts ``msbuddy_result_summary.tsv`` and
+``--sirius_path`` a single formula summary file. See :doc:`formats` for these
+formats and the deprecated msfiddle-normalized CSV files.
 
 Python API
 ----------

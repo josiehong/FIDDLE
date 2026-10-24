@@ -44,7 +44,12 @@ This repository also holds the research code for training and evaluation. Run ev
 conda env create -f environment.yml
 ```
 
-2. (optional) Install [BUDDY](https://github.com/Philipbear/msbuddy) and [SIRIUS](https://v6.docs.sirius-ms.io/) for the comparison experiments.
+2. (optional) Install [BUDDY](https://github.com/Philipbear/msbuddy) and [SIRIUS](https://v6.docs.sirius-ms.io/) for the comparison experiments. SIRIUS needs a free account; log in once as `install_sirius.sh` prints at the end.
+
+```bash
+bash running_scripts/install_buddy.sh
+bash running_scripts/install_sirius.sh
+```
 
 3. Download the models into `./check_point/`, where the scripts expect them:
 
