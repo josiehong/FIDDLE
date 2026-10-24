@@ -733,15 +733,15 @@ class MsFiddlePredictor:
         the neutral mass it refines around. ``isotope_shift`` = k assumes the
         precursor m/z was read from the k-th 13C isotope peak."""
         spectrum = prediction.spectrum
+        # Aliases such as [M+FA-H]- are encoded under their canonical name
+        adduct = unify_precursor_type(spectrum.precursor_type)
         neutral_mass = float(
-            mass_calculator(spectrum.precursor_type, spectrum.precursor_mz)
-        ) - isotope_mass_shift(spectrum.precursor_type, isotope_shift)
+            mass_calculator(adduct, spectrum.precursor_mz)
+        ) - isotope_mass_shift(adduct, isotope_shift)
         pp = self.config["post_processing"]
         # A ppm tolerance applies to the precursor m/z, like the data filters
         window = (
-            precursor_window_da(
-                spectrum.precursor_type, spectrum.precursor_mz, pp["mass_tolerance"]
-            )
+            precursor_window_da(adduct, spectrum.precursor_mz, pp["mass_tolerance"])
             if pp["ppm_mode"]
             else pp["mass_tolerance"]
         )

@@ -312,3 +312,33 @@ def test_external_formulas_with_unmodeled_elements_are_ignored():
     assert not api._is_external_formula("C8H22OSi2")
     assert not api._is_external_formula("NA")
     assert not api._is_external_formula(float("nan"))
+
+
+def test_refinement_args_accepts_adduct_aliases(tmp_path):
+    predictor = MsFiddlePredictor(
+        resume_path=tmp_path / "missing_tcn.pt",
+        rescore_resume_path=tmp_path / "missing_rescore.pt",
+    )
+
+    def neutral_mass(adduct):
+        spectrum = _EncodedSpectrum(
+            id="spec-1",
+            precursor_type=adduct,
+            precursor_mz=200.0,
+            collision_energy="40",
+            spec=np.zeros(10, dtype=np.float32),
+            env=np.zeros(3, dtype=np.float32),
+            neutral_add=np.zeros(13, dtype=np.float32),
+        )
+        prediction = _ModelPrediction(
+            spectrum=spectrum,
+            vector_string="",
+            pred_formula="C8H10O",
+            pred_mass=122.1,
+            pred_atom_count=19.0,
+            pred_hc_count=1.25,
+            prediction_time=0.0,
+        )
+        return predictor._refinement_args(prediction, 5)[1]
+
+    assert neutral_mass("[M+FA-H]-") == pytest.approx(neutral_mass("[M+CH2O2-H]-"))

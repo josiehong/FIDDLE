@@ -107,7 +107,8 @@ def load_sirius_results(path: str | Path) -> pd.DataFrame:
     if resolved.is_dir():
         resolved = _find_sirius_formula_file(resolved)
 
-    df = _read_table(resolved)
+    # As text: an ID column with a gap would turn float and lose digits
+    df = _read_table(resolved, dtype=str)
     if _has_columns(df, SIRIUS_COLUMNS):
         warnings.warn(
             _NORMALIZED_CSV_DEPRECATION.format(tool="SIRIUS"),
@@ -125,15 +126,15 @@ def _resolve_path(path: str | Path, label: str) -> Path:
     return resolved
 
 
-def _read_table(path: Path) -> pd.DataFrame:
+def _read_table(path: Path, dtype=None) -> pd.DataFrame:
     suffix = path.suffix.lower()
     if suffix in {".xlsx", ".xls"}:
-        return _clean_columns(pd.read_excel(path))
+        return _clean_columns(pd.read_excel(path, dtype=dtype))
     if suffix == ".tsv":
-        return _clean_columns(pd.read_csv(path, sep="\t"))
+        return _clean_columns(pd.read_csv(path, sep="\t", dtype=dtype))
     if suffix == ".csv":
-        return _clean_columns(pd.read_csv(path))
-    return _clean_columns(pd.read_csv(path, sep=None, engine="python"))
+        return _clean_columns(pd.read_csv(path, dtype=dtype))
+    return _clean_columns(pd.read_csv(path, sep=None, engine="python", dtype=dtype))
 
 
 def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:

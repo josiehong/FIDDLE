@@ -8,8 +8,8 @@ training compound counts as seen.
 
 Usage:
     python scripts/remove_training_compounds.py \\
-        --train_data ./data/cl_pkl_102026/qtof_maxmin_train.pkl \\
-                     ./data/cl_pkl_102026/qtof_maxmin_val.pkl \\
+        --train_data ./data/cl_pkl_102026/qtof_maxmin_train.mgf \\
+                     ./data/cl_pkl_102026/qtof_maxmin_val.mgf \\
         --mgf ./data/casmi2016.mgf ./data/casmi2017.mgf ./data/embl.mgf
 """
 
@@ -48,7 +48,8 @@ if __name__ == "__main__":
         "--train_data",
         nargs="+",
         required=True,
-        help="Training (and validation) data of the model, .pkl or .mgf",
+        help="Training (and validation) data of the model, .mgf or .pkl; an MGF is "
+        "read one spectrum at a time, a pickle is loaded whole",
     )
     parser.add_argument("--mgf", nargs="+", required=True, help="Benchmark MGF files")
     args = parser.parse_args()
