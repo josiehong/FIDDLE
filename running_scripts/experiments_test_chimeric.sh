@@ -6,7 +6,7 @@ source running_scripts/compare.sh
 
 # DATA_TAG must name the data build the models were trained on, so the test
 # compounds stay unseen; MODEL_TAG selects local checkpoints (see compare.sh).
-DATA=./data/cl_pkl_${DATA_TAG:-082426}
+DATA=./data/cl_pkl_${DATA_TAG:-102026}
 
 for INST in qtof orbitrap; do
     python scripts/prepare_msms_chimeric.py \

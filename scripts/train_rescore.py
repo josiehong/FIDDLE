@@ -17,11 +17,11 @@ several points.
 
 Usage:
     python scripts/train_rescore.py \\
-        --train_data ./data/rescore_082426_muon/qtof_maxmin_rescore_train.pkl \\
-        --val_data ./data/rescore_082426_muon/qtof_maxmin_rescore_val.pkl \\
+        --train_data ./data/rescore_102026_muon/qtof_maxmin_rescore_train.pkl \\
+        --val_data ./data/rescore_102026_muon/qtof_maxmin_rescore_val.pkl \\
         --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \\
-        --resume_path ./check_point/fiddle_tcn_qtof_082426_muon.pt \\
-        --checkpoint_path ./check_point/fiddle_rescore_qtof_082426_muon.pt \\
+        --resume_path ./check_point/fiddle_tcn_qtof_102026_muon.pt \\
+        --checkpoint_path ./check_point/fiddle_rescore_qtof_102026_muon.pt \\
         --seed 1 --device 0
 """
 

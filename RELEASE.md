@@ -7,7 +7,7 @@ Follow these steps every time you want to publish a new `msfiddle` version to Py
 In `setup.py`, bump the version number:
 
 ```python
-version="2.2.0",  # e.g. 2.1.0 → 2.2.0
+version="2.3.0",  # e.g. 2.2.1 → 2.3.0
 ```
 
 `setup.py` is the single source of truth — `msfiddle.__version__` is derived
@@ -29,7 +29,7 @@ are the exception; both use the `v2.0.0` assets.
 Move the `[Unreleased]` items into a new versioned entry at the top of `CHANGELOG.md`:
 
 ```markdown
-## [2.2.0] - YYYY-MM-DD
+## [2.3.0] - YYYY-MM-DD
 ### Added
 - ...
 ### Changed
@@ -42,7 +42,7 @@ Move the `[Unreleased]` items into a new versioned entry at the top of `CHANGELO
 
 ```bash
 git add setup.py CHANGELOG.md
-git commit -m "Release v2.2.0"
+git commit -m "Release v2.3.0"
 git push origin main
 ```
 
@@ -50,8 +50,8 @@ git push origin main
 
 Go to this repo on GitHub → **Releases** → **Draft a new release**:
 
-1. Click **"Choose a tag"** → type `v2.2.0` → **"Create new tag: v2.2.0 on publish"**
-2. Set title to `v2.2.0`
+1. Click **"Choose a tag"** → type `v2.3.0` → **"Create new tag: v2.3.0 on publish"**
+2. Set title to `v2.3.0`
 3. Paste the CHANGELOG entry into the description
 4. Click **Publish release**
 
@@ -64,28 +64,29 @@ Any `v*` tag triggers the PyPI publish workflow, so only tag when you intend to 
 - Test the new release locally:
 
 ```bash
-pip install msfiddle==2.2.0
+pip install msfiddle==2.3.0
 ```
 
 ## 6. Checkpoints (every minor release)
 
-`msfiddle` downloads checkpoints from the `vx.y.0` release matching its installed version (`checkpoint_release_for_package_version` in `msfiddle/download.py`) and caches them under `~/.msfiddle/check_point/vx.y.0/`. A minor release therefore needs four zips attached to its `vx.y.0` GitHub release, named exactly:
+`msfiddle` downloads checkpoints from the `vx.y.0` release matching its installed version (`checkpoint_release_for_package_version` in `msfiddle/download.py`) and caches them under `~/.msfiddle/check_point/vx.y.0/`. A minor release therefore needs one zip per instrument attached to its `vx.y.0` GitHub release, named exactly:
 
-- `fiddle_tcn_qtof.zip`, `fiddle_rescore_qtof.zip`
-- `fiddle_tcn_orbitrap.zip`, `fiddle_rescore_orbitrap.zip`
+- `fiddle_qtof.zip`, `fiddle_orbitrap.zip`, `fiddle_timstof.zip`
+
+Each holds the instrument's TCN and rescore model (`fiddle_tcn_<instrument>.pt` and `fiddle_rescore_<instrument>.pt`), so the pair that belongs together is always downloaded together. Releases before 2.3 used one zip per model.
 
 Build them from the training checkpoints with:
 
 ```bash
-python scripts/package_release_checkpoints.py --tag 082426_muon --out_dir ./release_v2.2.0
+python scripts/package_release_checkpoints.py --tag 102026_muon --out_dir ./release_v2.3.0
 ```
 
-`--tag` is the suffix of `check_point/fiddle_<model>_<tag>.pt`. The script keeps only the weights inference needs, writes one `fiddle_<model>.pt` per zip, and checks each zip against its source. If the model weights did not change, upload the previous release's zips again under the new tag.
+`--tag` is the suffix of `check_point/fiddle_<model>_<instrument>_<tag>.pt`; `--instruments` packages some of them, for example on the server that trained them. The script keeps only the weights inference needs, checks that each rescore model was trained with the TCN it is packaged with (by a hash of the TCN's weights), and checks each zip against its sources. If the model weights did not change, upload the previous release's zips again under the new tag.
 
 Then check the download path from a clean install:
 
 ```bash
-pip install msfiddle==2.2.0
+pip install msfiddle==2.3.0
 msfiddle-download-models
 msfiddle --demo --result_path ./output_demo.csv --no_cuda
 ```

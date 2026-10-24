@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.3.0] - 2026-10-24
 
 ### Added
 
@@ -21,7 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - The experiment scripts take `MODEL_TAG` to evaluate locally trained checkpoints (`check_point/fiddle_{tcn,rescore}_<instrument>_<MODEL_TAG>.pt`) instead of the released ones, and the noised and chimeric scripts take `DATA_TAG` for the matching test sets.
 - Rescore checkpoints record a hash of the weights of the TCN they were trained with, and prediction warns when it is given a different TCN, whose embeddings the rescore model cannot read.
 - A step-by-step guide in the documentation to running BUDDY and SIRIUS on your own data and comparing FIDDLE alone, with BUDDY, and with both.
-- A benchmarks page in the documentation, and `scripts/remove_training_compounds.py`, which removes the compounds of a model's training data from benchmark MGF files. `experiments_test_benchmark.sh` reports each benchmark on all compounds and on the unseen ones.
+- A benchmarks page in the documentation, and `scripts/remove_training_compounds.py`, which removes the compounds of a model's training data from benchmark MGF files. `experiments_test_benchmark.sh` reports each benchmark on all compounds and on the unseen ones, and runs each with the models of its instrument: the Orbitrap models for CASMI 2016 and EMBL-MCF 2.0, which were measured on Orbitraps, and the Q-TOF models for CASMI 2017. `fiddle_tcn_embl.yml` follows the Orbitrap model settings with a wider refinement window.
 
 ### Changed
 
@@ -38,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - fp32 TCN training skips a step with NaN or infinite gradients, as AMP training already did, and stops with a message when the validation error turns NaN.
 - SIRIUS 6 results were not matched to their spectra unless the MGF had a `FEATURE_ID`: the summaries identify spectra by a mapping ID that adds an internal ID and the source to the title, so SIRIUS added no candidates. msfiddle now recovers the title from it, and `predict` warns when no BUDDY or SIRIUS result matches a spectrum. `run_buddy_sirius.py` and the docs set `FEATURE_ID` to the title.
 - A BUDDY or SIRIUS candidate with an element FIDDLE does not model, such as Si, stopped prediction with a `KeyError`; such candidates are now skipped.
+- `embl2mgf.py` writes EMBL-MCF 2.0 collision energies as NCE (`50 nce`). They are normalized energies, but the bare number it wrote was read as eV and turned into an NCE several times too high.
 - `run_buddy_sirius.py` clears its earlier outputs first: SIRIUS adds to an existing project, so results from an earlier MGF were pooled in.
 
 ### Removed

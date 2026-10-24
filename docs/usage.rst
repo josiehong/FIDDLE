@@ -29,8 +29,8 @@ Model weights must be downloaded before running predictions:
    # Download one instrument's models to a custom location
    msfiddle-download-models --destination /path/to/models --instruments qtof
 
-Each release keeps its checkpoints in its own directory (for 2.2.x,
-``~/.msfiddle/check_point/v2.2.0``), so run ``msfiddle-download-models`` again
+Each release keeps its checkpoints in its own directory (for 2.3.x,
+``~/.msfiddle/check_point/v2.3.0``), so run ``msfiddle-download-models`` again
 after upgrading to a new minor version.
 
 To inspect current model paths:
