@@ -20,7 +20,8 @@ required per spectrum; all others are ignored.
    * - ``PRECURSOR_TYPE``
      - Adduct type (e.g. ``[M+H]+``, ``[M-H]-``). See supported types below.
    * - ``COLLISION_ENERGY``
-     - A single collision energy, in eV (``50.0``) or as NCE (``NCE=35%``).
+     - A single collision energy, in eV (``50.0``) or as NCE (``35 nce``,
+       ``NCE=35%``). A bare number is read as eV.
        Spectra with a stepped or ranged energy (``HCD (NCE 20-30-40%)``,
        ``30-50 eV``) are skipped with a warning: the models were trained on
        single-energy spectra.
@@ -35,7 +36,7 @@ required per spectrum; all others are ignored.
    CHARGE=1-
    PRECURSOR_TYPE=[M-H]-
    PRECURSOR_MZ=111.02016
-   COLLISION_ENERGY=50.0
+   COLLISION_ENERGY=50 nce
    41.0148 0.329893
    68.0258 0.402906
    111.0203 100.0
