@@ -4,7 +4,7 @@
 # the models' training data (*_unseen). Run from the repository root with the
 # raw data in data/benchmark/{casmi2016,casmi2017,embl}/. DATA_TAG names the
 # data build the models were trained on; MODEL_TAG selects local checkpoints
-# (see compare.sh).
+# (see compare.sh). Ends with a summary table and figure for the docs.
 set -e
 source running_scripts/compare.sh
 
@@ -25,3 +25,6 @@ for BENCH in casmi2016 casmi2017 embl; do
     compare ./data/$BENCH.mgf qtof $BENCH --config_path $CONFIG
     compare ./data/${BENCH}_unseen.mgf qtof ${BENCH}_unseen --config_path $CONFIG
 done
+
+python scripts/plot_benchmarks.py --csv ./result/benchmarks.csv \
+    --figure ./docs/_static/benchmarks.png

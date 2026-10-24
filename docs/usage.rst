@@ -138,10 +138,12 @@ both on ``data.mgf`` and compare FIDDLE alone, FIDDLE + BUDDY and
 FIDDLE + BUDDY + SIRIUS.
 
 **1. Prepare the input for the tools.** Both tools read the precursor m/z from
-``PEPMASS``, the charge from ``CHARGE`` and the adduct from ``ION``, and SIRIUS
-needs the MS level as a number. SIRIUS also takes a ``FORMULA``, ``SMILES`` or
+``PEPMASS``, the charge from ``CHARGE`` and the adduct from ``ION``. SIRIUS
+needs the MS level as a number and reports its results under ``FEATURE_ID``,
+so set that to the title msfiddle matches results on. SIRIUS also takes a ``FORMULA``, ``SMILES`` or
 ``INCHI`` field as the known answer, so remove them when the file holds
-reference annotations, as test data does. This writes ``tools.mgf`` from an
+reference annotations, as test data does, and it reads any field starting with
+``ION`` as the adduct, so a field like ``IONMODE=P`` must go too. This writes ``tools.mgf`` from an
 msfiddle input file:
 
 .. code-block:: python
@@ -152,8 +154,11 @@ msfiddle input file:
    def for_tools(spectra):
        for spec in spectra:
            p = spec["params"]
-           for key in ("smiles", "inchi", "inchikey", "inchi_key", "formula"):
-               p.pop(key, None)
+           for key in list(p):
+               if key in ("smiles", "inchi", "inchikey", "inchi_key", "formula") \
+                       or key.startswith("ion"):
+                   del p[key]
+           p["feature_id"] = p["title"]
            p["pepmass"] = float(p["precursor_mz"])
            p["ion"] = p["precursor_type"]
            n, sign = re.search(r"\](\d*)([+-])$", p["ion"]).groups()

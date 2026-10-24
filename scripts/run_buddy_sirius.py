@@ -2,8 +2,11 @@
 
 Writes <out_dir>/input.mgf for the tools: the spectra with the fields both
 read the precursor from (PEPMASS from PRECURSOR_MZ, ION and CHARGE from
-PRECURSOR_TYPE), MS_LEVEL as a number, which SIRIUS requires, and without the
-true structure and formula, which SIRIUS would otherwise take as the answer.
+PRECURSOR_TYPE), MS_LEVEL as a number, which SIRIUS requires, FEATURE_ID set
+to the title, which SIRIUS reports its results under, and without the true
+structure and formula, which SIRIUS would otherwise take as the answer. ION is
+the only field starting with "ION": SIRIUS takes any such field as the adduct,
+so IONMODE=P would become [M+P]+.
 Then it writes <out_dir>/buddy/ and
 <out_dir>/sirius/, which `msfiddle predict` takes as --buddy_path and
 --sirius_path. A tool that is not on PATH is skipped.
@@ -40,8 +43,10 @@ TRUTH_KEYS = (
 def with_ion(path):
     for spec in mgf.read(path):
         params = spec["params"]
-        for key in TRUTH_KEYS:
-            params.pop(key, None)
+        for key in list(params):
+            if key in TRUTH_KEYS or key.startswith("ion") or "adduct" in key:
+                del params[key]
+        params["feature_id"] = params["title"]
         params["pepmass"] = float(params["precursor_mz"])
         params["ion"] = params["precursor_type"]
         n, sign = re.search(r"\](\d*)([+-])$", params["ion"]).groups()

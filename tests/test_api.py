@@ -295,3 +295,20 @@ def test_warns_when_the_rescore_model_belongs_to_another_tcn(tmp_path, matching)
         predictor._ensure_models_loaded()
     mismatch = [w for w in caught if "different TCN" in str(w.message)]
     assert len(mismatch) == (0 if matching else 1)
+
+
+def test_warns_when_no_external_result_matches_a_spectrum():
+    df = pd.DataFrame({"ID": ["1_UNKNOWN_spec-1"]}).set_index("ID")
+    with pytest.warns(UserWarning, match="No SIRIUS result matches"):
+        api._warn_if_unmatched("SIRIUS", df, {"spec-1"})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        api._warn_if_unmatched("SIRIUS", df, {"1_UNKNOWN_spec-1"})
+        api._warn_if_unmatched("SIRIUS", None, {"spec-1"})
+
+
+def test_external_formulas_with_unmodeled_elements_are_ignored():
+    assert api._is_external_formula("C10H9N")
+    assert not api._is_external_formula("C8H22OSi2")
+    assert not api._is_external_formula("NA")
+    assert not api._is_external_formula(float("nan"))

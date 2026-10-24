@@ -110,6 +110,27 @@ def test_load_sirius_results_finds_formula_summary_in_directory(tmp_path):
     assert result.loc[0, "SIRIUS Score (1)"] == pytest.approx(0.8)
 
 
+def test_load_sirius_results_recovers_titles_from_sirius6_mapping_ids(tmp_path):
+    path = tmp_path / "formula_identifications_top-5.tsv"
+    pd.DataFrame(
+        [
+            {
+                "formulaRank": 1,
+                "molecularFormula": "C10H9N",
+                "adduct": "[M + H]+",
+                "SiriusScore": 12.9,
+                "alignedFeatureId": 901721886549270209,
+                "mappingFeatureId": mapping_id,
+            }
+            for mapping_id in ["901721886549270209_UNKNOWN_casmi16_620", "spec-2"]
+        ]
+    ).to_csv(path, sep="\t", index=False)
+
+    result = load_sirius_results(path)
+
+    assert result["ID"].tolist() == ["casmi16_620", "spec-2"]
+
+
 def test_load_sirius_results_accepts_prefixed_column_variants(tmp_path):
     path = tmp_path / "formula_identifications_top-5.tsv"
     pd.DataFrame(

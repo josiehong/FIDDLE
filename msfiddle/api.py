@@ -39,7 +39,7 @@ from .utils.pkl_utils import (
     resolve_collision_energy,
     unify_precursor_type,
 )
-from .utils.refine_utils import formula_refinement
+from .utils.refine_utils import ISOTOPE_MASS, formula_refinement, parse_formula
 
 _INSTRUMENT_TYPES = {"orbitrap", "qtof", "timstof"}
 _NEUTRAL_FORMULAS = ("CH4O2", "CH2O2", "H2O", "NH3", "CO2")
@@ -238,6 +238,9 @@ class MsFiddlePredictor:
         sirius_df = (
             _index_by_id(load_sirius_results(sirius_path)) if sirius_path else None
         )
+        ids = {prediction.spectrum.id for prediction in predictions}
+        _warn_if_unmatched("BUDDY", buddy_df, ids)
+        _warn_if_unmatched("SIRIUS", sirius_df, ids)
 
         refined_formula = {f"Refined Formula ({k})": [] for k in range(top_k)}
         refined_mass = {f"Refined Mass ({k})": [] for k in range(top_k)}
@@ -945,6 +948,16 @@ def _index_by_id(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop_duplicates("ID").set_index("ID")
 
 
+def _warn_if_unmatched(tool: str, df: pd.DataFrame | None, ids: set[str]) -> None:
+    """Warn when none of a tool's results belongs to a spectrum being predicted."""
+    if df is not None and len(df) and ids.isdisjoint(df.index):
+        warnings.warn(
+            f"No {tool} result matches a spectrum title, so {tool} adds no "
+            f"candidates. Its IDs look like {df.index[0]!r}.",
+            stacklevel=3,
+        )
+
+
 def _merge_isotope_refinements(
     parts: Sequence[tuple[int, dict[str, list[Any]]]],
 ) -> tuple[dict[str, list[Any]], dict[str, int]]:
@@ -1131,9 +1144,14 @@ def _normalize_instrument_type(instrument_type: str) -> str:
 
 
 def _is_external_formula(value: object) -> bool:
+    """A BUDDY or SIRIUS formula that refinement can use: present, and made only
+    of elements FIDDLE models (SIRIUS may propose Si or Se, for example)."""
     if pd.isna(value):
         return False
-    return str(value).strip().lower() not in {"", "na", "nan", "none", "null", "<na>"}
+    text = str(value).strip()
+    if text.lower() in {"", "na", "nan", "none", "null", "<na>"}:
+        return False
+    return parse_formula(text).keys() <= ISOTOPE_MASS.keys()
 
 
 def _load_config(config_path: Path) -> dict[str, Any]:
