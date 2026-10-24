@@ -53,7 +53,9 @@ def summarize(result_dir):
                         "compounds": subset,
                         "method": method,
                         "n_spectra": int(d["n_spectra"].iloc[0]),
-                        **{f"top{k}": 100 * d.loc[k, "spectrum_acc"] for k in (1, 3, 5)},
+                        **{
+                            f"top{k}": 100 * d.loc[k, "spectrum_acc"] for k in (1, 3, 5)
+                        },
                     }
                 )
     return pd.DataFrame(rows)
@@ -105,7 +107,9 @@ def plot(summary, path):
             if row == 0:
                 ax.set_title(title, fontsize=9, color=INK)
             if col == 0:
-                ax.set_ylabel(f"{subset} compounds\naccuracy (%)", fontsize=8, color=INK)
+                ax.set_ylabel(
+                    f"{subset} compounds\naccuracy (%)", fontsize=8, color=INK
+                )
 
         # Combination matrix: a filled dot for each tool the method uses
         mat = axes[-1, col]

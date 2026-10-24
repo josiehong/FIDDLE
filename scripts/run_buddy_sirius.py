@@ -25,7 +25,6 @@ import sys
 
 from pyteomics import mgf
 
-
 # Fields that give away the answer; SIRIUS fixes the formula to them when present.
 TRUTH_KEYS = (
     "smiles",
