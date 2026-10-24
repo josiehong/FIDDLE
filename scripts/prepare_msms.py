@@ -1,7 +1,7 @@
 import os
+import random
 import re
 import argparse
-import yaml
 from tqdm import tqdm
 import numpy as np
 import pickle
@@ -19,7 +19,17 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from msfiddle.utils import sdf2mgf, filter_spec, mgf_key_order, spec2arr, spec2pair
+from msfiddle.settings import load_config
+from msfiddle.utils import (
+    sdf2mgf,
+    filter_spec,
+    mgf_key_order,
+    spec2arr,
+    spec2pair,
+    split_by_scaffold,
+)
+from msfiddle.utils.casmi2026 import iter_spectra
+from msfiddle.utils.pkl_utils import is_stepped_collision_energy
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -32,26 +42,63 @@ if __name__ == "__main__":
         "--pkl_dir", type=str, default="./data/", help="Path to pkl data"
     )
     parser.add_argument(
-        "--test_title_list", type=str, default="", help="Path to test title list"
-    )
-    parser.add_argument(
         "--dataset",
         type=str,
         nargs="+",
         required=True,
-        choices=["agilent", "nist20", "nist23", "mona", "waters", "gnps"],
-        help="Dataset name",
+        choices=["agilent", "nist20", "nist23", "mona", "waters", "gnps", "casmi2026"],
+        help="Dataset name; casmi2026 is the Enveda CASMI 2026 train.parquet "
+        "(timsTOF), read from --casmi_parquet",
     )
     parser.add_argument(
         "--instrument_type",
         type=str,
         nargs="+",
         required=True,
-        choices=["qtof", "orbitrap"],
+        choices=["qtof", "orbitrap", "timstof"],
         help="Instrument type",
     )
     parser.add_argument(
-        "--train_ratio", type=float, default=0.9, help="Ratio for train set"
+        "--casmi_parquet",
+        type=str,
+        default="",
+        help="CASMI 2026 parquet file (default: <raw_dir>/casmi2026/train.parquet)",
+    )
+    parser.add_argument(
+        "--ingest_lib",
+        type=str,
+        nargs="*",
+        default=None,
+        help="casmi2026: libraries (ingest_lib values) to read; default: the "
+        "Enveda timsTOF libraries",
+    )
+    parser.add_argument(
+        "--holdout_lib",
+        type=str,
+        nargs="*",
+        default=[],
+        help="Source libraries whose compounds all go to the test set, e.g. "
+        "enveda-np-examples (natural products on the CASMI 2026 test instrument)",
+    )
+    parser.add_argument(
+        "--max_spectra_per_compound",
+        type=int,
+        default=0,
+        help="casmi2026: keep at most N spectra per compound (0 = all); every "
+        "encoded spectrum takes 60 KB of RAM during training",
+    )
+    parser.add_argument(
+        "--train_ratio",
+        type=float,
+        default=0.9,
+        help="Share of compounds outside the test set (the test set is the rest)",
+    )
+    parser.add_argument(
+        "--val_ratio",
+        type=float,
+        default=0.1,
+        help="Share of all compounds held out from training as the validation "
+        "set, for early stopping and checkpoint selection",
     )
     parser.add_argument(
         "--config_path",
@@ -60,9 +107,17 @@ if __name__ == "__main__":
         help="Path to configuration",
     )
     parser.add_argument(
+        "--split",
+        type=str,
+        default=None,
+        choices=["random", "maxmin", "scaffold"],
+        help="Compound split: random (default), MaxMin picking of the training "
+        "compounds, or by Bemis-Murcko scaffold (fast for 100k+ compounds)",
+    )
+    parser.add_argument(
         "--maxmin_pick",
         action="store_true",
-        help="If using MaxMin algorithm to pick training molecules",
+        help="Same as --split maxmin",
     )
     parser.add_argument(
         "--num_workers",
@@ -70,11 +125,23 @@ if __name__ == "__main__":
         default=8,
         help="Process count for parallel filtering/encoding (0 = serial)",
     )
+    parser.add_argument(
+        "--report_only",
+        action="store_true",
+        help="Load and filter only, and report what each dataset keeps and "
+        "drops (mass errors, isotope-peak precursors, stepped collision "
+        "energies); writes nothing",
+    )
     args = parser.parse_args()
 
     assert args.train_ratio < 1.0
+    assert 0 <= args.val_ratio < args.train_ratio
+    split = args.split or ("maxmin" if args.maxmin_pick else "random")
+    if not args.casmi_parquet:
+        args.casmi_parquet = os.path.join(args.raw_dir, "casmi2026", "train.parquet")
 
-    os.makedirs(args.pkl_dir, exist_ok=True)
+    if not args.report_only:
+        os.makedirs(args.pkl_dir, exist_ok=True)
 
     if "agilent" in args.dataset:
         assert os.path.exists(os.path.join(args.raw_dir, "Agilent_Combined.sdf"))
@@ -96,10 +163,11 @@ if __name__ == "__main__":
     if "gnps" in args.dataset:
         assert os.path.exists(os.path.join(args.raw_dir, "ALL_GNPS_cleaned.mgf"))
         assert os.path.exists(os.path.join(args.raw_dir, "ALL_GNPS_cleaned.csv"))
+    if "casmi2026" in args.dataset:
+        assert os.path.exists(args.casmi_parquet), args.casmi_parquet
 
     # load the configurations
-    with open(args.config_path, "r") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    config = load_config(args.config_path)
     # configuration check (later)
 
     # 1. convert original format to mgf
@@ -216,6 +284,14 @@ if __name__ == "__main__":
                 os.path.join(args.raw_dir, "ALL_GNPS_cleaned.mgf"),
             )
         )
+    if "casmi2026" in args.dataset:
+        origin_spectra["casmi2026"] = list(
+            iter_spectra(
+                args.casmi_parquet,
+                libraries=args.ingest_lib,
+                max_spectra_per_compound=args.max_spectra_per_compound,
+            )
+        )
 
     # 2. filter the spectra
     # 3. split spectra into training and test set according to smiles
@@ -252,126 +328,145 @@ if __name__ == "__main__":
                     len(filter_spectra), len(filter_smiles_list)
                 )
             )
+            if args.report_only:
+                # Encoding (skipped here) drops these too
+                n_stepped = sum(
+                    is_stepped_collision_energy(sp["params"]["collision_energy"])
+                    for sp in filter_spectra
+                )
+                mode = config["encoding"].get("stepped_collision_energy", "drop")
+                print(
+                    "# with a stepped collision energy: {} ({})".format(
+                        n_stepped,
+                        "encoded at the mean energy" if mode == "mean" else "dropped",
+                    )
+                )
             del filter_spectra, filter_smiles_list
         smiles_list = sorted(set(smiles_list))
         print(
             "Total # spectra: {} # compounds: {}".format(len(spectra), len(smiles_list))
         )
+        if args.report_only:
+            continue
 
         # split the training and test set
         train_spectra = []
         test_spectra = []
-        if args.test_title_list:
-            with open(args.test_title_list, "r") as f:
-                test_title_list = f.readlines()
-                test_title_list = [t.strip() for t in test_title_list]
-
-            for _, spectrum in enumerate(tqdm(spectra)):
-                if spectrum["params"]["title"] in test_title_list:
-                    test_spectra.append(spectrum)
-                else:
-                    train_spectra.append(spectrum)
-            del spectra, smiles_list, test_title_list
+        if split == "scaffold":
+            print("({}) Split training and test set by scaffold...".format(ins))
+            train_smiles_set, val_smiles_set, test_smiles = split_by_scaffold(
+                smiles_list, args.train_ratio, args.val_ratio, seed=42
+            )
+            train_indices = []  # test compounds are those in neither set
+        elif split == "maxmin":
+            print("({}) Split training and test set by MaxMin algorithm...".format(ins))
+            # maxmin algorithm picking training smiles (Since the training set so far is not large enough,
+            # we'd like to make a full utilizing of our datasets. It worth noting that MaxMin picker is
+            # for application, and the experiments in our paper spliting the molecules randomly according
+            # to their smiles. )
+            fpgen = rdFingerprintGenerator.GetMorganGenerator(radius=3)
+            fp_list = [fpgen.GetFingerprint(Chem.MolFromSmiles(s)) for s in smiles_list]
+            picker = MaxMinPicker()
+            train_indices = picker.LazyBitVectorPick(
+                fp_list, len(fp_list), int(len(fp_list) * args.train_ratio), seed=42
+            )
+            train_indices = list(train_indices)
         else:
-            if args.maxmin_pick:
-                print(
-                    "({}) Split training and test set by MaxMin algorithm...".format(
-                        ins
-                    )
-                )
-                # maxmin algorithm picking training smiles (Since the training set so far is not large enough,
-                # we'd like to make a full utilizing of our datasets. It worth noting that MaxMin picker is
-                # for application, and the experiments in our paper spliting the molecules randomly according
-                # to their smiles. )
-                fpgen = rdFingerprintGenerator.GetMorganGenerator(radius=3)
-                fp_list = [
-                    fpgen.GetFingerprint(Chem.MolFromSmiles(s)) for s in smiles_list
-                ]
-                picker = MaxMinPicker()
-                train_indices = picker.LazyBitVectorPick(
-                    fp_list, len(fp_list), int(len(fp_list) * args.train_ratio), seed=42
-                )
-                train_indices = list(train_indices)
-            else:
-                print(
-                    "({}) Split training and test set by randomly choose...".format(ins)
-                )
-                train_indices = np.random.choice(
-                    len(smiles_list),
-                    int(len(smiles_list) * args.train_ratio),
-                    replace=False,
-                )
+            print("({}) Split training and test set by randomly choose...".format(ins))
+            train_indices = np.random.choice(
+                len(smiles_list),
+                int(len(smiles_list) * args.train_ratio),
+                replace=False,
+            )
 
+        if split != "scaffold":
             train_idx_set = {int(i) for i in train_indices}
             train_smiles_list = [
                 smiles_list[i] for i in range(len(smiles_list)) if i in train_idx_set
             ]
-            train_smiles_set = set(train_smiles_list)
-            test_smiles_list = [s for s in smiles_list if s not in train_smiles_set]
-            print(
-                "({}) Get {} training compounds and {} test compounds".format(
-                    ins, len(train_smiles_list), len(test_smiles_list)
+            # Validation compounds come out of the training pool at random, so
+            # the test set is the same as without a validation split
+            val_smiles_set = set(
+                random.Random(42).sample(
+                    train_smiles_list, int(len(smiles_list) * args.val_ratio)
                 )
             )
-
-            for _, spectrum in enumerate(tqdm(spectra)):
-                smiles = spectrum["params"]["smiles"]
-                if smiles in train_smiles_set:
-                    train_spectra.append(spectrum)
-                else:
-                    test_spectra.append(spectrum)
-            del spectra, smiles_list, test_smiles_list
+            train_smiles_set = set(train_smiles_list) - val_smiles_set
+        # Compounds measured in a held-out library go to the test set, with
+        # all their spectra from every library
+        holdout = {
+            s["params"]["smiles"]
+            for s in spectra
+            if s["params"]["source_instrument"] in set(args.holdout_lib)
+        }
+        if holdout:
+            print(
+                "({}) Hold out {} compounds from {}".format(
+                    ins, len(holdout), args.holdout_lib
+                )
+            )
+        train_smiles_set -= holdout
+        val_smiles_set -= holdout
+        n_test = len(smiles_list) - len(train_smiles_set) - len(val_smiles_set)
         print(
-            "({}) Get {} training spectra and {} test spectra".format(
-                ins, len(train_spectra), len(test_spectra)
+            "({}) Get {} training, {} validation and {} test compounds".format(
+                ins, len(train_smiles_set), len(val_smiles_set), n_test
+            )
+        )
+
+        val_spectra = []
+        for spectrum in tqdm(spectra):
+            smiles = spectrum["params"]["smiles"]
+            if smiles in train_smiles_set:
+                train_spectra.append(spectrum)
+            elif smiles in val_smiles_set:
+                val_spectra.append(spectrum)
+            else:
+                test_spectra.append(spectrum)
+        del spectra, smiles_list
+        print(
+            "({}) Get {} training, {} validation and {} test spectra".format(
+                ins, len(train_spectra), len(val_spectra), len(test_spectra)
             )
         )
 
         # save mgf for debug, SIRIUS, and BUDDY
-        out_path = os.path.join(
-            args.pkl_dir,
-            "{}_{}_test.mgf".format(ins, "maxmin" if args.maxmin_pick else "random"),
-        )
+        out_path = os.path.join(args.pkl_dir, "{}_{}_test.mgf".format(ins, split))
         mgf.write(test_spectra, out_path, key_order=mgf_key_order, file_mode="w")
         print("Save {} for comparing with SIRIUS and BUDDY".format(out_path))
-        out_path = os.path.join(
-            args.pkl_dir,
-            "{}_{}_train.mgf".format(ins, "maxmin" if args.maxmin_pick else "random"),
-        )
+        out_path = os.path.join(args.pkl_dir, "{}_{}_train.mgf".format(ins, split))
         mgf.write(train_spectra, out_path, key_order=mgf_key_order, file_mode="w")
         print("Save {} for comparing with SIRIUS and BUDDY".format(out_path))
 
+        out_path = os.path.join(args.pkl_dir, "{}_{}_val.mgf".format(ins, split))
+        mgf.write(val_spectra, out_path, key_order=mgf_key_order, file_mode="w")
+        print("Save {}".format(out_path))
+
         # convert the spectra into arrays
         print("({}) Convert spectra and molecules data into arrays...".format(ins))
-        # test (do not apply contrastive learning on test set)
-        test_data, _ = spec2arr(
-            test_spectra, config["encoding"], num_workers=args.num_workers
-        )
-        out_path = os.path.join(
-            args.pkl_dir,
-            "{}_{}_test.pkl".format(ins, "maxmin" if args.maxmin_pick else "random"),
-        )
-        with open(out_path, "wb") as f:
-            pickle.dump(test_data, f)
-            print("Save {} data to {}".format(len(test_data), out_path))
+        # test and validation (no contrastive pairs)
+        for split_name, split_spectra in (("test", test_spectra), ("val", val_spectra)):
+            split_data, _ = spec2arr(
+                split_spectra, config["encoding"], num_workers=args.num_workers
+            )
+            out_path = os.path.join(
+                args.pkl_dir, "{}_{}_{}.pkl".format(ins, split, split_name)
+            )
+            with open(out_path, "wb") as f:
+                pickle.dump(split_data, f)
+                print("Save {} data to {}".format(len(split_data), out_path))
         # train
         train_data, bad_title = spec2arr(
             train_spectra, config["encoding"], num_workers=args.num_workers
         )
-        out_path = os.path.join(
-            args.pkl_dir,
-            "{}_{}_train.pkl".format(ins, "maxmin" if args.maxmin_pick else "random"),
-        )
+        out_path = os.path.join(args.pkl_dir, "{}_{}_train.pkl".format(ins, split))
         with open(out_path, "wb") as f:
             pickle.dump(train_data, f)
             print("Save {} data to {}".format(len(train_data), out_path))
         # save the training pairs for contrastive learning
         train_pairs = spec2pair(train_data, bad_title, config["encoding"])
         out_path = os.path.join(
-            args.pkl_dir,
-            "{}_{}_train_pairs.pkl".format(
-                ins, "maxmin" if args.maxmin_pick else "random"
-            ),
+            args.pkl_dir, "{}_{}_train_pairs.pkl".format(ins, split)
         )
         with open(out_path, "wb") as f:
             pickle.dump(train_pairs, f)

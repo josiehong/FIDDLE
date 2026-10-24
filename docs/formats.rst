@@ -20,7 +20,10 @@ required per spectrum; all others are ignored.
    * - ``PRECURSOR_TYPE``
      - Adduct type (e.g. ``[M+H]+``, ``[M-H]-``). See supported types below.
    * - ``COLLISION_ENERGY``
-     - Collision energy in eV.
+     - A single collision energy, in eV (``50.0``) or as NCE (``NCE=35%``).
+       Spectra with a stepped or ranged energy (``HCD (NCE 20-30-40%)``,
+       ``30-50 eV``) are skipped with a warning: the models were trained on
+       single-energy spectra.
 
 **Example:**
 
@@ -82,6 +85,11 @@ One row is produced per input spectrum.
    * - ``Rescore (k)``
      - Rescore model confidence score for ``Refined Formula (k)``
        (0–1; higher is more confident).
+   * - ``Isotope Shift (k)``
+     - Only when the config's ``isotope_errors`` is not ``[0]``: the 13C
+       isotope offset at which ``Refined Formula (k)`` was found (0 for the
+       measured mass). The ranking uses ``Rescore (k)`` minus
+       ``isotope_penalty`` times this offset.
 
 The number of ranked columns is set by ``top_k`` in the configuration file
 (20 in the bundled Orbitrap and Q-TOF configs) unless ``top_k`` is passed

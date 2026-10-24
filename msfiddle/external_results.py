@@ -107,7 +107,8 @@ def load_sirius_results(path: str | Path) -> pd.DataFrame:
     if resolved.is_dir():
         resolved = _find_sirius_formula_file(resolved)
 
-    df = _read_table(resolved)
+    # As text: an ID column with a gap would turn float and lose digits
+    df = _read_table(resolved, dtype=str)
     if _has_columns(df, SIRIUS_COLUMNS):
         warnings.warn(
             _NORMALIZED_CSV_DEPRECATION.format(tool="SIRIUS"),
@@ -125,15 +126,15 @@ def _resolve_path(path: str | Path, label: str) -> Path:
     return resolved
 
 
-def _read_table(path: Path) -> pd.DataFrame:
+def _read_table(path: Path, dtype=None) -> pd.DataFrame:
     suffix = path.suffix.lower()
     if suffix in {".xlsx", ".xls"}:
-        return _clean_columns(pd.read_excel(path))
+        return _clean_columns(pd.read_excel(path, dtype=dtype))
     if suffix == ".tsv":
-        return _clean_columns(pd.read_csv(path, sep="\t"))
+        return _clean_columns(pd.read_csv(path, sep="\t", dtype=dtype))
     if suffix == ".csv":
-        return _clean_columns(pd.read_csv(path))
-    return _clean_columns(pd.read_csv(path, sep=None, engine="python"))
+        return _clean_columns(pd.read_csv(path, dtype=dtype))
+    return _clean_columns(pd.read_csv(path, sep=None, engine="python", dtype=dtype))
 
 
 def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -304,6 +305,8 @@ def _normalize_sirius_native(df: pd.DataFrame) -> pd.DataFrame:
 
     native = df.copy()
     native["_msfiddle_id"] = native[id_column].map(_clean_identifier)
+    if id_column.endswith("mappingFeatureId"):
+        native["_msfiddle_id"] = _sirius_mapping_titles(native, id_column)
     native["_msfiddle_formula"] = native[formula_column].map(_clean_formula)
     native["_msfiddle_adduct"] = native[adduct_column].map(_clean_text)
     native["_msfiddle_score"] = pd.to_numeric(native[score_column], errors="coerce")
@@ -347,6 +350,32 @@ def _canonical_column(column: object) -> str:
     if text.lower().startswith("sirius_"):
         text = text[7:]
     return re.sub(r"[^a-z0-9]+", "", text.lower())
+
+
+def _sirius_mapping_titles(df: pd.DataFrame, id_column: str) -> pd.Series:
+    """Spectrum titles from SIRIUS 6 mapping IDs.
+
+    SIRIUS uses the MGF's FEATURE_ID as the mapping ID when there is one, and
+    otherwise "<alignedFeatureId>_<source>_<title>", where the source is
+    UNKNOWN for MGF input; the title is recovered from that form.
+    """
+    aligned_column = id_column.replace("mappingFeatureId", "alignedFeatureId")
+    if aligned_column not in df.columns:
+        return df["_msfiddle_id"]
+
+    def title(mapping_id, aligned_id):
+        if pd.isna(mapping_id) or pd.isna(aligned_id):
+            return mapping_id
+        prefix = f"{_clean_identifier(aligned_id)}_UNKNOWN_"
+        if not mapping_id.startswith(prefix):
+            return mapping_id
+        return mapping_id[len(prefix) :]
+
+    return pd.Series(
+        [title(m, a) for m, a in zip(df["_msfiddle_id"], df[aligned_column])],
+        index=df.index,
+        dtype=object,
+    )
 
 
 def _clean_identifier(value: object) -> object:

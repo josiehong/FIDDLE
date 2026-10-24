@@ -4,10 +4,8 @@ from decimal import Decimal
 from tqdm import tqdm
 import pandas as pd
 import random
-import copy
 
 from rdkit import Chem, RDLogger
-from rdkit.Chem import AllChem
 from rdkit.Chem.rdMolDescriptors import CalcMolFormula
 
 RDLogger.DisableLog("rdApp.*")
@@ -17,10 +15,50 @@ from .mol_utils import (
     formula_to_dict,
     formula_to_vector,
     dict_to_formula,
-    ATOMS_INDEX,
 )
 
 # ------------------------ Main Functions ------------------------
+
+
+# Several energies in one spectrum ("HCD (NCE 20-30-40%)", "30-50 eV",
+# "stepped 20,40,60"). The model was trained on single-energy spectra, so these
+# are dropped rather than encoded as, say, the mean energy.
+_STEPPED_CE = re.compile(r"\d\s*%?\s*[-,/]\s*\d|\bstep", re.IGNORECASE)
+
+
+def is_stepped_collision_energy(ce_str):
+    """True for a stepped or ranged collision energy string."""
+    return bool(_STEPPED_CE.search(str(ce_str)))
+
+
+_CE_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+
+
+def mean_collision_energy(ce_str):
+    """The mean of the energies in a stepped collision energy string, as a
+    single-energy string parse_collision_energy reads ('20,40,60' -> '40.0',
+    'HCD (NCE 20-30-40%)' -> '30.0 nce'). None when no number is found."""
+    numbers = [float(n) for n in _CE_NUMBER.findall(str(ce_str))]
+    if not numbers:
+        return None
+    mean = sum(numbers) / len(numbers)
+    text = str(ce_str).lower()
+    return f"{mean} nce" if "%" in text or "nce" in text else str(mean)
+
+
+def resolve_collision_energy(ce_str, mode="drop"):
+    """Apply an encoder's ``stepped_collision_energy`` policy to a collision
+    energy string: 'drop' returns None for a stepped energy, 'mean' replaces it
+    with its mean energy (timsTOF libraries merge 20/40/60 eV spectra). Single
+    energies pass through unchanged."""
+    ce_str = str(ce_str)
+    if not is_stepped_collision_energy(ce_str):
+        return ce_str
+    if mode == "mean":
+        return mean_collision_energy(ce_str)
+    if mode == "drop":
+        return None
+    raise ValueError(f"Unknown stepped_collision_energy mode {mode!r}")
 
 
 def spec2arr(spectra, encoder, num_workers=0):
@@ -60,6 +98,13 @@ def spec2arr(spectra, encoder, num_workers=0):
         else:
             bad_data.append(spectrum["params"]["title"])
 
+    if encoder.get("stepped_collision_energy", "drop") == "drop":
+        n_stepped = sum(
+            is_stepped_collision_energy(s["params"].get("collision_energy", ""))
+            for s in spectra
+        )
+        if n_stepped:
+            print(f"Dropped {n_stepped} spectra with a stepped collision energy")
     return data, bad_data
 
 
@@ -173,12 +218,19 @@ def spec2arr_single(spectrum, encoder):
         print("Failed to generate mass spectra: {}".format(spectrum["params"]["title"]))
         return None  # invalid spectra
 
+    ce_str = resolve_collision_energy(
+        spectrum["params"]["collision_energy"],
+        encoder.get("stepped_collision_energy", "drop"),
+    )
+    if ce_str is None:
+        return None  # stepped collision energy, counted in spec2arr
+
     # env array
     adjust_formula, adjust_precursor_type = melt_neutral_precursor(
         formula, spectrum["params"]["precursor_type"]
     )
     ce, nce = parse_collision_energy(
-        ce_str=spectrum["params"]["collision_energy"],
+        ce_str=ce_str,
         precursor_mz=float(spectrum["params"]["theoretical_precursor_mz"]),
         charge=abs(charge),
     )
@@ -188,7 +240,7 @@ def spec2arr_single(spectrum, encoder):
                 spectrum["params"]["collision_energy"]
             )
         )
-        return None  # can not process '30-50 eV'
+        return None
     env_arr = np.array(
         [
             float(spectrum["params"]["theoretical_precursor_mz"]),
@@ -374,7 +426,6 @@ def parse_collision_energy(ce_str, precursor_mz, charge=1):
             x.split()[1].rstrip("ev")
         ),
         # MassBank
-        r"^[\d]+[.]?[\d]*[ ]?V$": lambda x: float(x.rstrip(" V")),
         r"^hcd[\d]+[.]?[\d]*$": lambda x: float(x.lstrip("hcd")),
         r"^[\d]+HCD$": lambda x: float(x.rstrip("HCD")),  # 35HCD
     }
@@ -496,6 +547,8 @@ def unify_precursor_type(precursor_type):
     # '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+'
     # -1+-neutrue
     # '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-'
+    if precursor_type in ("[M+FA-H]-", "[M+HCOO]-", "[M+HCO2]-", "[M+HCOOH-H]-"):
+        return "[M+CH2O2-H]-"  # formate adduct
     if precursor_type == "[M+NH4]+":
         return "[M+H+NH3]+"
     elif precursor_type == "[M-CHO2]-":
@@ -504,45 +557,3 @@ def unify_precursor_type(precursor_type):
         return "[M+H-H2O]+"
     else:
         return precursor_type
-
-
-if __name__ == "__main__":
-    # melt_neutral_precursor
-    formula = "C12H14O2"
-    precursor_type = "[M+H-CH2O2]+"
-    adjust_formula, adjust_precursor_type = melt_neutral_precursor(
-        formula, precursor_type
-    )
-    print(adjust_formula, adjust_precursor_type)
-    print(formula_to_vector(adjust_formula))
-
-    # generate_ms
-    x = [128.0511, 128.0553, 129.0544, 129.0585, 130.0665, 130.0725]
-    y = [102.5, 2.3, 10.99, 1.0, 999.0, 22.68]
-    precursor_mz = 130.06564948176495
-    print("origin mz", x)
-    print("origin intensity", y)
-    resolution = 0.2
-    max_mz = 1500
-    charge = 1
-    good_ms, mz, intensity, ms = generate_ms(
-        x, y, precursor_mz, resolution, max_mz, charge
-    )
-    print(good_ms, ms)
-    print("mz", mz)
-    print("intensity", intensity)
-
-    x = [1447.98, 279.24, 695.48, 1446.97, 415.23, 29.69, 1446.89]
-    y = [1.0, 0.02231055, 0.02118375, 0.01257913, 0.01197476, 0.00163897, 0.0]
-    precursor_mz = 1448.97222710619
-    print("origin mz", x)
-    print("origin intensity", y)
-    resolution = 1.0
-    max_mz = 1500
-    charge = -1
-    good_ms, mz, intensity, ms = generate_ms(
-        x, y, precursor_mz, resolution, max_mz, charge
-    )
-    print(good_ms, ms)
-    print("mz", mz)
-    print("intensity", intensity)

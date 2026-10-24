@@ -1,6 +1,6 @@
 import os
+import random
 import argparse
-import yaml
 from tqdm import tqdm
 import numpy as np
 import pickle
@@ -17,6 +17,7 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from msfiddle.settings import load_config
 from msfiddle.utils import sdf2mgf, filter_spec, mgf_key_order, spec2arr, spec2pair
 
 if __name__ == "__main__":
@@ -28,9 +29,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pkl_dir", type=str, default="./data/", help="Path to pkl data"
-    )
-    parser.add_argument(
-        "--test_title_list", type=str, default="", help="Path to test title list"
     )
     parser.add_argument(
         "--dataset",
@@ -50,6 +48,12 @@ if __name__ == "__main__":
     )  # J0siee: remove later
     parser.add_argument(
         "--train_ratio", type=float, default=0.9, help="Ratio for train set"
+    )
+    parser.add_argument(
+        "--val_ratio",
+        type=float,
+        default=0.1,
+        help="Share of all compounds held out from training as the validation set",
     )
     parser.add_argument(
         "--config_path",
@@ -85,8 +89,7 @@ if __name__ == "__main__":
         assert os.path.exists(os.path.join(args.raw_dir, "ALL_GNPS_cleaned.csv"))
 
     # load the configurations
-    with open(args.config_path, "r") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    config = load_config(args.config_path)
     # configuration check (later)
 
     # 1. convert original format to mgf
@@ -251,65 +254,61 @@ if __name__ == "__main__":
         # split the training and test set
         train_spectra = []
         test_spectra = []
-        if args.test_title_list:
-            with open(args.test_title_list, "r") as f:
-                test_title_list = f.readlines()
-                test_title_list = [t.strip() for t in test_title_list]
-
-            for _, spectrum in enumerate(tqdm(spectra)):
-                if spectrum["params"]["title"] in test_title_list:
-                    test_spectra.append(spectrum)
-                else:
-                    train_spectra.append(spectrum)
-            del spectra, smiles_list, test_title_list
-        else:
-            unique_nist23_smiles = list(nist23_smiles - nist20_smiles)
-            print(
-                "({}) Unique nist23 smiles: {}".format(ins, len(unique_nist23_smiles))
-            )
-            non_nist23_smiles_list = list(set(smiles_list) - set(unique_nist23_smiles))
-            print(
-                "({}) Total smiles excluding nist23: {}".format(
-                    ins, len(non_nist23_smiles_list)
-                )
-            )
-
-            num_training_smiles = int(len(smiles_list) * args.train_ratio)
-            num_test_smiles = len(smiles_list) - num_training_smiles
-            # If unique_nist23_smiles can fully cover the test set, take all test compounds from it
-            if len(unique_nist23_smiles) >= num_test_smiles:
-                test_smiles_list = np.random.choice(
-                    unique_nist23_smiles, num_test_smiles, replace=False
-                ).tolist()
-            # Otherwise, take all of unique_nist23_smiles and fill the gap from non_nist23_smiles_list
-            else:
-                test_smiles_list = unique_nist23_smiles.copy()
-                remaining_test_smiles = num_test_smiles - len(test_smiles_list)
-                test_smiles_list += np.random.choice(
-                    non_nist23_smiles_list, remaining_test_smiles, replace=False
-                ).tolist()
-            # The training set is composed of all remaining compounds not in the test set
-            train_smiles_list = [
-                smiles for smiles in smiles_list if smiles not in test_smiles_list
-            ]
-            print(
-                "({}) Get {} training compounds and {} test compounds".format(
-                    ins, len(train_smiles_list), len(test_smiles_list)
-                )
-            )
-
-            for _, spectrum in enumerate(tqdm(spectra)):
-                smiles = spectrum["params"]["smiles"]
-                if smiles in train_smiles_list and not spectrum["params"][
-                    "title"
-                ].startswith("nist23_"):
-                    train_spectra.append(spectrum)
-                else:
-                    test_spectra.append(spectrum)
-            del spectra, smiles_list, test_smiles_list
+        unique_nist23_smiles = list(nist23_smiles - nist20_smiles)
+        print("({}) Unique nist23 smiles: {}".format(ins, len(unique_nist23_smiles)))
+        non_nist23_smiles_list = list(set(smiles_list) - set(unique_nist23_smiles))
         print(
-            "({}) Get {} training spectra and {} test spectra".format(
-                ins, len(train_spectra), len(test_spectra)
+            "({}) Total smiles excluding nist23: {}".format(
+                ins, len(non_nist23_smiles_list)
+            )
+        )
+
+        num_training_smiles = int(len(smiles_list) * args.train_ratio)
+        num_test_smiles = len(smiles_list) - num_training_smiles
+        # If unique_nist23_smiles can fully cover the test set, take all test compounds from it
+        if len(unique_nist23_smiles) >= num_test_smiles:
+            test_smiles_list = np.random.choice(
+                unique_nist23_smiles, num_test_smiles, replace=False
+            ).tolist()
+        # Otherwise, take all of unique_nist23_smiles and fill the gap from non_nist23_smiles_list
+        else:
+            test_smiles_list = unique_nist23_smiles.copy()
+            remaining_test_smiles = num_test_smiles - len(test_smiles_list)
+            test_smiles_list += np.random.choice(
+                non_nist23_smiles_list, remaining_test_smiles, replace=False
+            ).tolist()
+        # The training set is composed of all remaining compounds not in the test set
+        train_smiles_list = [
+            smiles for smiles in smiles_list if smiles not in test_smiles_list
+        ]
+        # Validation compounds come out of the training pool
+        val_smiles_set = set(
+            random.Random(42).sample(
+                train_smiles_list, int(len(smiles_list) * args.val_ratio)
+            )
+        )
+        train_smiles_set = set(train_smiles_list) - val_smiles_set
+        print(
+            "({}) Get {} training, {} validation and {} test compounds".format(
+                ins, len(train_smiles_set), len(val_smiles_set), len(test_smiles_list)
+            )
+        )
+
+        val_spectra = []
+        for spectrum in tqdm(spectra):
+            smiles = spectrum["params"]["smiles"]
+            if spectrum["params"]["title"].startswith("nist23_"):
+                test_spectra.append(spectrum)
+            elif smiles in train_smiles_set:
+                train_spectra.append(spectrum)
+            elif smiles in val_smiles_set:
+                val_spectra.append(spectrum)
+            else:
+                test_spectra.append(spectrum)
+        del spectra, smiles_list, test_smiles_list
+        print(
+            "({}) Get {} training, {} validation and {} test spectra".format(
+                ins, len(train_spectra), len(val_spectra), len(test_spectra)
             )
         )
 
@@ -321,14 +320,18 @@ if __name__ == "__main__":
         mgf.write(train_spectra, out_path, key_order=mgf_key_order, file_mode="w")
         print("Save {} for comparing with SIRIUS and BUDDY".format(out_path))
 
+        out_path = os.path.join(args.pkl_dir, "{}_val.mgf".format(ins))
+        mgf.write(val_spectra, out_path, key_order=mgf_key_order, file_mode="w")
+
         # convert the spectra into arrays
         print("({}) Convert spectra and molecules data into arrays...".format(ins))
-        # test (do not apply contrastive learning on test set)
-        test_data, _ = spec2arr(test_spectra, config["encoding"])
-        out_path = os.path.join(args.pkl_dir, "{}_test.pkl".format(ins))
-        with open(out_path, "wb") as f:
-            pickle.dump(test_data, f)
-            print("Save {} data to {}".format(len(test_data), out_path))
+        # test and validation (no contrastive pairs)
+        for split, split_spectra in (("test", test_spectra), ("val", val_spectra)):
+            split_data, _ = spec2arr(split_spectra, config["encoding"])
+            out_path = os.path.join(args.pkl_dir, "{}_{}.pkl".format(ins, split))
+            with open(out_path, "wb") as f:
+                pickle.dump(split_data, f)
+                print("Save {} data to {}".format(len(split_data), out_path))
         # train
         train_data, bad_title = spec2arr(train_spectra, config["encoding"])
         out_path = os.path.join(args.pkl_dir, "{}_train.pkl".format(ins))

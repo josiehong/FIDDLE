@@ -5,13 +5,16 @@ from .msms_utils import (
     mgf_key_order,
     mass_calculator,
     precursor_mz_calculator,
+    split_by_scaffold,
 )
 
 from .pkl_utils import (
     spec2arr,
     spec2pair,
     generate_ms,
+    mean_collision_energy,
     parse_collision_energy,
+    resolve_collision_energy,
     unify_precursor_type,
 )
 
@@ -34,11 +37,14 @@ __all__ = [
     "mgf_key_order",
     "mass_calculator",
     "precursor_mz_calculator",
+    "split_by_scaffold",
     # From pkl_utils
     "spec2arr",
     "spec2pair",
     "generate_ms",
+    "mean_collision_energy",
     "parse_collision_energy",
+    "resolve_collision_energy",
     "unify_precursor_type",
     # From mol_utils
     "ATOMS_WEIGHT",

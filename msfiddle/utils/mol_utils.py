@@ -167,26 +167,3 @@ def vector_to_formula(vec, withH=True):
         else:
             formula += ATOMS_INDEX_re[idx] + str(v)
     return formula
-
-
-if __name__ == "__main__":
-    from rdkit import Chem
-
-    from rdkit import RDLogger
-
-    RDLogger.DisableLog("rdApp.*")
-
-    formula = "C10H12N2O3"
-    vec = formula_to_vector(formula)
-    print(formula)
-    print(vec)
-    print(vector_to_formula(vec))
-
-    smiles = "CC(C)C1=CC(=C(C=C1)O)C(=O)O"
-    mol = Chem.MolFromSmiles(smiles)
-    mass = monoisotopic_mass_calculator(mol, mode="mol")
-    print(smiles, mass)
-
-    formula = "C10H12N2O3"
-    mass = monoisotopic_mass_calculator(formula, mode="f")
-    print(formula, mass)

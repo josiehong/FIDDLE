@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Robustness to noise: add 1-5x random noise peaks to held-out test spectra
-# and predict with the released models. Run from the repository root after
-# `msfiddle download` and the data step of train_release_v2.2.sh.
+# Robustness to noise: add random noise peaks to held-out test spectra and
+# predict, alone and with BUDDY and SIRIUS. Run from the repository root.
 set -e
+source running_scripts/compare.sh
 
-DATA=./data/cl_pkl_082426
+# DATA_TAG must name the data build the models were trained on, so the test
+# compounds stay unseen; MODEL_TAG selects local checkpoints (see compare.sh).
+DATA=./data/cl_pkl_${DATA_TAG:-102026}
 
 for INST in qtof orbitrap; do
     python scripts/prepare_msms_noised.py \
@@ -13,7 +15,5 @@ for INST in qtof orbitrap; do
         --out_path ./data/noised/noised_${INST}_test.mgf \
         --noise_times 1 2 3 4 5 --num_spectra 1000
 
-    python -m msfiddle predict --test_data ./data/noised/noised_${INST}_test.mgf \
-        --instrument_type $INST --num_workers 8 --eval \
-        --result_path ./result/fiddle_${INST}_noised.csv
+    compare ./data/noised/noised_${INST}_test.mgf $INST ${INST}_noised
 done

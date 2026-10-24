@@ -4,7 +4,49 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.3.0] - 2026-10-24
+
+### Added
+
+- timsTOF as a third instrument type, with released checkpoints (`--instrument_type timstof`, `MsFiddlePredictor(instrument_type="timstof")`, `msfiddle/config/fiddle_tcn_timstof.yml`). `prepare_msms.py --dataset casmi2026 --instrument_type timstof` reads the Enveda CASMI 2026 `train.parquet` (or the Enveda-180 deposit) through `msfiddle.utils.casmi2026`, keeping the timsTOF libraries, and `train_release_v2.3.sh` trains the timsTOF models as a third parallel job (`INSTRUMENTS` selects the jobs), holding out the `enveda-np-examples` library as the test set. The timsTOF model settings equal the Q-TOF ones, so `TIMSTOF_TRANSFER_FROM` can fine-tune from a Q-TOF checkpoint instead.
+- `prepare_msms.py --split {random,maxmin,scaffold}` (`--maxmin_pick` still means `maxmin`): a Bemis-Murcko scaffold split for libraries too large for MaxMin picking; `--holdout_lib` sends every compound of a source library to the test set; `--max_spectra_per_compound` thins a library.
+- `encoding.stepped_collision_energy` (`drop`, the default, or `mean`): with `mean`, spectra merged over several collision energies (`20,40,60`) are encoded at the mean energy instead of being skipped, in preprocessing, the MGF dataset and the prediction API.
+- The formate adduct `[M+CH2O2-H]-` (also spelled `[M+FA-H]-`, `[M+HCOO]-`), folded into `[M-H]-` like the other neutral adducts.
+- `running_scripts/train_release_v2.3.sh`: builds the data with validation sets, trains both TCNs and rescorers (several seeds, keeping the best by validation top-1) and evaluates on the test sets.
+- `prepare_msms.py --report_only` loads and filters the raw libraries and reports what each dataset keeps and drops, including isotope-peak precursors and stepped collision energies, without the split, encoding or output files.
+- Isotope-error search ([#8](https://github.com/JosieHong/FIDDLE/issues/8)): `post_processing.isotope_errors` (default `[0]`) lists 13C isotope offsets k to refine at, for precursors read from the M+k isotope peak, and `isotope_penalty` (default 0.5) is subtracted from the rescore per unit of k. Results gain `Isotope Shift (k)` columns when enabled. `prepare_augment_rescore.py` adds the candidates found at those offsets as decoys, so the rescorer is trained on them.
+- `msfiddle.settings.load_config`: every config is read through it. It fills defaults, rejects invalid post-processing settings, and warns when a dataset's `ppm_tolerance` is wider than `mass_tolerance`.
+- `scripts/run_buddy_sirius.py` runs msbuddy and SIRIUS on an MGF file. It writes their input with `PEPMASS`, `CHARGE` and `ION` from `PRECURSOR_MZ` and `PRECURSOR_TYPE`, the fields both tools read the precursor from, without the true structure and formula, which SIRIUS would take as the answer, and with `ION` as the only field starting with `ION`, since SIRIUS reads `IONMODE=P` as the adduct `[M+P]+`. It stops when SIRIUS writes no results. `running_scripts/install_buddy.sh` and `install_sirius.sh` install the tools, and `running_scripts/compare.sh` runs FIDDLE alone, with BUDDY, and with BUDDY and SIRIUS for each experiment. The experiment scripts run BUDDY and SIRIUS through it again.
+- `scripts/check_precursor_error.py` classifies each spectrum's precursor mass error as within tolerance, a 13C isotope peak, or other, and flags spectra within tolerance on the m/z but not on the neutral mass. Preprocessing reports isotope-peak precursors as `isotope_error` instead of `ppm_tolerance`; they are still dropped.
+- The experiment scripts take `MODEL_TAG` to evaluate locally trained checkpoints (`check_point/fiddle_{tcn,rescore}_<instrument>_<MODEL_TAG>.pt`) instead of the released ones, and the noised and chimeric scripts take `DATA_TAG` for the matching test sets.
+- Rescore checkpoints record a hash of the weights of the TCN they were trained with, and prediction warns when it is given a different TCN, whose embeddings the rescore model cannot read.
+- A step-by-step guide in the documentation to running BUDDY and SIRIUS on your own data and comparing FIDDLE alone, with BUDDY, and with both.
+- A benchmarks page in the documentation, and `scripts/remove_training_compounds.py`, which removes the compounds of a model's training data from benchmark MGF files. `experiments_test_benchmark.sh` reports each benchmark on all compounds and on the unseen ones, and runs each with the models of its instrument: the Orbitrap models for CASMI 2016 and EMBL-MCF 2.0, which were measured on Orbitraps, and the Q-TOF models for CASMI 2017. `fiddle_tcn_embl.yml` follows the Orbitrap model settings with a wider refinement window.
+
+### Changed
+
+- Training uses a validation set, so the test set is used only for the final evaluation. `prepare_msms.py` (and `prepare_msms_nist23.py`) hold out a share of the training compounds (`--val_ratio`, default 0.1) as `*_val.pkl`/`.mgf`; the test set is the same as without it. `train_tcn_gpus_cl.py` early-stops and picks its checkpoint on `--val_data` (it was `--test_data`, which made the test set choose the model). `prepare_augment_rescore.py` builds validation pairs from the validation set (`--val_data`) and no longer builds test pairs, and `train_rescore.py` picks checkpoints by top-1 on them (`--val_data`) instead of pair AUC on test pairs; pair-level AUC barely changes between retrains whose top-1 differs by several points. The rescore learning rate halves after `train_rescore.patience` (3) stalled epochs.
+- The refinement window `mass_tolerance` is in ppm of the precursor m/z, the unit of the data filters' `ppm_tolerance`, and is converted to each adduct's neutral mass ([#9](https://github.com/JosieHong/FIDDLE/issues/9)). It used to be ppm of the neutral mass, so for adducts lighter than their ion, such as small `[M+Na]+`, spectra the filter admitted could fall outside the window. The CASMI and EMBL configs' windows are raised to their filters' tolerances (10 and 50 ppm), which changes those benchmark results. Rescore training pairs use the same window.
+- With the default `encoding.stepped_collision_energy: drop`, spectra with a stepped or ranged collision energy (`HCD (NCE 20-30-40%)`, `30-50 eV`) are skipped with one warning that gives the count, where `predict` used to drop them without saying why; `predict_from_spectrum` raises a clear error. Preprocessing reports how many it drops. The Q-TOF and Orbitrap models were trained on single-energy spectra, so their configs keep `drop`; the timsTOF config sets `mean`, which encodes such spectra at their mean energy. ([#7](https://github.com/JosieHong/FIDDLE/issues/7))
+- BUDDY and SIRIUS results are looked up by spectrum ID through an index, not by scanning the whole table for every spectrum. Results are unchanged.
+- Each instrument's TCN and rescore model are released in one zip, `fiddle_<instrument>.zip`, so the pair that belongs together is always downloaded together. `msfiddle download` and `msfiddle-download-models` take `--instruments` instead of `--models`, and `download_models(instruments=...)` instead of `models=`; the checkpoint files on disk keep their names. `package_release_checkpoints.py` packages per instrument and adds the TCN hash to older rescore checkpoints.
+
+### Fixed
+
+- Preprocessing dropped every spectrum of a library passed in as a one-pass MGF reader: `filter_spec` read its input twice, and the second pass was empty. One Q-TOF training library was affected; data built since the August 2026 preprocessing speed-up, including the 2.2 release data, lacks its spectra.
+- Resuming TCN training reset the learning rate to its initial value, discarding the halvings restored with the optimizer state.
+- fp32 TCN training skips a step with NaN or infinite gradients, as AMP training already did, and stops with a message when the validation error turns NaN.
+- SIRIUS 6 results were not matched to their spectra unless the MGF had a `FEATURE_ID`: the summaries identify spectra by a mapping ID that adds an internal ID and the source to the title, so SIRIUS added no candidates. msfiddle now recovers the title from it, and `predict` warns when no BUDDY or SIRIUS result matches a spectrum. `run_buddy_sirius.py` and the docs set `FEATURE_ID` to the title.
+- A BUDDY or SIRIUS candidate with an element FIDDLE does not model, such as Si, stopped prediction with a `KeyError`; such candidates are now skipped.
+- `embl2mgf.py` writes EMBL-MCF 2.0 collision energies as NCE (`50 nce`). They are normalized energies, but the bare number it wrote was read as eV and turned into an NCE several times too high.
+- `run_buddy_sirius.py` clears its earlier outputs first: SIRIUS adds to an existing project, so results from an earlier MGF were pooled in.
+
+### Removed
+
+- `running_scripts/train_release_v2.2.sh`, replaced by `train_release_v2.3.sh`.
+- `scripts/train_tcn_gpus.py`; `scripts/train_tcn_gpus_cl.py` trains the TCN.
+- `--test_title_list` in `prepare_msms.py` and `prepare_msms_nist23.py`, which nothing used.
+- Unused imports and a duplicate collision-energy pattern in the package, and the manual test scripts at the end of the `msfiddle/utils` modules.
 
 ## [2.2.1] - 2026-10-19
 

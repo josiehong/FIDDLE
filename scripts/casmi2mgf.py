@@ -1,6 +1,5 @@
 import os
 import argparse
-import yaml
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
@@ -18,6 +17,7 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from msfiddle.settings import load_config
 from msfiddle.utils import (
     sdf2mgf,
     filter_spec,
@@ -72,8 +72,7 @@ if __name__ == "__main__":
     )
 
     # load the configurations
-    with open(args.data_config_path, "r") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    config = load_config(args.data_config_path)
 
     # 1. convert original format to mgf
     """mgf format

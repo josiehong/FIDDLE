@@ -1,6 +1,5 @@
 import argparse
 from tqdm import tqdm
-import yaml
 import os
 
 import numpy as np
@@ -18,6 +17,7 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from msfiddle.settings import load_config
 from msfiddle.dataset import MS2FDataset_CL, MS2FDataset
 from msfiddle.model_tcn import MS2FNet_tcn
 from msfiddle.optim import Muon, split_matrix_params
@@ -191,13 +191,17 @@ def train_step(
                     scaler.step(optimizer)
                     scaler.update()
                 else:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                    optimizer.step()
+                    grad_norm = torch.nn.utils.clip_grad_norm_(
+                        model.parameters(), max_norm=1.0
+                    )
+                    # Skip a step with NaN/inf gradients, as GradScaler does
+                    if torch.isfinite(grad_norm):
+                        optimizer.step()
 
                 # Update the learning rate during warm-up phase (counted in
                 # optimizer steps). After warm-up phase, the learning rate
                 # ctrled by warmup_scheduler is fixed and we won't use it
-                if warmup_scheduler.last_epoch < warmup_steps:
+                if warmup_scheduler and warmup_scheduler.last_epoch < warmup_steps:
                     warmup_scheduler.step()
 
             # (tmp) for debug
@@ -285,7 +289,10 @@ if __name__ == "__main__":
         "--train_data", type=str, required=True, help="Path to data (.pkl)"
     )
     parser.add_argument(
-        "--test_data", type=str, required=True, help="Path to data (.pkl)"
+        "--val_data",
+        type=str,
+        required=True,
+        help="Validation data (.pkl) for early stopping and checkpoint selection",
     )
     parser.add_argument(
         "--config_path", type=str, required=True, help="Path to configuration (.yaml)"
@@ -331,8 +338,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     init_random_seed(args.seed)
-    with open(args.config_path, "r") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    config = load_config(args.config_path)
     print("Load the model & training configuration from {}".format(args.config_path))
 
     # Input size is fixed (padded spectra, constant batch), the exact case
@@ -381,7 +387,7 @@ if __name__ == "__main__":
             config["train"]["batch_size"], grad_accum_steps, effective_batch_size
         )
     )
-    valid_set = MS2FDataset(args.test_data, padding_dim=config["model"]["padding_dim"])
+    valid_set = MS2FDataset(args.val_data, padding_dim=config["model"]["padding_dim"])
     valid_loader = DataLoader(
         valid_set,
         batch_size=int(config["train"]["batch_size"] / 4),
@@ -462,9 +468,15 @@ if __name__ == "__main__":
             len(train_set) / effective_batch_size * config["train"]["warmup_ratio"]
         )  # 10% of the optimizer steps in the first epoch
 
-    # Create the warm-up scheduler
+    # Create the warm-up scheduler. Not when resuming: creating it sets the
+    # learning rate back to its initial value, undoing the plateau halvings
+    # restored with the optimizer state
     warmup_start_lr = 1e-6
-    warmup_scheduler = WarmUpScheduler(optimizer, warmup_steps, warmup_start_lr)
+    warmup_scheduler = (
+        WarmUpScheduler(optimizer, warmup_steps, warmup_start_lr)
+        if warmup_steps > 0
+        else None
+    )
     print(
         "Warm-up steps: {}, Warm-up start lr: {}".format(warmup_steps, warmup_start_lr)
     )
@@ -516,6 +528,12 @@ if __name__ == "__main__":
                 valid_mae, valid_mass_mae
             )
         )
+        if not np.isfinite(valid_mae):
+            sys.exit(
+                "Validation error is NaN: training diverged. Lower the learning "
+                "rate and restart from scratch or the best checkpoint, not "
+                "from the _last.pt checkpoint."
+            )
         formula_true = [vector_to_formula(y) for y in y_true]
         formula_pred = [vector_to_formula(y) for y in y_pred_dec]
         print("Exp samples: {}, \nmass: {}".format(formula_true[:5], mass_true[:5]))

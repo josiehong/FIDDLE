@@ -1,9 +1,9 @@
-import numpy as np
+import random
 import re
+import numpy as np
 from tqdm import tqdm
 
 from rdkit import Chem, RDLogger
-from rdkit.Chem import AllChem
 from rdkit.Chem.rdMolDescriptors import CalcMolFormula
 
 RDLogger.DisableLog("rdApp.*")
@@ -30,6 +30,9 @@ mgf_key_order = [
     "smiles",
     "inchi_key",
 ]
+
+
+C13_SHIFT = 1.0033548  # 13C - 12C, the spacing of isotope peaks
 
 
 def sdf2mgf(path, prefix):
@@ -178,8 +181,15 @@ def _filter_spec_single(spectrum, config, type2charge):
     theo_mz = precursor_mz_calculator(precursor_type, molmass)
     ppm = abs(theo_mz - float(spectrum["params"]["precursor_mz"])) / theo_mz * 10**6
 
-    # Filter by ppm (mass error)
+    # Filter by ppm (mass error); a precursor picked at a 13C isotope peak is
+    # dropped too, but counted separately
     if "ppm_tolerance" in config.keys() and ppm > config["ppm_tolerance"]:
+        charge = abs(int(type2charge[precursor_type]))
+        error = float(spectrum["params"]["precursor_mz"]) - theo_mz
+        for k in (1, 2):
+            shifted = abs(error - k * C13_SHIFT / charge) / theo_mz * 10**6
+            if shifted <= config["ppm_tolerance"]:
+                return None, "isotope_error"
         return None, "ppm_tolerance"
 
     # Remove the invalid spectra
@@ -216,6 +226,9 @@ def filter_spec(spectra, config, type2charge, num_workers=0):
     Returns:
             tuple: (clean_spectra, smiles_list) — filtered spectra and their SMILES.
     """
+    # The input is read twice below (filtering, then pairing with results), so
+    # a one-pass reader such as pyteomics' IndexedMGF must be materialized.
+    spectra = list(spectra)
     if num_workers and num_workers > 1:
         from functools import partial
         from multiprocessing import Pool
@@ -250,6 +263,7 @@ def filter_spec(spectra, config, type2charge, num_workers=0):
         "max_mz": [],
         "invalud_formula": [],
         "ppm_tolerance": [],
+        "isotope_error": [],
         "invalid_intensity_array": [],
     }
     for spectrum, (kept, reject_key) in zip(spectra, results):
@@ -264,6 +278,39 @@ def filter_spec(spectra, config, type2charge, num_workers=0):
         print("\t{}: {}".format(k, len(v)))
 
     return clean_spectra, smiles_list
+
+
+def split_by_scaffold(smiles_list, train_ratio, val_ratio, seed=42):
+    """Split compounds into (train, validation, test) SMILES sets, keeping every
+    Bemis-Murcko scaffold in one split. The test set is the 1 - train_ratio
+    share of the compounds and the validation set the val_ratio share, like
+    the random and MaxMin splits in scripts/prepare_msms.py; unlike MaxMin it
+    is fast enough for 100k+ compounds."""
+    from rdkit.Chem.Scaffolds import MurckoScaffold
+
+    groups = {}
+    for smiles in sorted(set(smiles_list)):
+        mol = Chem.MolFromSmiles(smiles)
+        key = (
+            MurckoScaffold.MurckoScaffoldSmiles(mol=mol, includeChirality=False)
+            if mol is not None
+            else ""
+        )
+        groups.setdefault(key or smiles, []).append(smiles)  # acyclic: own group
+    buckets = list(groups.values())
+    random.Random(seed).shuffle(buckets)
+
+    n = sum(len(b) for b in buckets)
+    sizes = [int(round(n * (1.0 - train_ratio))), int(round(n * val_ratio))]
+    test, val, train = set(), set(), set()
+    for bucket in buckets:
+        if len(test) < sizes[0]:
+            test.update(bucket)
+        elif len(val) < sizes[1]:
+            val.update(bucket)
+        else:
+            train.update(bucket)
+    return train, val, test
 
 
 def simulate_experimental_mz(theoretical_mz, relative_mass_tolerance_ppm):
@@ -341,6 +388,12 @@ def precursor_mz_calculator(precursor_type, mass):
         return mass - ATOMS_WEIGHT["H"] - (ATOMS_WEIGHT["C"] + ATOMS_WEIGHT["O"] * 2)
     elif precursor_type == "[M-H-H2O]-" or precursor_type == "[M-H2O-H]-":
         return mass - ATOMS_WEIGHT["H"] - (ATOMS_WEIGHT["H"] * 2 + ATOMS_WEIGHT["O"])
+    elif precursor_type == "[M+CH2O2-H]-":  # formate adduct, [M+FA-H]-
+        return (
+            mass
+            - ATOMS_WEIGHT["H"]
+            + (ATOMS_WEIGHT["C"] + ATOMS_WEIGHT["H"] * 2 + ATOMS_WEIGHT["O"] * 2)
+        )
     else:
         raise ValueError("Unsupported precursor type: {}".format(precursor_type))
 
@@ -420,52 +473,47 @@ def mass_calculator(precursor_type, precursor_mz):
             + ATOMS_WEIGHT["H"]
             + (ATOMS_WEIGHT["H"] * 2 + ATOMS_WEIGHT["O"])
         )
+    elif precursor_type == "[M+CH2O2-H]-":  # formate adduct, [M+FA-H]-
+        return (
+            precursor_mz
+            + ATOMS_WEIGHT["H"]
+            - (ATOMS_WEIGHT["C"] + ATOMS_WEIGHT["H"] * 2 + ATOMS_WEIGHT["O"] * 2)
+        )
     else:
         raise ValueError("Unsupported precursor type: {}".format(precursor_type))
 
 
-if __name__ == "__main__":
-    # test sdf2mgf
-    spectra = sdf2mgf("../data/origin/Agilent_Combined.sdf", "agilent_combine")
-    print("Number of spectra: {}".format(len(spectra)))
-    for spec in spectra:
-        if spec["params"]["precursor_type"] == "[M-H]-":
-            print(spec)
-            break
+def precursor_charge(precursor_type):
+    """Absolute charge of an adduct, e.g. 2 for '[M+2H]2+'."""
+    match = re.search(r"\](\d*)[+-]$", precursor_type)
+    if match is None:
+        raise ValueError("Unsupported precursor type: {}".format(precursor_type))
+    return int(match.group(1) or 1)
 
-    # test filter_spec
-    config = {
-        "instrument_type": "ESI-QTOF",
-        "instrument": ["Unknown"],
-        "ms_level": "2",
-        "atom_type": [
-            "C",
-            "O",
-            "N",
-            "H",
-            "P",
-            "S",
-            "F",
-            "Cl",
-            "B",
-            "Br",
-            "I",
-            "Na",
-            "K",
-        ],
-        "precursor_type": ["[M+H]+", "[M-H]-"],
-        "min_mz": 50,
-        "max_mz": 1500,
-        "min_peak_num": 5,
-        "max_atom_num": 300,
-        "min_atom_num": 10,
-        "ppm_tolerance": 10,
-    }
-    type2charge = {"[M+H]+": 1, "[M-H]-": -1}
-    clean_spectra, smiles_list = filter_spec(spectra, config, type2charge)
-    print("Number of clean spectra: {}".format(len(clean_spectra)))
-    print("Number of smiles: {}".format(len(smiles_list)))
-    for spec in clean_spectra:
-        if spec["params"]["precursor_type"] == "[M-H]-":
-            print(spec)
-            break
+
+def neutral_mass_per_mz(precursor_type):
+    """d(neutral mass)/d(m/z) for an adduct: charge / (number of M), e.g. 1 for
+    '[M+H]+', 2 for '[M+2H]2+' and 0.5 for '[2M+H]+'."""
+    return mass_calculator(precursor_type, 1001.0) - mass_calculator(
+        precursor_type, 1000.0
+    )
+
+
+def precursor_window_da(precursor_type, precursor_mz, ppm):
+    """Neutral-mass window (Da) for a precursor m/z error of `ppm`.
+
+    Instrument error is relative to the measured m/z, so a ppm tolerance is
+    applied there and carried to the neutral mass of the adduct.
+    """
+    return ppm * precursor_mz / 1e6 * neutral_mass_per_mz(precursor_type)
+
+
+def isotope_mass_shift(precursor_type, k):
+    """How much heavier the neutral mass looks when the precursor m/z was read
+    from the k-th 13C isotope peak instead of the monoisotopic one."""
+    return (
+        k
+        * C13_SHIFT
+        / precursor_charge(precursor_type)
+        * neutral_mass_per_mz(precursor_type)
+    )

@@ -15,9 +15,9 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-import yaml
 from pyteomics import mgf
 
+from .settings import load_config
 from .download import download_models as download_pretrained_models
 from .download import get_checkpoint_dir
 from .external_results import load_buddy_results, load_sirius_results
@@ -27,11 +27,21 @@ from .utils.mol_utils import (
     formula_to_vector,
     vector_to_formula,
 )
-from .utils.msms_utils import mass_calculator
-from .utils.pkl_utils import generate_ms, parse_collision_energy, unify_precursor_type
-from .utils.refine_utils import formula_refinement
+from .utils.msms_utils import (
+    isotope_mass_shift,
+    mass_calculator,
+    precursor_window_da,
+)
+from .utils.pkl_utils import (
+    generate_ms,
+    is_stepped_collision_energy,
+    parse_collision_energy,
+    resolve_collision_energy,
+    unify_precursor_type,
+)
+from .utils.refine_utils import ISOTOPE_MASS, formula_refinement, parse_formula
 
-_INSTRUMENT_TYPES = {"orbitrap", "qtof"}
+_INSTRUMENT_TYPES = {"orbitrap", "qtof", "timstof"}
 _NEUTRAL_FORMULAS = ("CH4O2", "CH2O2", "H2O", "NH3", "CO2")
 
 
@@ -223,46 +233,53 @@ class MsFiddlePredictor:
         encoded = self._load_mgf_spectra(test_data_path)
         predictions = self._predict_encoded(encoded, batch_size=batch_size)
 
-        buddy_df = load_buddy_results(buddy_path) if buddy_path else None
-        sirius_df = load_sirius_results(sirius_path) if sirius_path else None
+        # Indexed by ID: looked up once per spectrum
+        buddy_df = _index_by_id(load_buddy_results(buddy_path)) if buddy_path else None
+        sirius_df = (
+            _index_by_id(load_sirius_results(sirius_path)) if sirius_path else None
+        )
+        ids = {prediction.spectrum.id for prediction in predictions}
+        _warn_if_unmatched("BUDDY", buddy_df, ids)
+        _warn_if_unmatched("SIRIUS", sirius_df, ids)
 
         refined_formula = {f"Refined Formula ({k})": [] for k in range(top_k)}
         refined_mass = {f"Refined Mass ({k})": [] for k in range(top_k)}
         refined_rescore = {f"Rescore ({k})": [] for k in range(top_k)}
+        isotope_shift = {f"Isotope Shift ({k})": [] for k in range(top_k)}
+        offsets = self.config["post_processing"]["isotope_errors"]
         running_time: list[float] = []
-        neutral_masses: list[float] = []
 
-        jobs = [
-            self._refinement_args(
-                prediction,
-                top_k,
-                extra_formulas=self._external_formula_candidates(
-                    prediction.spectrum.id,
-                    buddy_df=buddy_df,
-                    sirius_df=sirius_df,
-                ),
+        # One refinement per spectrum and isotope offset
+        jobs = []  # (spectrum index, offset, refine args, neutral mass)
+        for i, prediction in enumerate(predictions):
+            extra_formulas = self._external_formula_candidates(
+                prediction.spectrum.id, buddy_df=buddy_df, sirius_df=sirius_df
             )
-            for prediction in predictions
-        ]
+            for k in offsets:
+                refine_args, mass = self._refinement_args(
+                    prediction, top_k, extra_formulas=extra_formulas, isotope_shift=k
+                )
+                jobs.append((i, k, refine_args, mass))
         refined = _run_refinement(
-            [refine_args for refine_args, _ in jobs], num_workers, self.verbose
+            [refine_args for _, _, refine_args, _ in jobs], num_workers, self.verbose
         )
+        parts: list[list] = [[] for _ in predictions]
+        refine_times = [0.0] * len(predictions)
+        neutral_masses: list[float] = [0.0] * len(predictions)
+        for (i, k, _, mass), (refined_results, refine_time) in zip(jobs, refined):
+            parts[i].append((k, refined_results))
+            refine_times[i] += refine_time
+            if k == 0:
+                neutral_masses[i] = mass
 
-        rescore_jobs = zip(predictions, jobs, refined)
+        rescore_jobs = zip(predictions, parts, refine_times)
         if self.verbose:
             from tqdm import tqdm
 
-            rescore_jobs = tqdm(rescore_jobs, total=len(jobs), desc="Rescore")
-        for (
-            prediction,
-            (_, neutral_mass),
-            (refined_results, refine_time),
-        ) in rescore_jobs:
+            rescore_jobs = tqdm(rescore_jobs, total=len(parts), desc="Rescore")
+        for prediction, spectrum_parts, refine_time in rescore_jobs:
             start_time = time.time()
-            results = self._rescore_candidates(
-                prediction.rescore_embedding, refined_results, top_k
-            )
-            neutral_masses.append(neutral_mass)
+            results = self._rank_candidates(prediction, spectrum_parts, top_k)
             running_time.append(
                 prediction.prediction_time + refine_time + time.time() - start_time
             )
@@ -273,6 +290,10 @@ class MsFiddlePredictor:
                 refined_formula[f"Refined Formula ({idx})"].append(formula)
                 refined_mass[f"Refined Mass ({idx})"].append(mass)
                 refined_rescore[f"Rescore ({idx})"].append(score)
+                if offsets != [0]:
+                    isotope_shift[f"Isotope Shift ({idx})"].append(
+                        results["isotope_shift"][idx]
+                    )
 
         base_columns = {
             "ID": [prediction.spectrum.id for prediction in predictions],
@@ -284,9 +305,10 @@ class MsFiddlePredictor:
             "Pred H/C Num": [prediction.pred_hc_count for prediction in predictions],
             "Running Time": running_time,
         }
-        return pd.DataFrame(
-            {**base_columns, **refined_formula, **refined_mass, **refined_rescore}
-        )
+        columns = {**base_columns, **refined_formula, **refined_mass, **refined_rescore}
+        if offsets != [0]:
+            columns.update(isotope_shift)
+        return pd.DataFrame(columns)
 
     def _encode_spectrum_record(
         self,
@@ -345,7 +367,16 @@ class MsFiddlePredictor:
                 f"{adjusted_precursor_type}"
             )
 
-        ce_str = _collision_energy_to_string(collision_energy)
+        ce_str = resolve_collision_energy(
+            _collision_energy_to_string(collision_energy),
+            encoder.get("stepped_collision_energy", "drop"),
+        )
+        if ce_str is None:
+            raise ValueError(
+                f"Stepped collision energy {collision_energy!r} is not supported: "
+                "this model was trained on single-energy spectra (the timsTOF "
+                "config sets encoding.stepped_collision_energy to 'mean')"
+            )
         ce, nce = parse_collision_energy(
             ce_str=ce_str,
             precursor_mz=precursor_mz,
@@ -388,8 +419,10 @@ class MsFiddlePredictor:
             if self.config["encoding"]["use_simulated_precursor_mz"]
             else "precursor_mz"
         )
+        stepped_mode = self.config["encoding"].get("stepped_collision_energy", "drop")
         encoded: list[_EncodedSpectrum] = []
         invalid_count = 0
+        stepped: list[str] = []
         for spectrum in spectra:
             params = spectrum.get("params", {})
             missing = [
@@ -413,6 +446,12 @@ class MsFiddlePredictor:
                         f"('title', '{precursor_mz_key}', 'precursor_type', 'collision_energy')"
                     )
                 continue
+            if stepped_mode == "drop" and is_stepped_collision_energy(
+                params["collision_energy"]
+            ):
+                stepped.append(str(params["collision_energy"]))
+                invalid_count += 1
+                continue
             try:
                 encoded.append(
                     self._encode_spectrum(
@@ -428,6 +467,13 @@ class MsFiddlePredictor:
                 invalid_count += 1
                 continue
 
+        if stepped:
+            warnings.warn(
+                f"Skipped {len(stepped)} spectra with a stepped collision energy "
+                f"(e.g. {stepped[0]!r}): FIDDLE was trained on single-energy "
+                "spectra. Set COLLISION_ENERGY to a single energy to predict them.",
+                stacklevel=3,
+            )
         if self.verbose:
             print(len(spectra) - invalid_count, "spectra left after filtering")
             print(len(encoded), "spectra loaded into the dataset")
@@ -532,12 +578,7 @@ class MsFiddlePredictor:
             if not path.exists()
         ]
         if missing_paths and self.download_models:
-            download_pretrained_models(
-                models=[
-                    f"fiddle_tcn_{self.instrument_type}",
-                    f"fiddle_rescore_{self.instrument_type}",
-                ]
-            )
+            download_pretrained_models(instruments=[self.instrument_type])
             missing_paths = [
                 path
                 for path in (self.resume_path, self.rescore_resume_path)
@@ -574,7 +615,7 @@ class MsFiddlePredictor:
         assert torch is not None
         assert nn is not None
 
-        from .model_tcn import FormulaEncoder, MS2FNet_tcn, RescoreHead
+        from .model_tcn import FormulaEncoder, MS2FNet_tcn, RescoreHead, tcn_hash
 
         self.device, self.device_ids = _resolve_torch_device(
             torch,
@@ -622,6 +663,15 @@ class MsFiddlePredictor:
         )
         formula_encoder.load_state_dict(ckpt["formula_encoder_state_dict"])
         rescore_head.load_state_dict(ckpt["rescore_head_state_dict"])
+        expected = ckpt.get("tcn_hash")  # absent in older checkpoints
+        if expected and expected != tcn_hash(state_dict):
+            warnings.warn(
+                f"The rescore model {self.rescore_resume_path} was trained with a "
+                f"different TCN than {self.resume_path}; its scores are not "
+                "meaningful with this TCN. Use the two checkpoints of one release "
+                "or training run.",
+                stacklevel=2,
+            )
         formula_encoder.eval()
         rescore_head.eval()
 
@@ -636,16 +686,39 @@ class MsFiddlePredictor:
         *,
         extra_formulas: Sequence[str] | None = None,
     ) -> tuple[dict[str, list[Any]], float]:
-        refine_args, neutral_mass = self._refinement_args(
-            prediction, top_k, extra_formulas=extra_formulas
-        )
-        return (
-            self._rescore_candidates(
-                prediction.rescore_embedding,
-                formula_refinement(*refine_args),
-                top_k,
-            ),
-            neutral_mass,
+        parts = []
+        for k in self.config["post_processing"]["isotope_errors"]:
+            refine_args, mass = self._refinement_args(
+                prediction, top_k, extra_formulas=extra_formulas, isotope_shift=k
+            )
+            parts.append((k, formula_refinement(*refine_args)))
+            if k == 0:
+                neutral_mass = mass
+        return self._rank_candidates(prediction, parts, top_k), neutral_mass
+
+    def _rank_candidates(
+        self,
+        prediction: _ModelPrediction,
+        parts: Sequence[tuple[int, dict[str, list[Any]]]],
+        top_k: int,
+    ) -> dict[str, list[Any]]:
+        """Rescore the candidates refined at each isotope offset k and rank them.
+
+        With the single offset 0 this is plain rescoring. Otherwise the
+        candidates are pooled (a formula found at several offsets keeps the
+        smallest k) and ranked by rescore - isotope_penalty * k.
+        """
+        if len(parts) == 1:
+            return self._rescore_candidates(
+                prediction.rescore_embedding, parts[0][1], top_k
+            )
+        merged, shift_of = _merge_isotope_refinements(parts)
+        results = self._rescore_candidates(prediction.rescore_embedding, merged, top_k)
+        return _apply_isotope_penalty(
+            results,
+            shift_of,
+            self.config["post_processing"]["isotope_penalty"],
+            top_k,
         )
 
     def _refinement_args(
@@ -654,13 +727,23 @@ class MsFiddlePredictor:
         top_k: int,
         *,
         extra_formulas: Sequence[str] | None = None,
+        isotope_shift: int = 0,
     ) -> tuple[tuple, float]:
-        """Positional arguments of formula_refinement for one prediction."""
+        """Positional arguments of formula_refinement for one prediction, and
+        the neutral mass it refines around. ``isotope_shift`` = k assumes the
+        precursor m/z was read from the k-th 13C isotope peak."""
+        spectrum = prediction.spectrum
+        # Aliases such as [M+FA-H]- are encoded under their canonical name
+        adduct = unify_precursor_type(spectrum.precursor_type)
         neutral_mass = float(
-            mass_calculator(
-                prediction.spectrum.precursor_type,
-                prediction.spectrum.precursor_mz,
-            )
+            mass_calculator(adduct, spectrum.precursor_mz)
+        ) - isotope_mass_shift(adduct, isotope_shift)
+        pp = self.config["post_processing"]
+        # A ppm tolerance applies to the precursor m/z, like the data filters
+        window = (
+            precursor_window_da(adduct, spectrum.precursor_mz, pp["mass_tolerance"])
+            if pp["ppm_mode"]
+            else pp["mass_tolerance"]
         )
         f0_list = [prediction.pred_formula]
         if extra_formulas:
@@ -679,8 +762,8 @@ class MsFiddlePredictor:
         refine_args = (
             f0_list,
             neutral_mass,
-            self.config["post_processing"]["mass_tolerance"],
-            self.config["post_processing"]["ppm_mode"],
+            window,
+            False,  # window is in Da
             top_k,
             self.config["post_processing"]["maxium_miss_atom_num"],
             self.config["post_processing"]["time_out"],
@@ -748,15 +831,20 @@ class MsFiddlePredictor:
     ) -> list[dict[str, Any]]:
         candidates = []
         base_metadata = self._metadata_for_prediction(prediction, neutral_mass)
-        for formula, mass, raw_score in zip(
-            refined_results["formula"],
-            refined_results["mass"],
-            refined_results["rescore"],
+        shifts = refined_results.get("isotope_shift", [])
+        for idx, (formula, mass, raw_score) in enumerate(
+            zip(
+                refined_results["formula"],
+                refined_results["mass"],
+                refined_results["rescore"],
+            )
         ):
             if formula is None:
                 continue
             metadata = dict(base_metadata)
             metadata["raw_rescore"] = float(raw_score)
+            if shifts:
+                metadata["isotope_shift"] = shifts[idx]
             candidates.append(
                 {
                     "formula": formula,
@@ -797,9 +885,8 @@ class MsFiddlePredictor:
     ) -> list[str]:
         candidates: list[str] = []
         if buddy_df is not None:
-            rows = buddy_df.loc[buddy_df["ID"] == spec_id]
-            if len(rows) > 0:
-                row = rows.iloc[0]
+            if spec_id in buddy_df.index:
+                row = buddy_df.loc[spec_id]
                 formulas = row[
                     [
                         "Pred Formula (1)",
@@ -826,9 +913,8 @@ class MsFiddlePredictor:
                     and score < self.config["post_processing"]["buddy_fdr_thr"]
                 )
         if sirius_df is not None:
-            rows = sirius_df.loc[sirius_df["ID"] == spec_id]
-            if len(rows) > 0:
-                row = rows.iloc[0]
+            if spec_id in sirius_df.index:
+                row = sirius_df.loc[spec_id]
                 formulas = row[
                     [
                         "Pred Formula (1)",
@@ -855,6 +941,63 @@ class MsFiddlePredictor:
                     and score > self.config["post_processing"]["sirius_score_thr"]
                 )
         return candidates
+
+
+def _index_by_id(df: pd.DataFrame) -> pd.DataFrame:
+    """One row per spectrum ID (the first, as before), indexed by ID."""
+    return df.drop_duplicates("ID").set_index("ID")
+
+
+def _warn_if_unmatched(tool: str, df: pd.DataFrame | None, ids: set[str]) -> None:
+    """Warn when none of a tool's results belongs to a spectrum being predicted."""
+    if df is not None and len(df) and ids.isdisjoint(df.index):
+        warnings.warn(
+            f"No {tool} result matches a spectrum title, so {tool} adds no "
+            f"candidates. Its IDs look like {df.index[0]!r}.",
+            stacklevel=3,
+        )
+
+
+def _merge_isotope_refinements(
+    parts: Sequence[tuple[int, dict[str, list[Any]]]],
+) -> tuple[dict[str, list[Any]], dict[str, int]]:
+    """Pool the candidates refined at each isotope offset. A formula found at
+    several offsets keeps the smallest one."""
+    formulas, masses, shift_of = [], [], {}
+    for k, refined in sorted(parts, key=lambda part: part[0]):
+        for formula, mass in zip(refined["formula"], refined["mass"]):
+            if formula is not None and formula not in shift_of:
+                shift_of[formula] = k
+                formulas.append(formula)
+                masses.append(mass)
+    return {"formula": formulas, "mass": masses}, shift_of
+
+
+def _apply_isotope_penalty(
+    results: dict[str, list[Any]],
+    shift_of: Mapping[str, int],
+    penalty: float,
+    top_k: int,
+) -> dict[str, list[Any]]:
+    """Rank rescored candidates by rescore - penalty * isotope shift, keep top_k."""
+    ranked = sorted(
+        (
+            (rescore - penalty * shift_of[formula], formula, mass, rescore)
+            for formula, mass, rescore in zip(
+                results["formula"], results["mass"], results["rescore"]
+            )
+            if formula is not None
+        ),
+        key=lambda item: item[0],
+        reverse=True,
+    )[:top_k]
+    pad = [None] * (top_k - len(ranked))
+    return {
+        "formula": [r[1] for r in ranked] + pad,
+        "mass": [r[2] for r in ranked] + pad,
+        "rescore": [r[3] for r in ranked] + [0.0] * len(pad),
+        "isotope_shift": [shift_of[r[1]] for r in ranked] + pad,
+    }
 
 
 def _timed_refinement(refine_args: tuple) -> tuple[dict[str, list[Any]], float]:
@@ -1001,16 +1144,20 @@ def _normalize_instrument_type(instrument_type: str) -> str:
 
 
 def _is_external_formula(value: object) -> bool:
+    """A BUDDY or SIRIUS formula that refinement can use: present, and made only
+    of elements FIDDLE models (SIRIUS may propose Si or Se, for example)."""
     if pd.isna(value):
         return False
-    return str(value).strip().lower() not in {"", "na", "nan", "none", "null", "<na>"}
+    text = str(value).strip()
+    if text.lower() in {"", "na", "nan", "none", "null", "<na>"}:
+        return False
+    return parse_formula(text).keys() <= ISOTOPE_MASS.keys()
 
 
 def _load_config(config_path: Path) -> dict[str, Any]:
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
-    with config_path.open("r") as handle:
-        return yaml.safe_load(handle)
+    return load_config(config_path)
 
 
 def _validate_top_k(top_k: int) -> int:

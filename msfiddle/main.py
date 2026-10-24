@@ -55,9 +55,9 @@ def _add_predict_args(parser):
     parser.add_argument(
         "--instrument_type",
         type=str,
-        choices=["qtof", "orbitrap"],
+        choices=["qtof", "orbitrap", "timstof"],
         default="orbitrap",
-        help="Instrument type: qtof or orbitrap (default: orbitrap)",
+        help="Instrument type: qtof, orbitrap or timstof (default: orbitrap)",
     )
 
     # Add other required arguments
@@ -225,7 +225,7 @@ def _evaluate(res_df, truth_path, args, parser):
 def _download(args, parser):
     from .download import download_models
 
-    download_models(destination=args.destination, models=args.models)
+    download_models(destination=args.destination, instruments=args.instruments)
 
 
 def _paths(args, parser):
@@ -250,7 +250,13 @@ def build_parser():
 
     p = sub.add_parser("download", help="Download the pre-trained models")
     p.add_argument("-d", "--destination", help="Directory to save the models")
-    p.add_argument("-m", "--models", nargs="+", help="Model names (default: all)")
+    p.add_argument(
+        "-i",
+        "--instruments",
+        nargs="+",
+        choices=["qtof", "orbitrap", "timstof"],
+        help="Instruments whose models to download (default: all)",
+    )
     p.set_defaults(func=_download)
 
     p = sub.add_parser("paths", help="Show the checkpoint directory and models")

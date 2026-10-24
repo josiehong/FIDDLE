@@ -1,6 +1,5 @@
 import re
 import argparse
-import yaml
 import numpy as np
 from pyteomics import mgf
 import os
@@ -9,6 +8,7 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from msfiddle.settings import load_config
 from msfiddle.utils import filter_spec
 
 
@@ -56,10 +56,13 @@ def parse_input_text(text):
     collision_energy_match = re.search(r">  <COLLISION ENERGY>\n(.+)", text)
     if collision_energy_match:
         collision_energy = collision_energy_match.group(1).strip()
-        if "," in collision_energy:
-            collision_energy = np.mean(
-                [float(ce) for ce in collision_energy.split(",")]
-            )  # average collision energy
+        # EMBL-MCF 2.0 gives normalized energies (stepped 30/50/70 %); mark them
+        # as NCE, since a bare number is read as eV. Stepped ones are averaged.
+        try:
+            energies = [float(ce) for ce in collision_energy.split(",")]
+            collision_energy = f"{np.mean(energies):g} nce"
+        except ValueError:
+            pass
         data["collision_energy"] = collision_energy
 
     # Extract M/Z array and intensity array from MASS SPECTRAL PEAKS
@@ -148,8 +151,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # load the configurations
-    with open(args.data_config_path, "r") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    config = load_config(args.data_config_path)
     type2charge = config["encoding"]["type2charge"]
 
     with open(args.raw_path, "r") as file:

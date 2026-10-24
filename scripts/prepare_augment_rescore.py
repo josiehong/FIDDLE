@@ -1,29 +1,24 @@
 """
-Prepare and augment rescore train/test data directly from TCN train/test sets.
+Prepare rescore training and validation pairs.
 
-Train pipeline (--train_data):
-  1. Run TCN inference → top-K candidates labelled correct/incorrect
-  2. Cap positives per formula to --pos_cap (default 10)
-  3. Generate cross-spectrum negatives (--neg_per_pos per positive, --tolerance ppm)
-  4. Pool original + cross-spectrum negatives, downsample to 1:1
-  → <rescore_dir>/qtof_maxmin_rescore_train.pkl
-
-Test pipeline (--test_data):
-  1. Run TCN inference → top-K candidates labelled correct/incorrect
-  2. No augmentation
-  → <rescore_dir>/qtof_maxmin_rescore_test.pkl
+  1. Run TCN inference and refinement on the TCN training and validation sets:
+     top-K candidates labelled correct or not
+  2. Validation pairs: the validation set's raw candidates (no augmentation),
+     used to pick rescore checkpoints by top-1. The TCN never trained on them,
+     and the test set is not used.
+  3. Training pairs: from the training set, cap positives per formula to
+     --pos_cap, add cross-spectrum negatives (--neg_per_pos per positive,
+     within --tolerance), and downsample to 1:1
+  → <rescore_dir>/<stem>_rescore_train.pkl and <stem>_rescore_val.pkl
 
 Usage:
     python scripts/prepare_augment_rescore.py \\
-        --train_data ./data/cl_pkl_031826/qtof_maxmin_train.pkl \\
-        --test_data  ./data/cl_pkl_031826/qtof_maxmin_test.pkl \\
+        --train_data ./data/cl_pkl_102026/qtof_maxmin_train.pkl \\
+        --val_data ./data/cl_pkl_102026/qtof_maxmin_val.pkl \\
         --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \\
-        --resume_path ./check_point/fiddle_tcn_qtof_031826.pt \\
-        --rescore_dir ./data/cl_pkl_031826 \\
-        --pos_cap 10 \\
-        --neg_per_pos 8 \\
-        --tolerance 50 \\
-        --device 2
+        --resume_path ./check_point/fiddle_tcn_qtof_102026_muon.pt \\
+        --rescore_dir ./data/rescore_102026_muon \\
+        --pos_cap 10 --neg_per_pos 8 --tolerance 50 --device 0
 """
 
 import argparse
@@ -34,10 +29,8 @@ from collections import defaultdict
 from multiprocessing import Pool
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
-import yaml
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -46,6 +39,7 @@ import sys
 # Make the repo root importable so `msfiddle` resolves without an editable install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from msfiddle.settings import load_config
 from msfiddle.dataset import MS2FDataset
 from msfiddle.model_tcn import MS2FNet_tcn
 from msfiddle.utils import (
@@ -55,6 +49,7 @@ from msfiddle.utils import (
     formula_to_vector,
     monoisotopic_mass_calculator,
 )
+from msfiddle.utils.msms_utils import isotope_mass_shift, precursor_window_da
 
 
 def _refine_worker(args):
@@ -186,26 +181,40 @@ def prepare_rescore_records(data_path, model, device, config, num_workers=8):
     formula_true = [vec2formula(v) for v in np.round(y_true.numpy()) + offsets]
     mass_true = [monoisotopic_mass_calculator(f, mode="f") for f in formula_true]
 
-    # Formula refinement (post-processing) — parallelised across CPU cores
+    # Formula refinement as at inference: the ppm tolerance applies to the
+    # precursor m/z, and each 13C isotope offset k is refined too (its
+    # candidates are decoys here, since the training masses are exact).
+    # Parallelised across CPU cores.
     pp = config["post_processing"]
-    top_k = pp["top_k"]
-
-    worker_args = [
-        (
-            pred_f,
-            m,
-            pp["mass_tolerance"],
-            pp["ppm_mode"],
-            top_k,
-            pp["maxium_miss_atom_num"],
-            pp["time_out"],
-            pp["refine_atom_type"],
-            pp["refine_atom_num"],
+    index_to_adduct = {v: t for t, v in config["encoding"]["precursor_type"].items()}
+    worker_args, owners = [], []
+    for i, (pred_f, m, title) in enumerate(zip(formula_pred, mass_true, spec_ids)):
+        env = pkl_data[title][1]
+        adduct = index_to_adduct[int(env[2])]
+        window = (
+            precursor_window_da(adduct, float(env[0]), pp["mass_tolerance"])
+            if pp["ppm_mode"]
+            else pp["mass_tolerance"]
         )
-        for pred_f, m in zip(formula_pred, mass_true)
-    ]
+        for k in pp["isotope_errors"]:
+            worker_args.append(
+                (
+                    pred_f,
+                    m - isotope_mass_shift(adduct, k),
+                    window,
+                    False,  # window is in Da
+                    pp["top_k"],
+                    pp["maxium_miss_atom_num"],
+                    pp["time_out"],
+                    pp["refine_atom_type"],
+                    pp["refine_atom_num"],
+                )
+            )
+            owners.append((i, k))
 
-    print(f"Post-processing {len(worker_args)} spectra with {num_workers} workers...")
+    print(
+        f"Post-processing {len(worker_args)} refinements with {num_workers} workers..."
+    )
     with Pool(num_workers) as pool:
         results = list(
             tqdm(
@@ -215,37 +224,33 @@ def prepare_rescore_records(data_path, model, device, config, num_workers=8):
             )
         )
 
-    # results[i] is a list of top_k formula strings
-    formula_refined = {
-        f"Refined Formula ({k})": [r[k] for r in results] for k in range(top_k)
-    }
+    # Pool each spectrum's candidates across offsets, keeping the first
+    candidates = [{} for _ in spec_ids]  # formula -> isotope offset
+    for (i, k), formulas in zip(owners, results):
+        for formula in formulas:
+            if formula is not None:
+                candidates[i].setdefault(formula, k)
 
     # Label and collect records
-    res_df = pd.DataFrame({"ID": spec_ids, "Formula": formula_true, **formula_refined})
-
     records = []
-    for k in range(top_k):
-        col = f"Refined Formula ({k})"
-        res_df[f"Label ({k})"] = res_df.apply(
-            lambda row: formula_to_dict(row["Formula"]) == formula_to_dict(row[col]),
-            axis=1,
-        )
-        for label_val, flag in [(1.0, True), (0.0, False)]:
-            sub = res_df[res_df[f"Label ({k})"] == flag].dropna(subset=[col])
-            for _, row in sub.iterrows():
-                title = row["ID"]
-                spec, env = pkl_data[title]
-                records.append(
-                    {
-                        "title": title,
-                        "pred_formula": row[col],
-                        "spec": spec,
-                        "env": env,
-                        "label": label_val,
-                    }
-                )
-            tag = "correct" if label_val == 1.0 else "incorrect"
-            print(f"  k={k} {tag}: {len(sub)}")
+    counts = {"correct": 0, "incorrect": 0, "from isotope offsets": 0}
+    for title, truth, found in zip(spec_ids, formula_true, candidates):
+        spec, env = pkl_data[title]
+        truth = formula_to_dict(truth)
+        for formula, k in found.items():
+            label = float(formula_to_dict(formula) == truth)
+            counts["correct" if label else "incorrect"] += 1
+            counts["from isotope offsets"] += k > 0
+            records.append(
+                {
+                    "title": title,
+                    "pred_formula": formula,
+                    "spec": spec,
+                    "env": env,
+                    "label": label,
+                }
+            )
+    print("  " + ", ".join(f"{name}: {n}" for name, n in counts.items()))
 
     return records
 
@@ -355,7 +360,7 @@ def augment(data, pos_cap, neg_per_pos, tolerance, ppm_mode, seed):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Prepare and augment rescore data from TCN train/test sets"
+        description="Prepare rescore training and validation pairs"
     )
     parser.add_argument(
         "--train_data",
@@ -364,10 +369,10 @@ def main():
         help="TCN training pkl (e.g. qtof_maxmin_train.pkl)",
     )
     parser.add_argument(
-        "--test_data",
+        "--val_data",
         type=str,
         required=True,
-        help="TCN test pkl (e.g. qtof_maxmin_test.pkl)",
+        help="TCN validation pkl (e.g. qtof_maxmin_val.pkl)",
     )
     parser.add_argument("--config_path", type=str, required=True)
     parser.add_argument(
@@ -407,8 +412,7 @@ def main():
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    with open(args.config_path) as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    config = load_config(args.config_path)
 
     tolerance = (
         args.tolerance
@@ -435,48 +439,32 @@ def main():
     model.eval()
     print(f"Loaded TCN model from {args.resume_path}")
 
-    # Derive output paths from input filenames
-    train_stem = os.path.basename(args.train_data).replace("_train.pkl", "")
-    test_stem = os.path.basename(args.test_data).replace("_test.pkl", "")
-    rescore_train_path = os.path.join(
-        args.rescore_dir, f"{train_stem}_rescore_train.pkl"
-    )
-    rescore_test_path = os.path.join(args.rescore_dir, f"{test_stem}_rescore_test.pkl")
+    os.makedirs(args.rescore_dir, exist_ok=True)
+    stem = os.path.basename(args.train_data).replace("_train.pkl", "")
+    rescore_train_path = os.path.join(args.rescore_dir, f"{stem}_rescore_train.pkl")
+    rescore_val_path = os.path.join(args.rescore_dir, f"{stem}_rescore_val.pkl")
 
-    # ── Train split: inference + augmentation ────────────────────────────────
-    print(f"\n{'='*60}")
-    print(f"Train split: {args.train_data}")
+    print(f"Validation set: {args.val_data}")
+    val_records = prepare_rescore_records(
+        args.val_data, model, device, config, args.num_workers
+    )
+    with open(rescore_val_path, "wb") as f:
+        pickle.dump(val_records, f)
+    print(f"Saved {len(val_records)} items to {rescore_val_path}")
+
+    print(f"\nTraining set: {args.train_data}")
     train_records = prepare_rescore_records(
-        args.train_data,
-        model,
-        device,
-        config,
-        args.num_workers,
+        args.train_data, model, device, config, args.num_workers
     )
-    print(f"\nRaw rescore train records: {len(train_records)}")
+    print(f"Raw rescore training records: {len(train_records)}")
 
-    print("\nAugmenting train split...")
+    print("\nAugmenting the training pairs...")
     train_augmented = augment(
         train_records, args.pos_cap, args.neg_per_pos, tolerance, ppm_mode, args.seed
     )
     with open(rescore_train_path, "wb") as f:
         pickle.dump(train_augmented, f)
     print(f"Saved {len(train_augmented)} items to {rescore_train_path}")
-
-    # ── Test split: inference only, no augmentation ──────────────────────────
-    print(f"\n{'='*60}")
-    print(f"Test split: {args.test_data}")
-    test_records = prepare_rescore_records(
-        args.test_data,
-        model,
-        device,
-        config,
-        args.num_workers,
-    )
-    print(f"\nRaw rescore test records: {len(test_records)}")
-    with open(rescore_test_path, "wb") as f:
-        pickle.dump(test_records, f)
-    print(f"Saved {len(test_records)} items to {rescore_test_path}")
 
     print("\nDone!")
 

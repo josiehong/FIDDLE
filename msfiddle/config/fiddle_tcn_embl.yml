@@ -1,12 +1,14 @@
 # ------------------------
-# EMBL MCF 2.0 
+# EMBL MCF 2.0 (Orbitrap Exploris 240): run with the Orbitrap models, so the
+# model settings and post-processing follow fiddle_tcn_orbitrap.yml except
+# for the refinement window
 # ------------------------
 embl:  
   atom_type: ['C', 'O', 'N', 'H', 'P', 'S', 'F', 'Cl', 'B', 'Br', 'I', 'Na', 'K']
   precursor_type: ['[M+H]+', '[M+Na]+', '[2M+H]+', # +1
-                    '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+', # +1+-neutrue
+                    '[M+H-H2O]+', '[M-H2O+H]+', '[M+H-2H2O]+', '[M+H-NH3]+', '[M+H+NH3]+', '[M+NH4]+', '[M+H-CH2O2]+', '[M+H-CH4O2]+', # +1, with a neutral loss or gain
                     '[M-H]-', '[2M-H]-', # -1
-                    '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-', '[M-H2O-H]-', # -1+-neutrue
+                    '[M-H-CO2]-', '[M-CHO2]-', '[M-H-H2O]-', '[M-H2O-H]-', # -1, with a neutral loss or gain
                     '[M+2H]2+', ]
   min_mz: 50
   max_mz: 1500
@@ -21,8 +23,10 @@ embl:
 encoding:
   resolution: 0.2
   max_mz: 1500
+  max_peak_num: 512
   max_atom_num: 300
   use_simulated_precursor_mz: False
+
   precursor_type:
     '[M+H]+': 1
     '[M-H]-': 2
@@ -30,7 +34,6 @@ encoding:
     '[M+2H]2+': 4
     '[2M+H]+': 5
     '[2M-H]-': 6
-    
   type2charge: 
     '[M+H]+': '+1'
     '[M-H]-': '-1'
@@ -48,15 +51,16 @@ encoding:
     '[M+H-CH2O2]+': '+1'
     '[M+H-CH4O2]+': '+1'
 
-    '[M-H-CO2]-': '-1' 
-    '[M-CHO2]-': '-1' 
+    '[M-H-CO2]-': '-1'
+    '[M-CHO2]-': '-1'
     '[M-H-H2O]-': '-1'
     '[M-H2O-H]-': '-1'
+    '[M+CH2O2-H]-': '-1'  # formate adduct, folded into [M-H]-
 
 model: 
   resolution: 0.2
   max_mz: 1500
-  padding_dim: 20 # 1500 / 0.2 = 7500; 7500 / 2**5 (# pooling layer) = 234.375; 235 * (2**5) = 7520 
+  padding_dim: 20 # pads 7500 m/z bins to 7520, a multiple of 2**5 for the 5 pooling layers
   num_add: 6
   input_channels: 1
 
@@ -65,36 +69,39 @@ model:
   tcn_kernel_sizes: [45, 43, 41, 39, 37, 35]
   tcn_dropout: 0.2
 
-  # metadata_dim: 16 
   add_embedding_dim: 4
   ce_embedding_dim: 4
   mass_embedding_dim: 4
   embedding_dim: 512
-  
-  formula_decoder_layers: [416, 208, 104, 52, 26, 13]
-  mass_decoder_layers: [416, 208, 104, 26, 13, 1]
-  atomnum_decoder_layers: [416, 208, 104, 26, 13, 1]
-  hcnum_decoder_layers: [416, 208, 104, 26, 13, 1]
+  formula_dim: 64
+
+  formula_decoder_layers: [416, 208, 104, 52, 26]
+  mass_decoder_layers: [416, 208, 104, 26, 13]
+  atomnum_decoder_layers: [416, 208, 104, 26, 13]
+  hcnum_decoder_layers: [416, 208, 104, 26, 13]
   output_dim: 13
 
   fdr_decoder_layers: [416, 208, 104, 26, 13]
   
+
 # ------------------------
 # training settings
 # ------------------------
-# unimplemented
+# not used: this config is for testing only
 
 # ------------------------
 # postprocessing settings
 # ------------------------
-post_processing: 
-  refine_atom_type: ['C', 'O', 'N', 'H']
-  refine_atom_num: [3, 3, 3, -1]
+post_processing:
+  refine_atom_type: ['C', 'O', 'N', 'H', 'Cl', 'Br', 'F', 'I', 'S', 'P'] # atom types refinement may change
+  refine_atom_num: [5, 5, 5, -1, 2, 1, 2, 1, 2, 1] # maximum change per atom type from the predicted formula; -1: no limit
 
-  mass_tolerance: 10.0 # target space
+  mass_tolerance: 50.0 # ppm of the precursor m/z; as wide as the embl filter, since these precursor errors are large
   ppm_mode: True
-  time_out: -1 # do not limit the time
-  maxium_miss_atom_num: 50 # search space
-  top_k: 5
+  isotope_errors: [0] # 13C isotope offsets k to search; [0, 1] also tries a precursor read from the M+1 peak
+  isotope_penalty: 0.5 # subtracted from the rescore per unit of k
+  time_out: 300 # seconds per spectrum; 0 or less: no limit
+  maxium_miss_atom_num: 20 # maximum atom-change steps from the predicted formula when the search cannot be enumerated
+  top_k: 20 # candidates kept per spectrum, at inference and in rescore training pairs
   buddy_fdr_thr: 0.6
   sirius_score_thr: -5
