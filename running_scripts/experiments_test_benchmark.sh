@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# External benchmarks (CASMI 2016, CASMI 2017, EMBL-MCF) with the Q-TOF models,
-# alone and with BUDDY and SIRIUS, on all compounds and on those absent from
-# the models' training data (*_unseen). Run from the repository root with the
-# raw data in data/benchmark/{casmi2016,casmi2017,embl}/. DATA_TAG names the
-# data build the models were trained on; MODEL_TAG selects local checkpoints
-# (see compare.sh). Ends with a summary table and figure for the docs.
+# External benchmarks with FIDDLE alone and with BUDDY and SIRIUS, on all
+# compounds and on those absent from the models' training data (*_unseen).
+# CASMI 2016 (Q Exactive) and EMBL-MCF 2.0 (Orbitrap Exploris) use the
+# Orbitrap models, CASMI 2017 the Q-TOF models. Run from the repository root
+# with the raw data in data/benchmark/{casmi2016,casmi2017,embl}/. DATA_TAG
+# names the data build the models were trained on; MODEL_TAG selects local
+# checkpoints (see compare.sh). Ends with a summary table and figure for the
+# docs.
 set -e
 source running_scripts/compare.sh
 
-DATA=./data/cl_pkl_${DATA_TAG:-082426}
+DATA=./data/cl_pkl_${DATA_TAG:-102026}
 
 python scripts/casmi2mgf.py --data_config_path ./msfiddle/config/fiddle_tcn_casmi.yml
 python scripts/embl2mgf.py \
@@ -16,14 +18,20 @@ python scripts/embl2mgf.py \
     --mgf_path ./data/embl.mgf \
     --data_config_path ./msfiddle/config/fiddle_tcn_embl.yml
 python scripts/remove_training_compounds.py \
+    --train_data $(ls $DATA/orbitrap_maxmin_{train,val}.pkl 2>/dev/null) \
+    --mgf ./data/casmi2016.mgf ./data/embl.mgf
+python scripts/remove_training_compounds.py \
     --train_data $(ls $DATA/qtof_maxmin_{train,val}.pkl 2>/dev/null) \
-    --mgf ./data/casmi2016.mgf ./data/casmi2017.mgf ./data/embl.mgf
+    --mgf ./data/casmi2017.mgf
 
-for BENCH in casmi2016 casmi2017 embl; do
-    CONFIG=./msfiddle/config/fiddle_tcn_casmi.yml
-    [ $BENCH = embl ] && CONFIG=./msfiddle/config/fiddle_tcn_embl.yml
-    compare ./data/$BENCH.mgf qtof $BENCH --config_path $CONFIG
-    compare ./data/${BENCH}_unseen.mgf qtof ${BENCH}_unseen --config_path $CONFIG
+for MGF in casmi2016 casmi2016_unseen; do
+    compare ./data/$MGF.mgf orbitrap $MGF
+done
+for MGF in casmi2017 casmi2017_unseen; do
+    compare ./data/$MGF.mgf qtof $MGF --config_path ./msfiddle/config/fiddle_tcn_casmi.yml
+done
+for MGF in embl embl_unseen; do
+    compare ./data/$MGF.mgf orbitrap $MGF --config_path ./msfiddle/config/fiddle_tcn_embl.yml
 done
 
 python scripts/plot_benchmarks.py --csv ./result/benchmarks.csv \

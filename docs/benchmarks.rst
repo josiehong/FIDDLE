@@ -1,12 +1,16 @@
 Benchmarks
 ==========
 
-Formula accuracy of the released models on three public benchmarks, for
-msfiddle |release|. Top-k is the share of spectra whose true formula is among
-the k highest-ranked candidates.
+This page reports how often the msfiddle |release| models find the right
+formula on three public benchmarks. Top-k is the share of spectra whose true
+formula is among the k highest-ranked candidates.
 
-The benchmarks are Q-TOF data and use the Q-TOF models with the benchmark
-configs ``fiddle_tcn_casmi.yml`` and ``fiddle_tcn_embl.yml``. Each is run
+Each benchmark is run with the models of its instrument type. CASMI 2016
+(Q Exactive) uses the Orbitrap models with their release config, as
+``--instrument_type orbitrap`` would. EMBL-MCF 2.0 (Orbitrap Exploris 240)
+also uses the Orbitrap models, with a 50 ppm refinement window in
+``fiddle_tcn_embl.yml`` because its precursor m/z errors are large. CASMI 2017
+uses the Q-TOF models with ``fiddle_tcn_casmi.yml``. Each benchmark is run
 three ways:
 
 - **FIDDLE**: FIDDLE's own candidates.
@@ -15,127 +19,20 @@ three ways:
 - **FIDDLE + BUDDY + SIRIUS**: SIRIUS's candidates added as well.
 
 Some benchmark compounds are also in the training libraries, so each result
-is given on all compounds and on the unseen ones, those absent from the
-models' training and validation data. Compounds are matched on the first
-block of the InChIKey, so a stereoisomer of a training compound counts as
-seen.
+is given twice: on all compounds, and on unseen compounds, which are absent
+from the models' training and validation data. Compounds are matched on the
+first block of the InChIKey, so a stereoisomer of a training compound counts
+as seen. The unseen sets of CASMI 2017 and EMBL-MCF 2.0 are small, so one
+spectrum moves their accuracy by several points.
 
-.. list-table:: CASMI 2016
-   :header-rows: 1
+.. figure:: _static/benchmarks.png
+   :alt: Top-1, top-3 and top-5 accuracy of FIDDLE alone, with BUDDY, and with
+         BUDDY and SIRIUS on CASMI 2016, CASMI 2017 and EMBL-MCF 2.0, on all
+         and on unseen compounds.
+   :width: 100%
 
-   * - Method
-     - Compounds
-     - Top-1
-     - Top-3
-     - Top-5
-   * - FIDDLE
-     - All
-     - --
-     - --
-     - --
-   * - FIDDLE
-     - Unseen
-     - --
-     - --
-     - --
-   * - FIDDLE + BUDDY
-     - All
-     - --
-     - --
-     - --
-   * - FIDDLE + BUDDY
-     - Unseen
-     - --
-     - --
-     - --
-   * - FIDDLE + BUDDY + SIRIUS
-     - All
-     - --
-     - --
-     - --
-   * - FIDDLE + BUDDY + SIRIUS
-     - Unseen
-     - --
-     - --
-     - --
-
-.. list-table:: CASMI 2017
-   :header-rows: 1
-
-   * - Method
-     - Compounds
-     - Top-1
-     - Top-3
-     - Top-5
-   * - FIDDLE
-     - All
-     - --
-     - --
-     - --
-   * - FIDDLE
-     - Unseen
-     - --
-     - --
-     - --
-   * - FIDDLE + BUDDY
-     - All
-     - --
-     - --
-     - --
-   * - FIDDLE + BUDDY
-     - Unseen
-     - --
-     - --
-     - --
-   * - FIDDLE + BUDDY + SIRIUS
-     - All
-     - --
-     - --
-     - --
-   * - FIDDLE + BUDDY + SIRIUS
-     - Unseen
-     - --
-     - --
-     - --
-
-.. list-table:: EMBL-MCF 2.0
-   :header-rows: 1
-
-   * - Method
-     - Compounds
-     - Top-1
-     - Top-3
-     - Top-5
-   * - FIDDLE
-     - All
-     - --
-     - --
-     - --
-   * - FIDDLE
-     - Unseen
-     - --
-     - --
-     - --
-   * - FIDDLE + BUDDY
-     - All
-     - --
-     - --
-     - --
-   * - FIDDLE + BUDDY
-     - Unseen
-     - --
-     - --
-     - --
-   * - FIDDLE + BUDDY + SIRIUS
-     - All
-     - --
-     - --
-     - --
-   * - FIDDLE + BUDDY + SIRIUS
-     - Unseen
-     - --
-     - --
-     - --
+   Top-k accuracy on all compounds (top row) and unseen compounds (bottom
+   row). The dots below mark the tools each method combines.
 
 Reproducing the results
 -----------------------
@@ -167,9 +64,13 @@ The script writes top-1 to top-20 accuracy, per spectrum and per compound, to
 ``result/<method>_<benchmark>_eval.csv``, where the method is ``fiddle``,
 ``fiddle_buddy`` or ``fiddle_buddy_sirius`` and the benchmark ``casmi2016``,
 ``casmi2017`` or ``embl``, with an ``_unseen`` suffix for the unseen compounds.
-``scripts/remove_training_compounds.py`` builds the unseen sets from the
-training data the models were built on (``DATA_TAG``), so that data must be in
-``data/cl_pkl_<DATA_TAG>/``.
+It ends with ``scripts/plot_benchmarks.py``, which saves the figure's numbers
+to ``result/benchmarks.csv`` and draws the figure.
+
+The unseen sets come from ``scripts/remove_training_compounds.py``, which reads
+the training and validation data of the models each benchmark is run with
+(Orbitrap for CASMI 2016 and EMBL-MCF 2.0, Q-TOF for CASMI 2017) from
+``data/cl_pkl_<DATA_TAG>/``, so that data must be present.
 
 The `paper <https://www.nature.com/articles/s41467-025-66060-9>`_ reports the
 full evaluation, including held-out test sets and comparisons with other

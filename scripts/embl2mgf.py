@@ -56,10 +56,13 @@ def parse_input_text(text):
     collision_energy_match = re.search(r">  <COLLISION ENERGY>\n(.+)", text)
     if collision_energy_match:
         collision_energy = collision_energy_match.group(1).strip()
-        if "," in collision_energy:
-            collision_energy = np.mean(
-                [float(ce) for ce in collision_energy.split(",")]
-            )  # average collision energy
+        # EMBL-MCF 2.0 gives normalized energies (stepped 30/50/70 %); mark them
+        # as NCE, since a bare number is read as eV. Stepped ones are averaged.
+        try:
+            energies = [float(ce) for ce in collision_energy.split(",")]
+            collision_energy = f"{np.mean(energies):g} nce"
+        except ValueError:
+            pass
         data["collision_energy"] = collision_energy
 
     # Extract M/Z array and intensity array from MASS SPECTRAL PEAKS

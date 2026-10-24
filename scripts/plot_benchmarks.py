@@ -20,7 +20,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
-BENCHMARKS = {"casmi2016": "CASMI 2016", "casmi2017": "CASMI 2017", "embl": "EMBL-MCF 2.0"}
+# Benchmark -> title, naming the models it is run with
+BENCHMARKS = {
+    "casmi2016": "CASMI 2016\n(Orbitrap models)",
+    "casmi2017": "CASMI 2017\n(Q-TOF models)",
+    "embl": "EMBL-MCF 2.0\n(Orbitrap models)",
+}
 TOOLS = ["FIDDLE", "BUDDY", "SIRIUS"]
 # Method name -> tools it combines, in plotting order
 METHODS = {
