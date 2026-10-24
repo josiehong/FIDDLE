@@ -70,9 +70,9 @@ It ends with ``scripts/plot_benchmarks.py``, which saves the figure's numbers
 to ``result/benchmarks.csv`` and draws the figure.
 
 The unseen sets come from ``scripts/remove_training_compounds.py``, which reads
-the training and validation data of the models each benchmark is run with
-(Orbitrap for CASMI 2016 and EMBL-MCF 2.0, Q-TOF for CASMI 2017) from
-``data/cl_pkl_<DATA_TAG>/``, so that data must be present.
+the training and validation MGF files of the models each benchmark is run
+with (Orbitrap for CASMI 2016 and EMBL-MCF 2.0, Q-TOF for CASMI 2017) from
+``data/cl_pkl_<DATA_TAG>/``, so those files must be present.
 
 The `paper <https://www.nature.com/articles/s41467-025-66060-9>`_ reports the
 full evaluation, including held-out test sets and comparisons with other

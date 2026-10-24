@@ -12,29 +12,16 @@ source running_scripts/compare.sh
 
 DATA=./data/cl_pkl_${DATA_TAG:-102026}
 
-# Training and validation data of an instrument's models: the MGF exports,
-# scanned for their SMILES, or the much larger pickles when they are missing
-train_data() {
-    local split
-    for split in train val; do
-        if [ -f "$DATA/$1_maxmin_$split.mgf" ]; then
-            echo "$DATA/$1_maxmin_$split.mgf"
-        else
-            echo "$DATA/$1_maxmin_$split.pkl"
-        fi
-    done
-}
-
 python scripts/casmi2mgf.py --data_config_path ./msfiddle/config/fiddle_tcn_casmi.yml
 python scripts/embl2mgf.py \
     --raw_path ./data/benchmark/embl/MoNA-export-EMBL-MCF_2.0_HRMS_Library.sdf \
     --mgf_path ./data/embl.mgf \
     --data_config_path ./msfiddle/config/fiddle_tcn_embl.yml
 python scripts/remove_training_compounds.py \
-    --train_data $(train_data orbitrap) \
+    --train_data $DATA/orbitrap_maxmin_{train,val}.mgf \
     --mgf ./data/casmi2016.mgf ./data/embl.mgf
 python scripts/remove_training_compounds.py \
-    --train_data $(train_data qtof) \
+    --train_data $DATA/qtof_maxmin_{train,val}.mgf \
     --mgf ./data/casmi2017.mgf
 
 for MGF in casmi2016 casmi2016_unseen; do

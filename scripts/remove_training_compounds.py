@@ -15,7 +15,6 @@ Usage:
 
 import argparse
 import os
-import pickle
 import sys
 
 from pyteomics import mgf
@@ -35,13 +34,10 @@ def compound_key(smiles):
 
 
 def training_smiles(path):
-    """SMILES of a training data file: an MGF or a pkl from prepare_msms.py."""
-    if path.endswith(".mgf"):
-        # Only the SMILES lines are read; parsing the peaks would be far slower
-        with open(path) as f:
-            return {line[7:].strip() for line in f if line.startswith("SMILES=")}
-    with open(path, "rb") as f:
-        return {d["smiles"] for d in pickle.load(f)}
+    """SMILES of a training MGF; only the SMILES lines are read, since parsing
+    every peak list would be far slower."""
+    with open(path) as f:
+        return {line[7:].strip() for line in f if line.startswith("SMILES=")}
 
 
 if __name__ == "__main__":
@@ -50,8 +46,8 @@ if __name__ == "__main__":
         "--train_data",
         nargs="+",
         required=True,
-        help="Training (and validation) data of the model, .mgf or .pkl; an MGF is "
-        "scanned for its SMILES lines, a pickle is loaded whole",
+        help="Training (and validation) MGF files of the model, as prepare_msms.py "
+        "writes them",
     )
     parser.add_argument("--mgf", nargs="+", required=True, help="Benchmark MGF files")
     args = parser.parse_args()
