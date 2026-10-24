@@ -12,8 +12,8 @@ source running_scripts/compare.sh
 
 DATA=./data/cl_pkl_${DATA_TAG:-102026}
 
-# Training and validation data of an instrument's models: the MGF exports, read
-# one spectrum at a time, or the much larger pickles when they are missing
+# Training and validation data of an instrument's models: the MGF exports,
+# scanned for their SMILES, or the much larger pickles when they are missing
 train_data() {
     local split
     for split in train val; do
