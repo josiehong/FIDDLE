@@ -204,6 +204,8 @@ row with a truth is evaluated, including repeated IDs. The result CSV holds only
 the returned candidates, so an empty ``true_rank`` cannot tell a ranking miss
 from a formula that refinement never generated.
 
+:doc:`troubleshooting` describes what to check when the accuracy is low.
+
 Integration with BUDDY and SIRIUS
 -----------------------------------
 

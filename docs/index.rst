@@ -18,6 +18,7 @@ msfiddle
    usage
    formats
    benchmarks
+   troubleshooting
    api
 
 .. rubric:: Reference
