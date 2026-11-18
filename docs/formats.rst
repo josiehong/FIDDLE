@@ -15,6 +15,7 @@ required per spectrum; all others are ignored.
      - Description
    * - ``TITLE``
      - Unique spectrum identifier, propagated to the ``ID`` column in output.
+       Of spectra sharing a title, only the last is predicted.
    * - ``PRECURSOR_MZ``
      - Observed precursor m/z.
    * - ``PRECURSOR_TYPE``

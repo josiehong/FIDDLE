@@ -14,6 +14,7 @@ from .api import (
     predict_batch_from_spectra,
     predict_from_mgf,
     predict_from_spectrum,
+    validate_mgf,
 )
 from .utils.mol_utils import vector_to_formula, formula_to_vector
 from .utils.msms_utils import mass_calculator
@@ -39,6 +40,7 @@ __all__ = [
     "predict_from_spectrum",
     "predict_batch_from_spectra",
     "predict_from_mgf",
+    "validate_mgf",
     "MS2FNet_tcn",
     "FormulaEncoder",
     "RescoreHead",

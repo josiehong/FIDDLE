@@ -42,11 +42,12 @@ To inspect current model paths:
 Commands
 --------
 
-``msfiddle`` has three subcommands:
+``msfiddle`` has four subcommands:
 
 .. code-block:: text
 
    msfiddle predict   predict formulas for an MGF file
+   msfiddle validate  check an MGF file's spectra without loading the models
    msfiddle download  download the pre-trained models
    msfiddle paths     show the checkpoint directory and downloaded models
 
@@ -55,6 +56,59 @@ still works. ``python -m msfiddle ...`` is equivalent, and also works from a
 source checkout without installing the package. ``msfiddle-download-models``
 and ``msfiddle-checkpoint-paths`` remain as aliases for ``download`` and
 ``paths``.
+
+Checking the Input
+------------------
+
+``validate`` checks each spectrum against an instrument's encoding, the same
+checks ``predict`` runs, without loading or downloading the models:
+
+.. code-block:: bash
+
+   msfiddle validate --test_data /path/to/data.mgf \
+                     --instrument_type orbitrap \
+                     --report_path /path/to/validation.csv
+
+It prints how many spectra are usable and counts the rejected ones by reason.
+The report has one row per spectrum: ``index``, ``id``, ``status`` (``ok``,
+``warning`` or ``rejected``), ``reason`` and ``message``. ``predict`` skips
+exactly the rejected spectra. The reasons are:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Reason
+     - Rejected because
+   * - ``missing_metadata``
+     - ``TITLE``, ``PRECURSOR_MZ``, ``PRECURSOR_TYPE`` or ``COLLISION_ENERGY``
+       is missing
+   * - ``duplicate_id``
+     - another spectrum later in the file has the same ``TITLE``; only the
+       last one is predicted
+   * - ``invalid_precursor_mz``
+     - the precursor m/z is not a finite number
+   * - ``unsupported_adduct``
+     - the precursor type is not one the model encodes
+   * - ``insufficient_peaks``
+     - fewer than 5 peaks
+   * - ``invalid_peaks``
+     - non-finite or mismatched m/z and intensity values
+   * - ``peak_mz_out_of_range``
+     - the largest peak m/z is below 50 or above the encoder's ``max_mz``
+   * - ``stepped_collision_energy``
+     - a stepped energy, with a model that skips them
+   * - ``invalid_collision_energy``
+     - the collision energy cannot be parsed
+   * - ``encoding_failure``
+     - no peaks remain after removing the precursor isotope peaks, or all
+       intensities are equal
+
+Usable spectra can carry warnings: ``stepped_collision_energy_averaged``
+(encoded at the mean energy, timsTOF only) and ``duplicate_id`` (the last of a
+repeated ``TITLE``). ``validate`` exits with status 1 when the file cannot be
+read or no spectrum is usable. ``msfiddle.validate_mgf`` returns the report as
+a DataFrame.
 
 Running Predictions
 --------------------
@@ -125,6 +179,7 @@ and saves the table as ``<result>_eval.csv``:
 The truth is each spectrum's ``SMILES`` field, or its ``FORMULA`` field when
 there is no SMILES. Both describe the intact molecule, which is also what
 msfiddle predicts for adducts with a neutral loss such as ``[M+H-H2O]+``.
+
 
 Integration with BUDDY and SIRIUS
 -----------------------------------

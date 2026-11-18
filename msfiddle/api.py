@@ -45,6 +45,29 @@ _INSTRUMENT_TYPES = {"orbitrap", "qtof", "timstof"}
 _NEUTRAL_FORMULAS = ("CH4O2", "CH2O2", "H2O", "NH3", "CO2")
 
 
+# Why a spectrum is left out of prediction. predict and validate share them.
+REJECTION_REASONS = (
+    "missing_metadata",
+    "duplicate_id",
+    "invalid_precursor_mz",
+    "unsupported_adduct",
+    "insufficient_peaks",
+    "invalid_peaks",
+    "peak_mz_out_of_range",
+    "stepped_collision_energy",
+    "invalid_collision_energy",
+    "encoding_failure",
+)
+
+
+class SpectrumRejected(ValueError):
+    """A spectrum the model cannot take; ``reason`` is one of REJECTION_REASONS."""
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
 @dataclass
 class _EncodedSpectrum:
     id: str
@@ -54,6 +77,20 @@ class _EncodedSpectrum:
     spec: np.ndarray
     env: np.ndarray
     neutral_add: np.ndarray
+
+
+@dataclass
+class _SpectrumCheck:
+    index: int
+    id: str
+    status: str  # ok, warning or rejected
+    reason: str
+    message: str
+    value: str = ""  # the offending metadata value, for summaries
+
+    @classmethod
+    def rejected(cls, index, id, reason, message, value=""):
+        return cls(index, id, "rejected", reason, message, value)
 
 
 @dataclass
@@ -358,13 +395,18 @@ class MsFiddlePredictor:
             charge=charge,
         )
         if not good_spec:
-            raise ValueError("Invalid spectrum: unable to encode mass spectrum")
+            raise SpectrumRejected(
+                "encoding_failure",
+                "Invalid spectrum: no peaks left to encode after removing the "
+                "precursor isotope peaks, or all intensities are equal",
+            )
 
         neutral_add, adjusted_precursor_type = _melt_neutral_precursor(precursor_type)
         if adjusted_precursor_type not in encoder["precursor_type"]:
-            raise ValueError(
+            raise SpectrumRejected(
+                "unsupported_adduct",
                 "Unsupported adduct after neutral-loss normalization: "
-                f"{adjusted_precursor_type}"
+                f"{adjusted_precursor_type}",
             )
 
         ce_str = resolve_collision_energy(
@@ -372,10 +414,11 @@ class MsFiddlePredictor:
             encoder.get("stepped_collision_energy", "drop"),
         )
         if ce_str is None:
-            raise ValueError(
+            raise SpectrumRejected(
+                "stepped_collision_energy",
                 f"Stepped collision energy {collision_energy!r} is not supported: "
                 "this model was trained on single-energy spectra (the timsTOF "
-                "config sets encoding.stepped_collision_energy to 'mean')"
+                "config sets encoding.stepped_collision_energy to 'mean')",
             )
         ce, nce = parse_collision_energy(
             ce_str=ce_str,
@@ -383,7 +426,10 @@ class MsFiddlePredictor:
             charge=abs(charge),
         )
         if ce is None and nce is None:
-            raise ValueError(f"Could not parse collision energy: {collision_energy!r}")
+            raise SpectrumRejected(
+                "invalid_collision_energy",
+                f"Could not parse collision energy: {collision_energy!r}",
+            )
 
         env_arr = np.array(
             [
@@ -403,80 +449,188 @@ class MsFiddlePredictor:
             neutral_add=np.array(neutral_add, dtype=np.float32),
         )
 
-    def _load_mgf_spectra(
+    def validate_mgf(self, test_data_path: str | os.PathLike[str]) -> pd.DataFrame:
+        """Check every spectrum of an MGF file without loading the models.
+
+        Returns one row per spectrum in file order: ``index``, ``id``,
+        ``status`` (``ok``, ``warning`` or ``rejected``), ``reason`` (one of
+        ``REJECTION_REASONS`` for a rejected spectrum, else the warning codes
+        joined by ``;``) and ``message``. ``predict_mgf`` keeps exactly the
+        spectra whose status is not ``rejected``.
+        """
+        rows = [
+            {
+                "index": check.index,
+                "id": check.id,
+                "status": check.status,
+                "reason": check.reason,
+                "message": check.message,
+            }
+            for _, check in self._check_mgf_spectra(test_data_path)
+        ]
+        return pd.DataFrame(
+            rows, columns=["index", "id", "status", "reason", "message"]
+        )
+
+    def _check_mgf_spectra(
         self, test_data_path: str | os.PathLike[str]
-    ) -> list[_EncodedSpectrum]:
+    ) -> list[tuple[_EncodedSpectrum | None, _SpectrumCheck]]:
         path = Path(test_data_path)
         if not path.exists():
             raise FileNotFoundError(f"MGF file not found: {path}")
 
-        spectra = list(mgf.read(str(path)))
+        # Read sequentially: the indexed reader that mgf.read returns by default
+        # silently drops untitled spectra and all but the last of a repeated
+        # TITLE. Those are now rejected with a reason, keeping the same spectra.
+        spectra = list(mgf.read(str(path), use_index=False))
         if self.verbose:
             print(len(spectra), "spectra loaded from", str(path))
 
+        encoder = self.config["encoding"]
         precursor_mz_key = (
             "simulated_precursor_mz"
-            if self.config["encoding"]["use_simulated_precursor_mz"]
+            if encoder["use_simulated_precursor_mz"]
             else "precursor_mz"
         )
-        stepped_mode = self.config["encoding"].get("stepped_collision_energy", "drop")
-        encoded: list[_EncodedSpectrum] = []
-        invalid_count = 0
-        stepped: list[str] = []
-        for spectrum in spectra:
+        required = ("title", precursor_mz_key, "precursor_type", "collision_energy")
+        stepped_mode = encoder.get("stepped_collision_energy", "drop")
+        titles = [str(s.get("params", {}).get("title", "")) for s in spectra]
+        title_counts: dict[str, int] = {}
+        last_index: dict[str, int] = {}
+        for idx, title in enumerate(titles):
+            title_counts[title] = title_counts.get(title, 0) + 1
+            last_index[title] = idx
+
+        results = []
+        for idx, spectrum in enumerate(spectra):
             params = spectrum.get("params", {})
-            missing = [
-                key
-                for key in (
-                    "title",
-                    precursor_mz_key,
-                    "precursor_type",
-                    "collision_energy",
-                )
-                if key not in params
-            ]
+            spec_id = titles[idx]
+            missing = [key for key in required if key not in params]
             if missing:
-                invalid_count += 1
-                if self.verbose:
-                    print(
-                        "MGFError: lacking necessary keys in mgf file, skip this spectrum"
+                results.append(
+                    (
+                        None,
+                        _SpectrumCheck.rejected(
+                            idx,
+                            spec_id,
+                            "missing_metadata",
+                            "Missing MGF field(s): "
+                            + ", ".join(key.upper() for key in missing),
+                        ),
                     )
-                    print(
-                        "expected keys in mgf: "
-                        f"('title', '{precursor_mz_key}', 'precursor_type', 'collision_energy')"
-                    )
+                )
                 continue
-            if stepped_mode == "drop" and is_stepped_collision_energy(
-                params["collision_energy"]
-            ):
-                stepped.append(str(params["collision_energy"]))
-                invalid_count += 1
+            if last_index[spec_id] != idx:
+                results.append(
+                    (
+                        None,
+                        _SpectrumCheck.rejected(
+                            idx,
+                            spec_id,
+                            "duplicate_id",
+                            f"TITLE {spec_id!r} is repeated; only its last "
+                            "spectrum is predicted",
+                        ),
+                    )
+                )
+                continue
+            ce = params["collision_energy"]
+            if stepped_mode == "drop" and is_stepped_collision_energy(ce):
+                results.append(
+                    (
+                        None,
+                        _SpectrumCheck.rejected(
+                            idx,
+                            spec_id,
+                            "stepped_collision_energy",
+                            f"Stepped collision energy {str(ce)!r}: this model "
+                            "was trained on single-energy spectra",
+                            str(ce),
+                        ),
+                    )
+                )
                 continue
             try:
-                encoded.append(
-                    self._encode_spectrum(
-                        mz_array=spectrum["m/z array"],
-                        intensity_array=spectrum["intensity array"],
-                        precursor_mz=float(params[precursor_mz_key]),
-                        adduct=params["precursor_type"],
-                        collision_energy=params["collision_energy"],
-                        spec_id=str(params["title"]),
+                encoded = self._encode_spectrum(
+                    mz_array=spectrum.get("m/z array", []),
+                    intensity_array=spectrum.get("intensity array", []),
+                    precursor_mz=params[precursor_mz_key],
+                    adduct=params["precursor_type"],
+                    collision_energy=ce,
+                    spec_id=spec_id,
+                )
+            except SpectrumRejected as exc:
+                results.append(
+                    (None, _SpectrumCheck.rejected(idx, spec_id, exc.reason, str(exc)))
+                )
+                continue
+            except ValueError as exc:
+                results.append(
+                    (
+                        None,
+                        _SpectrumCheck.rejected(
+                            idx, spec_id, "encoding_failure", str(exc)
+                        ),
                     )
                 )
-            except ValueError:
-                invalid_count += 1
                 continue
 
+            warning_codes, warning_messages = [], []
+            if is_stepped_collision_energy(ce):
+                warning_codes.append("stepped_collision_energy_averaged")
+                warning_messages.append(
+                    f"Stepped collision energy {str(ce)!r} encoded at its mean "
+                    f"({encoded.collision_energy})"
+                )
+            if title_counts[spec_id] > 1:
+                warning_codes.append("duplicate_id")
+                warning_messages.append(
+                    f"TITLE {spec_id!r} is shared by {title_counts[spec_id]} "
+                    "spectra; only this last one is predicted"
+                )
+            check = _SpectrumCheck(
+                idx,
+                spec_id,
+                "warning" if warning_codes else "ok",
+                ";".join(warning_codes),
+                "; ".join(warning_messages),
+            )
+            results.append((encoded, check))
+        return results
+
+    def _load_mgf_spectra(
+        self, test_data_path: str | os.PathLike[str]
+    ) -> list[_EncodedSpectrum]:
+        results = self._check_mgf_spectra(test_data_path)
+        # A repeated TITLE keeps its last spectrum at its first position, as
+        # the indexed reader did, so prediction output is unchanged.
+        first_index: dict[str, int] = {}
+        for _, check in results:
+            first_index.setdefault(check.id, check.index)
+        encoded = sorted(
+            (spectrum for spectrum, _ in results if spectrum is not None),
+            key=lambda spectrum: first_index[spectrum.id],
+        )
+        rejected = [check for _, check in results if check.status == "rejected"]
+
+        stepped = [c for c in rejected if c.reason == "stepped_collision_energy"]
         if stepped:
             warnings.warn(
                 f"Skipped {len(stepped)} spectra with a stepped collision energy "
-                f"(e.g. {stepped[0]!r}): FIDDLE was trained on single-energy "
-                "spectra. Set COLLISION_ENERGY to a single energy to predict them.",
+                f"(e.g. {stepped[0].value!r}): FIDDLE was trained on "
+                "single-energy spectra. Set COLLISION_ENERGY to a single energy "
+                "to predict them.",
                 stacklevel=3,
             )
         if self.verbose:
-            print(len(spectra) - invalid_count, "spectra left after filtering")
-            print(len(encoded), "spectra loaded into the dataset")
+            counts: dict[str, int] = {}
+            for check in rejected:
+                counts[check.reason] = counts.get(check.reason, 0) + 1
+            for reason, count in sorted(counts.items()):
+                print(f"Skipped {count} spectra: {reason}")
+            if counts:
+                print("Run 'msfiddle validate' for the reason for each spectrum")
+            print(len(encoded), "spectra left after filtering")
         return encoded
 
     def _predict_encoded(
@@ -1133,6 +1287,42 @@ def predict_from_mgf(
     )
 
 
+def validate_mgf(
+    test_data_path: str | os.PathLike[str],
+    *,
+    instrument_type: str = "orbitrap",
+    config_path: str | os.PathLike[str] | None = None,
+) -> pd.DataFrame:
+    """Check each spectrum of an MGF file against an instrument's encoding,
+    without loading or downloading checkpoints. See
+    ``MsFiddlePredictor.validate_mgf`` for the returned columns."""
+    predictor = MsFiddlePredictor(
+        instrument_type=instrument_type, config_path=config_path
+    )
+    return predictor.validate_mgf(test_data_path)
+
+
+def summarize_validation(report: pd.DataFrame) -> str:
+    """A short text summary of a ``validate_mgf`` report."""
+    n = len(report)
+    rejected = report[report["status"] == "rejected"]
+    warned = report[report["status"] == "warning"]
+    lines = [
+        f"{n} spectra: {n - len(rejected)} usable "
+        f"({len(warned)} with warnings), {len(rejected)} rejected"
+    ]
+    if len(rejected):
+        lines.append("Rejected (prediction skips these):")
+        for reason, count in rejected["reason"].value_counts().items():
+            lines.append(f"  {reason:<28s}{count}")
+    if len(warned):
+        codes = warned["reason"].str.split(";").explode().value_counts()
+        lines.append("Warnings (predicted, but may be less reliable):")
+        for code, count in codes.items():
+            lines.append(f"  {code:<28s}{count}")
+    return "\n".join(lines)
+
+
 def _normalize_instrument_type(instrument_type: str) -> str:
     normalized = str(instrument_type).lower()
     if normalized not in _INSTRUMENT_TYPES:
@@ -1194,32 +1384,50 @@ def _validate_arrays(
     mz_values = np.asarray(mz_array, dtype=float)
     intensity_values = np.asarray(intensity_array, dtype=float)
     if mz_values.ndim != 1 or intensity_values.ndim != 1:
-        raise ValueError("mz_array and intensity_array must be one-dimensional")
+        raise SpectrumRejected(
+            "invalid_peaks", "mz_array and intensity_array must be one-dimensional"
+        )
     if len(mz_values) != len(intensity_values):
-        raise ValueError(
+        raise SpectrumRejected(
+            "invalid_peaks",
             "mz_array and intensity_array must have the same length: "
-            f"{len(mz_values)} != {len(intensity_values)}"
+            f"{len(mz_values)} != {len(intensity_values)}",
         )
     if len(mz_values) < min_peak_num:
-        raise ValueError(f"Spectrum must contain at least {min_peak_num} peaks")
+        raise SpectrumRejected(
+            "insufficient_peaks",
+            f"Spectrum must contain at least {min_peak_num} peaks "
+            f"(has {len(mz_values)})",
+        )
     if not np.isfinite(mz_values).all() or not np.isfinite(intensity_values).all():
-        raise ValueError("mz_array and intensity_array must contain only finite values")
+        raise SpectrumRejected(
+            "invalid_peaks",
+            "mz_array and intensity_array must contain only finite values",
+        )
     if not np.isfinite(intensity_values.max() - intensity_values.min()):
-        raise ValueError("Invalid intensity array")
+        raise SpectrumRejected("invalid_peaks", "Invalid intensity array")
     if float(np.max(mz_values)) < min_mz:
-        raise ValueError(f"Spectrum maximum m/z must be at least {min_mz}")
+        raise SpectrumRejected(
+            "peak_mz_out_of_range", f"Spectrum maximum m/z must be at least {min_mz}"
+        )
     if float(np.max(mz_values)) > max_mz:
-        raise ValueError(f"Spectrum maximum m/z must be no greater than {max_mz}")
+        raise SpectrumRejected(
+            "peak_mz_out_of_range",
+            f"Spectrum maximum m/z must be no greater than {max_mz}",
+        )
     return mz_values, intensity_values
 
 
 def _validate_float(name: str, value: Any) -> float:
+    reason = f"invalid_{name}"
     try:
         result = float(value)
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be numeric, got {value!r}") from exc
+        raise SpectrumRejected(
+            reason, f"{name} must be numeric, got {value!r}"
+        ) from exc
     if not math.isfinite(result):
-        raise ValueError(f"{name} must be finite, got {value!r}")
+        raise SpectrumRejected(reason, f"{name} must be finite, got {value!r}")
     return result
 
 
@@ -1227,7 +1435,7 @@ def _validate_adduct(adduct: Any, encoder: Mapping[str, Any]) -> str:
     precursor_type = str(adduct)
     normalized = unify_precursor_type(precursor_type)
     if normalized not in encoder["type2charge"]:
-        raise ValueError(f"Unsupported adduct: {adduct!r}")
+        raise SpectrumRejected("unsupported_adduct", f"Unsupported adduct: {adduct!r}")
     return precursor_type
 
 

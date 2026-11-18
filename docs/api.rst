@@ -13,6 +13,10 @@ Prediction API
 
 .. autofunction:: msfiddle.api.predict_from_mgf
 
+.. autofunction:: msfiddle.api.validate_mgf
+
+.. autofunction:: msfiddle.api.summarize_validation
+
 Evaluation
 ----------
 

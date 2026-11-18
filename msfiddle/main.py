@@ -40,7 +40,7 @@ def init_random_seed(seed):
     return
 
 
-SUBCOMMANDS = ("predict", "download", "paths")
+SUBCOMMANDS = ("predict", "validate", "download", "paths")
 
 
 def _add_predict_args(parser):
@@ -222,6 +222,25 @@ def _evaluate(res_df, truth_path, args, parser):
     print(f"Saved to {eval_path}")
 
 
+def _validate(args, parser):
+    from .api import summarize_validation, validate_mgf
+
+    try:
+        report = validate_mgf(
+            args.test_data,
+            instrument_type=args.instrument_type,
+            config_path=args.config_path,
+        )
+    except Exception as exc:  # a missing or unparseable MGF file
+        parser.exit(status=1, message=f"Could not read {args.test_data}: {exc}\n")
+    print(summarize_validation(report))
+    if args.report_path:
+        report.to_csv(args.report_path, index=False)
+        print(f"Per-spectrum report saved to {args.report_path}")
+    if (report["status"] == "rejected").all():
+        parser.exit(status=1, message="No spectrum can be predicted.\n")
+
+
 def _download(args, parser):
     from .download import download_models
 
@@ -242,11 +261,35 @@ def build_parser():
             "Without a subcommand, the arguments are passed to 'predict'."
         ),
     )
-    sub = parser.add_subparsers(dest="command", metavar="{predict,download,paths}")
+    sub = parser.add_subparsers(
+        dest="command", metavar="{predict,validate,download,paths}"
+    )
 
     p = sub.add_parser("predict", help="Predict formulas for an MGF file")
     _add_predict_args(p)
     p.set_defaults(func=_predict)
+
+    p = sub.add_parser(
+        "validate",
+        help="Check an MGF file's spectra without loading the models",
+    )
+    p.add_argument("--test_data", type=str, required=True, help="Path to data (.mgf)")
+    p.add_argument(
+        "--instrument_type",
+        type=str,
+        choices=["qtof", "orbitrap", "timstof"],
+        default="orbitrap",
+        help="Instrument type whose encoding to check against (default: orbitrap)",
+    )
+    p.add_argument(
+        "--report_path",
+        type=str,
+        help="Save the status and reason for each spectrum to this CSV",
+    )
+    p.add_argument(
+        "--config_path", type=str, help="Custom path to configuration (.yaml)"
+    )
+    p.set_defaults(func=_validate)
 
     p = sub.add_parser("download", help="Download the pre-trained models")
     p.add_argument("-d", "--destination", help="Directory to save the models")
