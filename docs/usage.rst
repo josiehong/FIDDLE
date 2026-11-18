@@ -180,6 +180,29 @@ The truth is each spectrum's ``SMILES`` field, or its ``FORMULA`` field when
 there is no SMILES. Both describe the intact molecule, which is also what
 msfiddle predicts for adducts with a neutral loss such as ``[M+H-H2O]+``.
 
+``--eval_details`` (which implies ``--eval``) also prints the evaluation
+coverage and saves two more files:
+
+- ``<result>_eval_details.csv``: one row per result row, then one per spectrum
+  with a truth but no result. ``eval_status`` is ``evaluated``, ``no_truth``
+  or ``not_predicted``; only ``evaluated`` rows count towards the accuracy.
+  Each row has the true formula, the top-1 prediction, ``true_rank`` (1-based,
+  empty when the true formula is not among the returned candidates),
+  cumulative ``top{k}_correct`` columns, and the spectrum's precursor m/z,
+  adduct, collision energy and peak count. Averaging ``top{k}_correct`` over
+  the evaluated rows, and over compounds, gives the numbers in
+  ``<result>_eval.csv``.
+- ``<result>_eval_groups.csv``: per-spectrum top-k accuracy of the evaluated
+  rows by precursor m/z, adduct, peak count and NCE, with the spectrum and
+  compound counts of each group. Stepped or unparseable energies fall in
+  ``unknown``.
+
+The coverage counts the input spectra, spectra with a truth, result rows,
+evaluated rows, result rows without a truth, spectra with a truth but no
+result row (usually rejected by ``validate``) and repeated IDs. Every result
+row with a truth is evaluated, including repeated IDs. The result CSV holds only
+the returned candidates, so an empty ``true_rank`` cannot tell a ranking miss
+from a formula that refinement never generated.
 
 Integration with BUDDY and SIRIUS
 -----------------------------------

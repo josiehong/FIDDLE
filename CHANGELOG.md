@@ -9,10 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - `msfiddle validate --test_data <mgf> --instrument_type <type>` checks every spectrum against the model's encoding without loading or downloading checkpoints, prints the counts by rejection reason, and with `--report_path` saves each spectrum's status, reason and message as CSV ([#12](https://github.com/JosieHong/FIDDLE/issues/12)). `predict` runs the same checks and skips exactly the rejected spectra; in verbose mode it prints the counts by reason. `msfiddle.validate_mgf` returns the report as a DataFrame.
+- `predict --eval_details` saves one row per spectrum (true formula, top-1 prediction, rank of the true formula, top-k correctness, precursor m/z, adduct, collision energy, peak count) to `<result>_eval_details.csv` and accuracy by precursor m/z, adduct, peak count and NCE to `<result>_eval_groups.csv`, and prints the evaluation coverage ([#13](https://github.com/JosieHong/FIDDLE/issues/13)). `--eval` output is unchanged.
 
 ### Fixed
 
-- `predict` read MGF files with pyteomics' indexed reader, which drops spectra without a `TITLE` and all but the last of a repeated `TITLE` without saying so. It now reads every spectrum, and `validate` reports those as `missing_metadata` and `duplicate_id`; the spectra predicted are the same as before.
+- `predict` and `--eval` read MGF files with pyteomics' indexed reader, which drops spectra without a `TITLE` and all but the last of a repeated `TITLE` without saying so. They now read every spectrum, and `validate` reports those as `missing_metadata` and `duplicate_id`; the spectra predicted and evaluated are the same as before.
 - A non-numeric `PRECURSOR_MZ` stopped `predict` with an error; that spectrum is now skipped as `invalid_precursor_mz`.
 
 - The demo spectra (`msfiddle/demo/input_msms.mgf`, from EMBL-MCF 2.0) give their collision energy as NCE (`50 nce`). They had a bare `50.0`, which is read as eV and turned into an NCE several times too high.

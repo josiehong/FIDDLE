@@ -116,6 +116,16 @@ def _add_predict_args(parser):
             "SMILES or FORMULA field and save it as <result>_eval.csv"
         ),
     )
+    parser.add_argument(
+        "--eval_details",
+        "--eval-details",
+        action="store_true",
+        help=(
+            "With --eval (implied), also save one row per spectrum to "
+            "<result>_eval_details.csv and accuracy by precursor m/z, adduct, "
+            "peak count and NCE to <result>_eval_groups.csv"
+        ),
+    )
 
     # Add advanced arguments for custom configurations
     advanced_group = parser.add_argument_group("Advanced options")
@@ -204,22 +214,46 @@ def _predict(args, parser):
     res_df.to_csv(args.result_path, index=False)
     print(f"Done! Results saved to {args.result_path}")
 
-    if args.eval:
+    if args.eval or args.eval_details:
         _evaluate(res_df, test_data_path, args, parser)
 
 
 def _evaluate(res_df, truth_path, args, parser):
-    from .evaluate import load_truth, topk_accuracy
+    from .evaluate import (
+        coverage,
+        grouped_accuracy,
+        load_eval_inputs,
+        topk_accuracy,
+        topk_details,
+    )
 
+    inputs = load_eval_inputs(truth_path)
     try:
-        result = topk_accuracy(res_df, load_truth(truth_path))
+        result = topk_accuracy(res_df, inputs.truth)
     except ValueError as exc:
         parser.exit(status=1, message=f"{exc}\n")
-    eval_path = os.path.splitext(args.result_path)[0] + "_eval.csv"
+    stem = os.path.splitext(args.result_path)[0]
+    eval_path = stem + "_eval.csv"
     result.to_frame().to_csv(eval_path, index=False)
     print(f"\nEval against {truth_path}")
     print(result.format())
     print(f"Saved to {eval_path}")
+    if not getattr(args, "eval_details", False):
+        return
+
+    details = topk_details(res_df, inputs.truth, info=inputs.info)
+    details.insert(2, "instrument_type", getattr(args, "instrument_type", None))
+    # A compound without SMILES is keyed by its formula vector; write the formula
+    details["compound"] = details["compound"].where(
+        details["compound"].map(lambda c: isinstance(c, str) or c is None),
+        details["true_formula"],
+    )
+    details.to_csv(stem + "_eval_details.csv", index=False)
+    grouped_accuracy(details).to_csv(stem + "_eval_groups.csv", index=False)
+    print("\nCoverage")
+    for key, value in coverage(details, len(res_df), inputs).items():
+        print(f"  {key:<30s}{value}")
+    print(f"Saved to {stem}_eval_details.csv and {stem}_eval_groups.csv")
 
 
 def _validate(args, parser):
