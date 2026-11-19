@@ -337,19 +337,10 @@ def simulate_experimental_mz(theoretical_mz, relative_mass_tolerance_ppm):
     return experimental_mz
 
 
-def precursor_mz_calculator(precursor_type, mass):
-    """Compute the expected precursor m/z from neutral monoisotopic mass.
-
-    Args:
-            precursor_type: Adduct string, e.g. '[M+H]+'.
-            mass: Neutral monoisotopic mass in Da.
-
-    Returns:
-            float: Theoretical precursor m/z.
-
-    Raises:
-            ValueError: If precursor_type is not supported.
-    """
+def _atom_precursor_mz(precursor_type, mass):
+    """Precursor m/z from the atom masses alone, without the electron mass;
+    precursor_mz_calculator adds that. Raises ValueError for an unsupported
+    precursor type."""
     if precursor_type == "[M+H]+":
         return mass + ATOMS_WEIGHT["H"]
     elif precursor_type == "[M+2H]2+":
@@ -398,21 +389,10 @@ def precursor_mz_calculator(precursor_type, mass):
         raise ValueError("Unsupported precursor type: {}".format(precursor_type))
 
 
-def mass_calculator(precursor_type, precursor_mz):
-    """Back-calculate neutral monoisotopic mass from observed precursor m/z.
-
-    The inverse of precursor_mz_calculator.
-
-    Args:
-            precursor_type: Adduct string, e.g. '[M+H]+'.
-            precursor_mz: Observed precursor m/z.
-
-    Returns:
-            float: Neutral monoisotopic mass in Da.
-
-    Raises:
-            ValueError: If precursor_type is not supported.
-    """
+def _atom_neutral_mass(precursor_type, precursor_mz):
+    """The inverse of _atom_precursor_mz, without the electron mass;
+    mass_calculator applies that. Raises ValueError for an unsupported
+    precursor type."""
     if precursor_type == "[M+H]+":
         return precursor_mz - ATOMS_WEIGHT["H"]
     elif precursor_type == "[M+2H]2+":
@@ -481,6 +461,58 @@ def mass_calculator(precursor_type, precursor_mz):
         )
     else:
         raise ValueError("Unsupported precursor type: {}".format(precursor_type))
+
+
+# Mass of an electron (Da). An ion's m/z is the mass of its atoms minus that of
+# the electrons it lost (or plus those it gained), per charge: [M+H]+ adds a
+# proton (1.007276 Da), not a hydrogen atom (1.007825 Da).
+ELECTRON_MASS = 0.000548579909
+
+
+def _charge_sign(precursor_type):
+    text = str(precursor_type).strip()
+    if text.endswith("+"):
+        return 1
+    if text.endswith("-"):
+        return -1
+    raise ValueError("Unsupported precursor type: {}".format(precursor_type))
+
+
+def precursor_mz_calculator(precursor_type, mass):
+    """Compute the theoretical precursor m/z from a neutral monoisotopic mass.
+
+    Args:
+            precursor_type: Adduct string, e.g. '[M+H]+'.
+            mass: Neutral monoisotopic mass in Da.
+
+    Returns:
+            float: Theoretical precursor m/z, with the electron mass accounted
+            for (an [M+H]+ ion is M plus a proton).
+
+    Raises:
+            ValueError: If precursor_type is not supported.
+    """
+    atoms = _atom_precursor_mz(precursor_type, mass)
+    return atoms - _charge_sign(precursor_type) * ELECTRON_MASS
+
+
+def mass_calculator(precursor_type, precursor_mz):
+    """Back-calculate the neutral monoisotopic mass from a precursor m/z.
+
+    The inverse of precursor_mz_calculator.
+
+    Args:
+            precursor_type: Adduct string, e.g. '[M+H]+'.
+            precursor_mz: Observed precursor m/z.
+
+    Returns:
+            float: Neutral monoisotopic mass in Da.
+
+    Raises:
+            ValueError: If precursor_type is not supported.
+    """
+    sign = _charge_sign(precursor_type)
+    return _atom_neutral_mass(precursor_type, precursor_mz + sign * ELECTRON_MASS)
 
 
 def precursor_charge(precursor_type):

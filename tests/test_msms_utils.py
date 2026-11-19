@@ -1,6 +1,5 @@
 import pytest
 
-from msfiddle.utils.mol_utils import ATOMS_WEIGHT
 from msfiddle.utils.msms_utils import mass_calculator, precursor_mz_calculator
 
 MASS = 200.0
@@ -34,17 +33,27 @@ def test_mass_calculator_inverts_precursor_mz(precursor_type):
     assert mass_calculator(precursor_type, mz) == pytest.approx(MASS, abs=1e-6)
 
 
+CAFFEINE = 194.080376  # C8H10N4O2, monoisotopic
+PROTON = 1.007276467
+
+
 @pytest.mark.parametrize(
     "precursor_type, expected",
     [
-        ("[M+H]+", MASS + ATOMS_WEIGHT["H"]),
-        ("[M-H]-", MASS - ATOMS_WEIGHT["H"]),
-        ("[M+Na]+", MASS + ATOMS_WEIGHT["Na"]),
-        ("[2M+H]+", 2 * MASS + ATOMS_WEIGHT["H"]),
+        ("[M+H]+", 195.087652),  # M plus a proton, not a hydrogen atom
+        ("[M-H]-", 193.073100),
+        ("[M+Na]+", 217.069597),
+        ("[M+2H]2+", (CAFFEINE + 2 * PROTON) / 2),
+        ("[2M+H]+", 2 * CAFFEINE + PROTON),
+        ("[M+NH4]+", 212.114202),
     ],
 )
-def test_precursor_mz(precursor_type, expected):
-    assert precursor_mz_calculator(precursor_type, MASS) == pytest.approx(expected)
+def test_precursor_mz_accounts_for_the_electron(precursor_type, expected):
+    mz = precursor_mz_calculator(precursor_type, CAFFEINE)
+    assert mz == pytest.approx(expected, abs=2e-6)
+    assert mass_calculator(precursor_type, expected) == pytest.approx(
+        CAFFEINE, abs=2e-6
+    )
 
 
 def test_unsupported_precursor_type_raises():
