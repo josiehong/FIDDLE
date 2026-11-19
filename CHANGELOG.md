@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - `predict` and `--eval` read MGF files with pyteomics' indexed reader, which drops spectra without a `TITLE` and all but the last of a repeated `TITLE` without saying so. They now read every spectrum, and `validate` reports those as `missing_metadata` and `duplicate_id`; the spectra predicted and evaluated are the same as before.
 - A non-numeric `PRECURSOR_MZ` stopped `predict` with an error; that spectrum is now skipped as `invalid_precursor_mz`.
+- `fiddle_tcn_casmi.yml` set `use_simulated_precursor_mz: True`, so CASMI 2017 was predicted from a precursor m/z drawn at random around the true molecule's m/z instead of the measured one: it gave FIDDLE information from the answer that BUDDY and SIRIUS did not get, and changed with every conversion of the data. It now uses the measured `PRECURSOR_MZ`, like the other benchmarks; FIDDLE's CASMI 2017 top-1 is 90.0% with it.
 
 - The demo spectra (`msfiddle/demo/input_msms.mgf`, from EMBL-MCF 2.0) give their collision energy as NCE (`50 nce`). They had a bare `50.0`, which is read as eV and turned into an NCE several times too high.
 
