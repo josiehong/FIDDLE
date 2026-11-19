@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Train and evaluate the v2.4 models; the instruments run in parallel:
+# Train and evaluate the v2.4 models, one instrument after another on all
+# GPUs (PARALLEL=1 runs them at once, each on its DEVICE_* GPUs):
 #   1. Build train, validation and test sets, split by compound. A precursor
 #      m/z the library computed from the structure is replaced by the
 #      theoretical m/z plus a seeded Gaussian error within the instrument's
@@ -9,8 +10,9 @@
 #   4. Evaluate on the test set, its only use.
 # A rerun skips finished steps and resumes an interrupted TCN:
 #   nohup bash running_scripts/train_release_v2.4.sh > train_v2.4.log 2>&1 &
-# Env: INSTRUMENTS, DATA_TAG, SEEDS, NUM_WORKERS, DEVICE_QTOF / DEVICE_ORBITRAP /
-# DEVICE_TIMSTOF (space-separated GPUs; rescore and evaluation use the first),
+# Env: INSTRUMENTS, DATA_TAG, SEEDS, NUM_WORKERS, PARALLEL, DEVICE_QTOF /
+# DEVICE_ORBITRAP / DEVICE_TIMSTOF (space-separated GPUs, default "0 1", for
+# two 11 GB GPUs; the TCN uses all of them, rescore and evaluation the first),
 # TIMSTOF_TRANSFER_FROM (a Q-TOF TCN to fine-tune from) and
 # CASMI2026_MAX_PER_COMPOUND (fewer timsTOF spectra, to save RAM),
 # SIMULATE_PPM_QTOF / SIMULATE_PPM_ORBITRAP / SIMULATE_PPM_TIMSTOF (0: keep
@@ -22,9 +24,10 @@ set -e
 DATA_TAG=${DATA_TAG:-112026}
 SEEDS=${SEEDS:-"1 2 3"}
 NUM_WORKERS=${NUM_WORKERS:-8}
+PARALLEL=${PARALLEL:-0}
 DEVICE_QTOF=${DEVICE_QTOF:-"0 1"}
-DEVICE_ORBITRAP=${DEVICE_ORBITRAP:-"2 3"}
-DEVICE_TIMSTOF=${DEVICE_TIMSTOF:-"4 5"}
+DEVICE_ORBITRAP=${DEVICE_ORBITRAP:-"0 1"}
+DEVICE_TIMSTOF=${DEVICE_TIMSTOF:-"0 1"}
 INSTRUMENTS=${INSTRUMENTS:-"qtof orbitrap timstof"}
 CASMI2026_PARQUET=./data/origin/casmi2026/train.parquet
 CASMI2026_MAX_PER_COMPOUND=${CASMI2026_MAX_PER_COMPOUND:-0}
@@ -125,26 +128,36 @@ mkdir -p "$PKL_DIR" ./result
 case " $INSTRUMENTS " in
     *" timstof "*) [ -s "$CASMI2026_PARQUET" ] || { echo "Missing $CASMI2026_PARQUET"; exit 1; } ;;
 esac
-jobs=()
-for inst in $INSTRUMENTS; do
-    case $inst in
+run_instrument() {
+    case $1 in
         qtof)
-            pipeline qtof "$DEVICE_QTOF" "" agilent nist20 nist23 mona waters gnps \
-                > "qtof_$TAG.log" 2>&1 & ;;
+            pipeline qtof "$DEVICE_QTOF" "" agilent nist20 nist23 mona waters gnps ;;
         orbitrap)
-            pipeline orbitrap "$DEVICE_ORBITRAP" "--amp" nist20 nist23 mona gnps \
-                > "orbitrap_$TAG.log" 2>&1 & ;;
+            pipeline orbitrap "$DEVICE_ORBITRAP" "--amp" nist20 nist23 mona gnps ;;
         timstof)
             SPLIT=scaffold TRANSFER_FROM=$TIMSTOF_TRANSFER_FROM \
             PREP_EXTRA="--casmi_parquet $CASMI2026_PARQUET --holdout_lib enveda-np-examples --max_spectra_per_compound $CASMI2026_MAX_PER_COMPOUND" \
-            pipeline timstof "$DEVICE_TIMSTOF" "--amp" casmi2026 \
-                > "timstof_$TAG.log" 2>&1 & ;;
-        *) echo "Unknown instrument $inst"; exit 1 ;;
+            pipeline timstof "$DEVICE_TIMSTOF" "--amp" casmi2026 ;;
+        *) echo "Unknown instrument $1"; return 1 ;;
     esac
-    jobs+=("$inst:$!")
-done
+}
 
 status=0
+jobs=()
+for inst in $INSTRUMENTS; do
+    if [ "$PARALLEL" = 1 ]; then
+        run_instrument "$inst" > "${inst}_$TAG.log" 2>&1 &
+        jobs+=("$inst:$!")
+    else
+        echo "$(date) $inst: started, see ${inst}_$TAG.log"
+        # As a job, so set -e still stops the pipeline at a failed step (it
+        # is ignored inside a function called before ||); a failure does not
+        # stop the other instruments
+        run_instrument "$inst" > "${inst}_$TAG.log" 2>&1 &
+        wait $! || { echo "$inst pipeline failed; see ${inst}_$TAG.log"; status=1; }
+        echo "$(date) $inst: done"
+    fi
+done
 for job in "${jobs[@]}"; do
     inst=${job%%:*}
     wait "${job#*:}" || { echo "$inst pipeline failed; see ${inst}_$TAG.log"; status=1; }
