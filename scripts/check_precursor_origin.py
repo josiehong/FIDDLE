@@ -198,12 +198,31 @@ def check(raw_dir, datasets, limit):
     if "casmi2026" in datasets:
         path = os.path.join(raw_dir, "casmi2026", "train.parquet")
         if os.path.exists(path):
-            df = pd.read_parquet(path, columns=["ingest_lib", "precursor_error_ppm"])
+            # Computed here, not read from the file's precursor_error_ppm,
+            # which disagrees with the theoretical m/z for some sources
+            from msfiddle.utils.mol_utils import monoisotopic_mass_calculator
+
+            df = pd.read_parquet(
+                path,
+                columns=["ingest_lib", "molecular_formula", "adduct", "precursor_mz"],
+            )
             if limit:
                 df = df.head(limit)
-            rows.append(summarize("casmi2026", df.precursor_error_ppm))
+            masses = {}
+            for formula in df.molecular_formula.dropna().unique():
+                try:
+                    masses[formula] = monoisotopic_mass_calculator(formula, "f")
+                except Exception:
+                    masses[formula] = np.nan
+            df["ppm"] = [
+                ppm_of(mz, adduct, masses.get(formula, np.nan))
+                for mz, adduct, formula in zip(
+                    df.precursor_mz, df.adduct, df.molecular_formula
+                )
+            ]
+            rows.append(summarize("casmi2026", df.ppm))
             for lib, d in df.groupby("ingest_lib"):
-                rows.append(summarize(f"casmi2026 {lib}", d.precursor_error_ppm))
+                rows.append(summarize(f"casmi2026 {lib}", d.ppm))
     return pd.DataFrame(rows)
 
 
