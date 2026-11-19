@@ -22,7 +22,7 @@ Uses the v2.3.0 checkpoints, so models downloaded for 2.3.0 keep working.
 ### Fixed
 
 - `predict` and `--eval` read MGF files with pyteomics' indexed reader, which drops spectra without a `TITLE` and all but the last of a repeated `TITLE` without saying so. They now read every spectrum, and `validate` reports those as `missing_metadata` and `duplicate_id`; the spectra predicted and evaluated are the same as before.
-- A non-numeric `PRECURSOR_MZ` stopped `predict` with an error; that spectrum is now skipped as `invalid_precursor_mz`.
+- A non-numeric `PRECURSOR_MZ` stopped `predict` with an error, as did a zero one; such spectra, and negative ones, are now skipped as `invalid_precursor_mz`. A peak with a negative m/z was binned among the highest m/z; such spectra are skipped as `invalid_peaks`.
 - `scripts/run_buddy_sirius.py` read the MGF file with the same indexed reader.
 - `fiddle_tcn_casmi.yml` set `use_simulated_precursor_mz: True`, so CASMI 2017 was predicted from a precursor m/z drawn at random around the true molecule's m/z instead of the measured one: it gave FIDDLE information from the answer that BUDDY and SIRIUS did not get, and changed with every conversion of the data. It now uses the measured `PRECURSOR_MZ`, like the other benchmarks; FIDDLE's CASMI 2017 top-1 is 90.0% with it.
 

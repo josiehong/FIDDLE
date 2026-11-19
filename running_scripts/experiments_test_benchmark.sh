@@ -12,9 +12,11 @@
 set -e
 source running_scripts/compare.sh
 
-methods=""
 if [ "$1" = "--fiddle_only" ]; then
     export FIDDLE_ONLY=1
+fi
+methods=""
+if [ -n "$FIDDLE_ONLY" ]; then
     methods="--methods fiddle"
 fi
 

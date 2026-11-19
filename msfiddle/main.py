@@ -219,27 +219,32 @@ def _predict(args, parser):
 
 
 def _evaluate(res_df, truth_path, args, parser):
-    from .evaluate import (
-        coverage,
-        grouped_accuracy,
-        load_eval_inputs,
-        topk_accuracy,
-        topk_details,
-    )
+    from .evaluate import load_eval_inputs, topk_accuracy
 
     inputs = load_eval_inputs(truth_path)
+    stem = os.path.splitext(args.result_path)[0]
     try:
         result = topk_accuracy(res_df, inputs.truth)
     except ValueError as exc:
+        # With no matched rows the details still show why (no_truth and
+        # not_predicted rows), so save them before failing.
+        if getattr(args, "eval_details", False):
+            try:
+                _save_eval_details(res_df, inputs, args, stem)
+            except ValueError:
+                pass
         parser.exit(status=1, message=f"{exc}\n")
-    stem = os.path.splitext(args.result_path)[0]
     eval_path = stem + "_eval.csv"
     result.to_frame().to_csv(eval_path, index=False)
     print(f"\nEval against {truth_path}")
     print(result.format())
     print(f"Saved to {eval_path}")
-    if not getattr(args, "eval_details", False):
-        return
+    if getattr(args, "eval_details", False):
+        _save_eval_details(res_df, inputs, args, stem)
+
+
+def _save_eval_details(res_df, inputs, args, stem):
+    from .evaluate import coverage, grouped_accuracy, topk_details
 
     details = topk_details(res_df, inputs.truth, info=inputs.info)
     details.insert(2, "instrument_type", getattr(args, "instrument_type", None))

@@ -137,3 +137,18 @@ def test_loading_matches_the_indexed_reader(tmp_path):
     ]
     encoded = MsFiddlePredictor()._load_mgf_spectra(path)
     assert [(e.id, e.collision_energy) for e in encoded] == indexed
+
+
+@pytest.mark.parametrize(
+    "kwargs, reason",
+    [
+        ({"mz": "0"}, "invalid_precursor_mz"),
+        ({"mz": "-180.063"}, "invalid_precursor_mz"),
+        ({"peaks": [(-40.0, 5.0)] + PEAKS[1:]}, "invalid_peaks"),
+    ],
+)
+def test_non_positive_masses_are_rejected(tmp_path, kwargs, reason):
+    path = tmp_path / "in.mgf"
+    path.write_text(_ion("s", **kwargs))
+    report = validate_mgf(path)
+    assert (report.loc[0, "status"], report.loc[0, "reason"]) == ("rejected", reason)

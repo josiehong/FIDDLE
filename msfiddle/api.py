@@ -1406,6 +1406,9 @@ def _validate_arrays(
         )
     if not np.isfinite(intensity_values.max() - intensity_values.min()):
         raise SpectrumRejected("invalid_peaks", "Invalid intensity array")
+    # A negative m/z would bin at a negative index, i.e. among the highest m/z
+    if float(np.min(mz_values)) < 0:
+        raise SpectrumRejected("invalid_peaks", "m/z values must not be negative")
     if float(np.max(mz_values)) < min_mz:
         raise SpectrumRejected(
             "peak_mz_out_of_range", f"Spectrum maximum m/z must be at least {min_mz}"
@@ -1426,8 +1429,10 @@ def _validate_float(name: str, value: Any) -> float:
         raise SpectrumRejected(
             reason, f"{name} must be numeric, got {value!r}"
         ) from exc
-    if not math.isfinite(result):
-        raise SpectrumRejected(reason, f"{name} must be finite, got {value!r}")
+    if not math.isfinite(result) or result <= 0:
+        raise SpectrumRejected(
+            reason, f"{name} must be finite and positive, got {value!r}"
+        )
     return result
 
 

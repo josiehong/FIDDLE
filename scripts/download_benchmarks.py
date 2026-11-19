@@ -22,6 +22,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import urllib.request
 import zipfile
 
@@ -58,6 +59,7 @@ CASMI2017_ZIPS = [
 
 
 MANIFEST = {}
+MANIFEST_PATH = None  # set in main; written after every download
 
 
 def fetch(url):
@@ -69,7 +71,19 @@ def fetch(url):
         "sha256": hashlib.sha256(data).hexdigest(),
         "downloaded": datetime.date.today().isoformat(),
     }
+    if MANIFEST_PATH:
+        save_manifest(MANIFEST_PATH)
     return data
+
+
+def save_manifest(path):
+    """Merge this run's downloads into manifest.json, replacing it atomically."""
+    old = {}
+    if os.path.exists(path):
+        with open(path) as f:
+            old = json.load(f)
+    old.update(MANIFEST)
+    write(path, json.dumps(old, indent=2).encode())
 
 
 def fingerprint(path):
@@ -123,15 +137,21 @@ def write(path, data):
 
 def extract_flat(data, out_dir, suffix=None):
     """Extract a zip's files into out_dir by base name (archives keep them in a
-    subfolder); returns the names written."""
+    subfolder); returns the names written. The files go to a staging folder
+    that replaces out_dir only once all are written, so an interrupted
+    extraction never leaves a partial out_dir to be reused."""
+    staging = out_dir.rstrip("/") + ".part"
+    shutil.rmtree(staging, ignore_errors=True)
     names = []
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         for info in archive.infolist():
             name = os.path.basename(info.filename)
             if info.is_dir() or not name or (suffix and not name.endswith(suffix)):
                 continue
-            write(os.path.join(out_dir, name), archive.read(info))
+            write(os.path.join(staging, name), archive.read(info))
             names.append(name)
+    shutil.rmtree(out_dir, ignore_errors=True)
+    os.replace(staging, out_dir)
     return names
 
 
@@ -171,7 +191,7 @@ def download_casmi2017(out_dir, force):
         print(f"Saved {path}")
     for stem in CASMI2017_ZIPS:
         folder = os.path.join(base, stem)
-        if os.path.isdir(folder) and os.listdir(folder) and not force:
+        if os.path.isdir(folder) and not force:  # only complete folders exist
             print(f"Keep {folder}/")
             continue
         names = extract_flat(fetch(f"{CASMI2017}/challenges/{stem}.zip"), folder)
@@ -185,13 +205,9 @@ if __name__ == "__main__":
         "--force", action="store_true", help="Download files already present again"
     )
     args = parser.parse_args()
+    MANIFEST_PATH = os.path.join(args.out_dir, "manifest.json")
     download_mona(args.out_dir, args.force)
     download_casmi2017(args.out_dir, args.force)
     check_expected(args.out_dir)
     if MANIFEST:
-        path = os.path.join(args.out_dir, "manifest.json")
-        old = json.load(open(path)) if os.path.exists(path) else {}
-        old.update(MANIFEST)
-        with open(path, "w") as f:
-            json.dump(old, f, indent=2)
-        print(f"Recorded the downloads in {path}")
+        print(f"Recorded the downloads in {MANIFEST_PATH}")

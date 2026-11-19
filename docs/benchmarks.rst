@@ -60,8 +60,12 @@ the clone, so that the scripts, configs and package are the same version:
 
    git clone --branch v<release> https://github.com/JosieHong/FIDDLE.git
    cd FIDDLE
-   pip install -e .
+   pip install -e ".[inference]" matplotlib
    msfiddle download
+
+The ``inference`` extra installs PyTorch, which prediction needs, and
+matplotlib draws the figure. For a GPU build of PyTorch, install it first as
+the `PyTorch guide <https://pytorch.org/get-started/locally/>`_ describes.
 
 **FIDDLE alone, all compounds.** This needs nothing but msfiddle and should
 give the FIDDLE bars of the figure's top row exactly:
