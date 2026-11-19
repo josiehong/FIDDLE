@@ -13,14 +13,13 @@ with their release config, as ``--instrument_type orbitrap`` would. EMBL-MCF
 which ``scripts/embl2mgf.py`` averages and writes as NCE (``50 nce``). CASMI
 2017 uses the Q-TOF models with ``fiddle_tcn_casmi.yml``.
 
-The precursor m/z of CASMI 2016 and EMBL-MCF 2.0 in their MoNA exports is
-computed from the structure, not measured, so it carries no mass error. As in
-the paper, the conversion scripts replace it with the theoretical m/z plus a
-Gaussian error with a standard deviation of a third of 5 ppm, drawn with a
-fixed seed so every run gets the same values. CASMI 2017's precursor m/z is
-the most intense peak of each challenge's MS1 spectrum, a measured value, and
-is kept. Every method is given the same precursor m/z and the adduct. Each
-benchmark is run three ways:
+As in the paper, the precursor m/z of CASMI 2016 and CASMI 2017 is replaced
+by the theoretical m/z plus a Gaussian error with a standard deviation of a
+third of 5 ppm (CASMI 2016, Orbitrap) or 10 ppm (CASMI 2017, Q-TOF), drawn
+with a fixed seed so every run gets the same values. EMBL-MCF 2.0 keeps the
+precursor m/z of its MoNA export, which is computed from the structure and so
+carries no mass error. Every method is given the same precursor m/z and the
+adduct. Each benchmark is run three ways:
 
 - **FIDDLE**: FIDDLE's own candidates.
 - **FIDDLE w. BUDDY**: BUDDY's candidates added to FIDDLE's, all ranked by the

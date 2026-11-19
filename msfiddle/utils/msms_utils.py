@@ -209,28 +209,18 @@ def _filter_spec_single(spectrum, config, type2charge):
         if "ppm_tolerance" in config.keys()
         else theo_mz
     )
-    # A library precursor m/z computed from the structure carries no mass
-    # error; with simulate_computed_ppm set, it is replaced by the theoretical
-    # m/z plus a Gaussian error within that tolerance, as in the paper.
-    # Measured values are kept.
-    simulate_ppm = config.get("simulate_computed_ppm", 0)
-    if simulate_ppm and is_computed_precursor_mz(
-        float(spectrum["params"]["precursor_mz"]), theo_mz
-    ):
+    # With simulate_precursor_ppm set (by prepare_msms.py for the libraries
+    # whose precursor m/z the paper treats as theoretical), the library value
+    # is replaced by the theoretical m/z plus a Gaussian error within that
+    # tolerance, as in the paper.
+    simulate_ppm = config.get("simulate_precursor_ppm", 0)
+    if simulate_ppm:
         spectrum["params"]["library_precursor_mz"] = spectrum["params"]["precursor_mz"]
         simulated = simulate_experimental_mz(theo_mz, simulate_ppm, rng)
         spectrum["params"]["precursor_mz"] = round(simulated, 6)
         spectrum["params"]["ppm"] = abs(simulated - theo_mz) / theo_mz * 10**6
     spectrum["params"]["charge"] = type2charge[precursor_type]  # add charge
     return spectrum, None
-
-
-def is_computed_precursor_mz(precursor_mz, theoretical_mz):
-    """True when a library precursor m/z equals the theoretical one up to
-    rounding: within 0.2 ppm, or 0.000052 Da (four decimals plus the atom
-    masses' precision), whichever is larger. Measured values scatter by ppm."""
-    tolerance = max(0.2e-6 * theoretical_mz, 0.000052)
-    return abs(precursor_mz - theoretical_mz) <= tolerance
 
 
 def filter_spec(spectra, config, type2charge, num_workers=0):

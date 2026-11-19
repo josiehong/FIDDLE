@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Train and evaluate the v2.4 models, one instrument after another on all
 # GPUs (PARALLEL=1 runs them at once, each on its DEVICE_* GPUs):
-#   1. Build train, validation and test sets, split by compound. A precursor
-#      m/z the library computed from the structure is replaced by the
-#      theoretical m/z plus a seeded Gaussian error within the instrument's
-#      tolerance (SIMULATE_PPM_*), as in the paper; measured values are kept.
+#   1. Build train, validation and test sets, split by compound. As in the
+#      paper, the theoretical precursor m/z of NIST20 and NIST23 is replaced
+#      by the theoretical m/z plus a seeded Gaussian error within the
+#      instrument's tolerance (SIMULATE_PPM_*).
 #   2. Train the TCN, choosing the checkpoint on validation.
 #   3. Build rescore pairs, train SEEDS rescorers and keep the best on validation.
 #   4. Evaluate on the test set, its only use.
@@ -15,8 +15,8 @@
 # two 11 GB GPUs; the TCN uses all of them, rescore and evaluation the first),
 # TIMSTOF_TRANSFER_FROM (a Q-TOF TCN to fine-tune from) and
 # CASMI2026_MAX_PER_COMPOUND (fewer timsTOF spectra, to save RAM),
-# SIMULATE_PPM_QTOF / SIMULATE_PPM_ORBITRAP / SIMULATE_PPM_TIMSTOF (0: keep
-# the library values) and SIMULATION_SEED.
+# SIMULATE_PPM_QTOF / SIMULATE_PPM_ORBITRAP (0: keep the library values),
+# SIMULATE_DATASETS (default "nist20 nist23") and SIMULATION_SEED.
 # Each TCN keeps its training data in RAM. Update this file only through git
 # while it runs: bash reads it as it goes.
 set -e
@@ -35,7 +35,7 @@ TIMSTOF_TRANSFER_FROM=${TIMSTOF_TRANSFER_FROM:-""}  # empty: from scratch
 # Precursor m/z simulation tolerance (ppm), the paper's per instrument
 SIMULATE_PPM_QTOF=${SIMULATE_PPM_QTOF:-10}
 SIMULATE_PPM_ORBITRAP=${SIMULATE_PPM_ORBITRAP:-5}
-SIMULATE_PPM_TIMSTOF=${SIMULATE_PPM_TIMSTOF:-10}
+SIMULATE_DATASETS=${SIMULATE_DATASETS:-"nist20 nist23"}
 SIMULATION_SEED=${SIMULATION_SEED:-0}
 PKL_DIR=./data/cl_pkl_$DATA_TAG
 TAG=${DATA_TAG}_muon
@@ -57,10 +57,11 @@ pipeline() {
     # 1. Data (train_pairs.pkl is written last)
     if [ ! -s "${data}_train_pairs.pkl" ]; then
         local simulate_var=SIMULATE_PPM_$(echo "$inst" | tr '[:lower:]' '[:upper:]')
+        local simulate_ppm=${!simulate_var:-0}  # timsTOF trains on no listed library
         python -u scripts/prepare_msms.py --dataset "$@" --instrument_type "$inst" \
             --config_path "$config" --num_workers "$NUM_WORKERS" \
             --pkl_dir "$PKL_DIR/" --split "$split" \
-            --simulate_computed_ppm "${!simulate_var}" \
+            --simulate_ppm "$simulate_ppm" --simulate_datasets $SIMULATE_DATASETS \
             --simulation_seed "$SIMULATION_SEED" $PREP_EXTRA
     fi
 

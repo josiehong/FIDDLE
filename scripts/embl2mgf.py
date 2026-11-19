@@ -152,10 +152,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--simulate_ppm",
         type=float,
-        default=5.0,
-        help="The library's precursor m/z is computed from the structure; "
-        "replace it by the theoretical m/z plus a Gaussian error within this "
-        "tolerance (the paper's 5 ppm for Orbitrap). 0 keeps the library value.",
+        default=0.0,
+        help="Replace the library's precursor m/z by the theoretical m/z plus a "
+        "Gaussian error within this tolerance in ppm (5 for Orbitrap). "
+        "0 (default) keeps the library value, as the paper does for EMBL-MCF 2.0.",
     )
     parser.add_argument("--seed", type=int, default=0, help="Seed of the simulation")
     args = parser.parse_args()

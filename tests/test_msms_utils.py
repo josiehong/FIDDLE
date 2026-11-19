@@ -156,7 +156,7 @@ def test_simulated_precursor_mz_is_seeded_and_realistic():
     assert ppm.std() == pytest.approx(5 / 3, rel=0.1)
 
 
-def test_filter_simulates_only_computed_precursors():
+def test_filter_simulates_the_precursor_mz_when_asked():
     import numpy as np
 
     from msfiddle.utils.mol_utils import monoisotopic_mass_calculator
@@ -165,21 +165,18 @@ def test_filter_simulates_only_computed_precursors():
     theo = precursor_mz_calculator("[M+H]+", monoisotopic_mass_calculator("C2H6O", "f"))
 
     def spectra():
-        def spectrum(title, mz):
-            return {
+        return [
+            {
                 "params": {
-                    "title": title,
+                    "title": f"s{i}",
                     "smiles": "CCO",
                     "precursor_type": "[M+H]+",
-                    "precursor_mz": f"{mz:.4f}",
+                    "precursor_mz": f"{theo:.4f}",
                 },
                 "m/z array": np.array([31.0, 45.0, 46.0]),
                 "intensity array": np.array([10.0, 100.0, 30.0]),
             }
-
-        # computed (rounded to 4 decimals) and measured (3 ppm off)
-        return [spectrum(f"c{i}", theo) for i in range(4)] + [
-            spectrum("measured", theo * (1 + 3e-6))
+            for i in range(5)
         ]
 
     config = {
@@ -191,26 +188,21 @@ def test_filter_simulates_only_computed_precursors():
         "atom_type": ["C", "H", "O"],
         "precursor_type": ["[M+H]+"],
         "ppm_tolerance": 10,
-        "simulate_computed_ppm": 10,
+        "simulate_precursor_ppm": 10,
     }
     kept, _ = filter_spec(spectra(), config, {"[M+H]+": "+1"})
-    by_title = {s["params"]["title"]: s["params"] for s in kept}
-    measured = by_title.pop("measured")
-    assert "library_precursor_mz" not in measured  # kept as measured
-    simulated = [p["precursor_mz"] for p in by_title.values()]
-    assert all(p["library_precursor_mz"] == f"{theo:.4f}" for p in by_title.values())
-    assert len(set(simulated)) == 4  # each spectrum gets its own error
+    simulated = [s["params"]["precursor_mz"] for s in kept]
+    assert all(s["params"]["library_precursor_mz"] == f"{theo:.4f}" for s in kept)
+    assert len(set(simulated)) == 5  # each spectrum gets its own error
     assert all(abs(mz - theo) / theo * 1e6 < 10 for mz in simulated)
 
     # The same values on every run, and in a process pool
     again, _ = filter_spec(spectra(), config, {"[M+H]+": "+1"}, num_workers=2)
-    assert [s["params"]["precursor_mz"] for s in again] == [
-        s["params"]["precursor_mz"] for s in kept
-    ]
+    assert [s["params"]["precursor_mz"] for s in again] == simulated
     # Off by default: the library value is kept
     plain, _ = filter_spec(
         spectra(),
-        {k: v for k, v in config.items() if k != "simulate_computed_ppm"},
+        {k: v for k, v in config.items() if k != "simulate_precursor_ppm"},
         {"[M+H]+": "+1"},
     )
     assert all("library_precursor_mz" not in s["params"] for s in plain)

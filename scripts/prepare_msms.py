@@ -126,14 +126,21 @@ if __name__ == "__main__":
         help="Process count for parallel filtering/encoding (0 = serial)",
     )
     parser.add_argument(
-        "--simulate_computed_ppm",
+        "--simulate_ppm",
         type=float,
         default=0,
-        help="Replace a precursor m/z that the library computed from the "
-        "structure (within rounding of the theoretical m/z) by the theoretical "
-        "m/z plus a Gaussian error with a standard deviation of a third of "
-        "this tolerance in ppm, as in the paper (5 for Orbitrap, 10 for Q-TOF). "
-        "Measured values are kept. 0 (default): keep every library value",
+        help="Replace the precursor m/z of every spectrum of --simulate_datasets "
+        "by the theoretical m/z plus a Gaussian error with a standard deviation "
+        "of a third of this tolerance in ppm, as the paper does for libraries "
+        "with theoretical precursor m/z (5 for Orbitrap, 10 for Q-TOF). "
+        "0 (default): keep every library value",
+    )
+    parser.add_argument(
+        "--simulate_datasets",
+        nargs="+",
+        default=["nist20", "nist23"],
+        help="Datasets whose precursor m/z is simulated with --simulate_ppm "
+        "(default: nist20 nist23, the training libraries the paper names)",
     )
     parser.add_argument(
         "--simulation_seed",
@@ -329,9 +336,10 @@ if __name__ == "__main__":
                     ins, config_name
                 )
             )
+            simulate_ppm = args.simulate_ppm if ds in args.simulate_datasets else 0
             filter_config = {
                 **config[config_name],
-                "simulate_computed_ppm": args.simulate_computed_ppm,
+                "simulate_precursor_ppm": simulate_ppm,
                 "simulation_seed": args.simulation_seed,
             }
             filter_spectra, filter_smiles_list = filter_spec(
@@ -341,13 +349,10 @@ if __name__ == "__main__":
                 num_workers=args.num_workers,
             )
 
-            if args.simulate_computed_ppm:
-                n_sim = sum(
-                    "library_precursor_mz" in s["params"] for s in filter_spectra
-                )
+            if simulate_ppm:
                 print(
-                    "Simulated the computed precursor m/z of {} of {} spectra".format(
-                        n_sim, len(filter_spectra)
+                    "Simulated the precursor m/z of all {} spectra ({} ppm)".format(
+                        len(filter_spectra), simulate_ppm
                     )
                 )
             filter_smiles_list = sorted(set(filter_smiles_list))

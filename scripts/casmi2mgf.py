@@ -57,10 +57,16 @@ if __name__ == "__main__":
         "--simulate_ppm",
         type=float,
         default=5.0,
-        help="CASMI 2016's precursor m/z is computed from the structure; replace "
-        "it by the theoretical m/z plus a Gaussian error within this tolerance "
-        "(the paper's 5 ppm for Orbitrap). 0 keeps the library value. CASMI "
-        "2017's, taken from its MS1 spectra, is measured and kept.",
+        help="As in the paper, replace CASMI 2016's precursor m/z by the "
+        "theoretical m/z plus a Gaussian error within this tolerance (the "
+        "paper's 5 ppm for Orbitrap). 0 keeps the library value.",
+    )
+    parser.add_argument(
+        "--simulate_ppm_casmi2017",
+        type=float,
+        default=10.0,
+        help="The same for CASMI 2017 (the paper's 10 ppm for Q-TOF), replacing "
+        "the most intense MS1 peak. 0 keeps that value.",
     )
     parser.add_argument("--seed", type=int, default=0, help="Seed of the simulation")
     args = parser.parse_args()
@@ -234,6 +240,10 @@ if __name__ == "__main__":
         config["casmi17"],
         type2charge=config["encoding"]["type2charge"],
     )
+    if args.simulate_ppm_casmi2017 > 0:
+        casmi17_spectra = simulate_precursor_mz(
+            casmi17_spectra, args.simulate_ppm_casmi2017, args.seed
+        )
     # calculate ppm
     for idx, spec in enumerate(casmi17_spectra):
         ppm = cal_ppm(
