@@ -7,16 +7,20 @@ Top-k is the share of spectra whose true formula is among the k
 highest-ranked candidates.
 
 Each benchmark is run with the models of its instrument type. CASMI 2016
-(Q Exactive) uses the Orbitrap models with their release config, as
-``--instrument_type orbitrap`` would. EMBL-MCF 2.0 (Orbitrap Exploris 240)
-also uses the Orbitrap models, with a 50 ppm refinement window in
-``fiddle_tcn_embl.yml`` because its precursor m/z errors are large. Its
-spectra were acquired with stepped normalized collision energies (30, 50 and
-70%), which ``scripts/embl2mgf.py`` averages and writes as NCE (``50 nce``).
-CASMI 2017 uses the Q-TOF models with ``fiddle_tcn_casmi.yml``; its precursor
-m/z is the most intense peak of each challenge's MS1 spectrum. Every method is
-given the measured precursor m/z and the adduct. Each benchmark is run three
-ways:
+(Q Exactive) and EMBL-MCF 2.0 (Orbitrap Exploris 240) use the Orbitrap models
+with their release config, as ``--instrument_type orbitrap`` would. EMBL-MCF
+2.0 was acquired with stepped normalized collision energies (30, 50 and 70%),
+which ``scripts/embl2mgf.py`` averages and writes as NCE (``50 nce``). CASMI
+2017 uses the Q-TOF models with ``fiddle_tcn_casmi.yml``.
+
+The precursor m/z of CASMI 2016 and EMBL-MCF 2.0 in their MoNA exports is
+computed from the structure, not measured, so it carries no mass error. As in
+the paper, the conversion scripts replace it with the theoretical m/z plus a
+Gaussian error with a standard deviation of a third of 5 ppm, drawn with a
+fixed seed so every run gets the same values. CASMI 2017's precursor m/z is
+the most intense peak of each challenge's MS1 spectrum, a measured value, and
+is kept. Every method is given the same precursor m/z and the adduct. Each
+benchmark is run three ways:
 
 - **FIDDLE**: FIDDLE's own candidates.
 - **FIDDLE w. BUDDY**: BUDDY's candidates added to FIDDLE's, all ranked by the

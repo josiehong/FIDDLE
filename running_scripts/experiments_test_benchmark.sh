@@ -29,7 +29,7 @@ python scripts/embl2mgf.py \
 
 compare ./data/casmi2016.mgf orbitrap casmi2016
 compare ./data/casmi2017.mgf qtof casmi2017 --config_path ./msfiddle/config/fiddle_tcn_casmi.yml
-compare ./data/embl.mgf orbitrap embl --config_path ./msfiddle/config/fiddle_tcn_embl.yml
+compare ./data/embl.mgf orbitrap embl
 
 python scripts/plot_benchmarks.py $methods --csv ./result/benchmarks_all.csv \
     --figure ./result/benchmarks_all.png

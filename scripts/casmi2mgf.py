@@ -25,6 +25,7 @@ from msfiddle.utils import (
     mgf_key_order,
     monoisotopic_mass_calculator,
 )
+from msfiddle.utils.msms_utils import simulate_precursor_mz
 
 global CASMI_STAND_MODE, CASMI_MODE2TYPE
 
@@ -52,6 +53,16 @@ if __name__ == "__main__":
         default="./msfiddle/config/fiddle_tcn_casmi.yml",
         help="path to configuration",
     )
+    parser.add_argument(
+        "--simulate_ppm",
+        type=float,
+        default=5.0,
+        help="CASMI 2016's precursor m/z is computed from the structure; replace "
+        "it by the theoretical m/z plus a Gaussian error within this tolerance "
+        "(the paper's 5 ppm for Orbitrap). 0 keeps the library value. CASMI "
+        "2017's, taken from its MS1 spectra, is measured and kept.",
+    )
+    parser.add_argument("--seed", type=int, default=0, help="Seed of the simulation")
     args = parser.parse_args()
 
     assert os.path.exists(
@@ -197,6 +208,10 @@ if __name__ == "__main__":
         config["casmi16"],
         type2charge=config["encoding"]["type2charge"],
     )
+    if args.simulate_ppm > 0:
+        casmi16_spectra = simulate_precursor_mz(
+            casmi16_spectra, args.simulate_ppm, args.seed
+        )
     # calculate ppm
     for idx, spec in enumerate(casmi16_spectra):
         ppm = cal_ppm(

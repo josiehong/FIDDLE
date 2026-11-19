@@ -1,5 +1,6 @@
 import random
 import re
+import zlib
 import numpy as np
 from tqdm import tqdm
 
@@ -196,15 +197,40 @@ def _filter_spec_single(spectrum, config, type2charge):
     if spectrum["intensity array"].max() == spectrum["intensity array"].min():
         return None, "invalid_intensity_array"
 
+    # Seeded per spectrum, so serial and pooled runs draw the same values
+    title = str(spectrum["params"].get("title", smiles))
+    rng = np.random.default_rng(
+        [int(config.get("simulation_seed", 0)), zlib.crc32(title.encode())]
+    )
     spectrum["params"]["theoretical_precursor_mz"] = theo_mz
     spectrum["params"]["ppm"] = ppm
     spectrum["params"]["simulated_precursor_mz"] = (
-        simulate_experimental_mz(theo_mz, config["ppm_tolerance"])
+        simulate_experimental_mz(theo_mz, config["ppm_tolerance"], rng)
         if "ppm_tolerance" in config.keys()
         else theo_mz
     )
+    # A library precursor m/z computed from the structure carries no mass
+    # error; with simulate_computed_ppm set, it is replaced by the theoretical
+    # m/z plus a Gaussian error within that tolerance, as in the paper.
+    # Measured values are kept.
+    simulate_ppm = config.get("simulate_computed_ppm", 0)
+    if simulate_ppm and is_computed_precursor_mz(
+        float(spectrum["params"]["precursor_mz"]), theo_mz
+    ):
+        spectrum["params"]["library_precursor_mz"] = spectrum["params"]["precursor_mz"]
+        simulated = simulate_experimental_mz(theo_mz, simulate_ppm, rng)
+        spectrum["params"]["precursor_mz"] = round(simulated, 6)
+        spectrum["params"]["ppm"] = abs(simulated - theo_mz) / theo_mz * 10**6
     spectrum["params"]["charge"] = type2charge[precursor_type]  # add charge
     return spectrum, None
+
+
+def is_computed_precursor_mz(precursor_mz, theoretical_mz):
+    """True when a library precursor m/z equals the theoretical one up to
+    rounding: within 0.2 ppm, or 0.000052 Da (four decimals plus the atom
+    masses' precision), whichever is larger. Measured values scatter by ppm."""
+    tolerance = max(0.2e-6 * theoretical_mz, 0.000052)
+    return abs(precursor_mz - theoretical_mz) <= tolerance
 
 
 def filter_spec(spectra, config, type2charge, num_workers=0):
@@ -313,13 +339,14 @@ def split_by_scaffold(smiles_list, train_ratio, val_ratio, seed=42):
     return train, val, test
 
 
-def simulate_experimental_mz(theoretical_mz, relative_mass_tolerance_ppm):
+def simulate_experimental_mz(theoretical_mz, relative_mass_tolerance_ppm, rng=None):
     """Simulate experimental precursor m/z by shifting the theoretical value
     within a Gaussian distribution of mass deviations.
 
     Args:
         theoretical_mz: Theoretical precursor m/z value.
         relative_mass_tolerance_ppm: Relative mass tolerance in ppm.
+        rng: numpy Generator to draw from; the global numpy state if None.
 
     Returns:
         float: Simulated experimental precursor m/z value.
@@ -329,12 +356,47 @@ def simulate_experimental_mz(theoretical_mz, relative_mass_tolerance_ppm):
     std_dev = (relative_mass_tolerance_ppm / 1e6 * theoretical_mz) / 3
 
     # Randomly sample a mass deviation from the Gaussian distribution
-    mass_deviation = np.random.normal(0, std_dev)
+    mass_deviation = (rng or np.random).normal(0, std_dev)
 
     # Shift the theoretical m/z value by the sampled mass deviation to simulate the experimental value
     experimental_mz = theoretical_mz + mass_deviation
 
     return experimental_mz
+
+
+def simulate_precursor_mz(spectra, ppm, seed=0):
+    """Give spectra whose library precursor m/z is computed from the structure
+    a realistic one: the theoretical m/z shifted by a Gaussian error with a
+    standard deviation of ppm / 3, as in the FIDDLE paper. The draws are
+    seeded, so a file is converted the same way every time. The library value
+    is kept as library_precursor_mz.
+
+    Args:
+        spectra: Spectra (pyteomics dicts) with precursor_mz, precursor_type
+            and a SMILES or molmass to compute the theoretical m/z from.
+        ppm: Mass tolerance the error is drawn within (5 for Orbitrap, 10 for
+            Q-TOF in the paper).
+        seed: Seed of the random generator.
+
+    Returns:
+        list: The spectra, with precursor_mz replaced.
+    """
+    rng = np.random.default_rng(seed)
+    out = []
+    for spectrum in spectra:
+        params = spectrum["params"]
+        if params.get("molmass") not in (None, "", "Unknown"):
+            mass = float(params["molmass"])
+        else:
+            mol = Chem.MolFromSmiles(params["smiles"])
+            mass = monoisotopic_mass_calculator(mol, mode="mol")
+        theo = precursor_mz_calculator(params["precursor_type"], mass)
+        params["library_precursor_mz"] = params["precursor_mz"]
+        params["precursor_mz"] = round(simulate_experimental_mz(theo, ppm, rng), 6)
+        # filter_spec's unseeded draw would be a second, conflicting value
+        params.pop("simulated_precursor_mz", None)
+        out.append(spectrum)
+    return out
 
 
 def _atom_precursor_mz(precursor_type, mass):

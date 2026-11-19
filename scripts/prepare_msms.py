@@ -126,6 +126,22 @@ if __name__ == "__main__":
         help="Process count for parallel filtering/encoding (0 = serial)",
     )
     parser.add_argument(
+        "--simulate_computed_ppm",
+        type=float,
+        default=0,
+        help="Replace a precursor m/z that the library computed from the "
+        "structure (within rounding of the theoretical m/z) by the theoretical "
+        "m/z plus a Gaussian error with a standard deviation of a third of "
+        "this tolerance in ppm, as in the paper (5 for Orbitrap, 10 for Q-TOF). "
+        "Measured values are kept. 0 (default): keep every library value",
+    )
+    parser.add_argument(
+        "--simulation_seed",
+        type=int,
+        default=0,
+        help="Seed of the precursor m/z simulation (per spectrum, by title)",
+    )
+    parser.add_argument(
         "--report_only",
         action="store_true",
         help="Load and filter only, and report what each dataset keeps and "
@@ -313,13 +329,27 @@ if __name__ == "__main__":
                     ins, config_name
                 )
             )
+            filter_config = {
+                **config[config_name],
+                "simulate_computed_ppm": args.simulate_computed_ppm,
+                "simulation_seed": args.simulation_seed,
+            }
             filter_spectra, filter_smiles_list = filter_spec(
                 origin_spectra[ds],
-                config[config_name],
+                filter_config,
                 type2charge=config["encoding"]["type2charge"],
                 num_workers=args.num_workers,
             )
 
+            if args.simulate_computed_ppm:
+                n_sim = sum(
+                    "library_precursor_mz" in s["params"] for s in filter_spectra
+                )
+                print(
+                    "Simulated the computed precursor m/z of {} of {} spectra".format(
+                        n_sim, len(filter_spectra)
+                    )
+                )
             filter_smiles_list = sorted(set(filter_smiles_list))
             spectra += filter_spectra
             smiles_list += filter_smiles_list

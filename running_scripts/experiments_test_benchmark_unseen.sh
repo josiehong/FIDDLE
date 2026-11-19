@@ -24,7 +24,7 @@ python scripts/remove_training_compounds.py \
 
 compare ./data/casmi2016_unseen.mgf orbitrap casmi2016_unseen
 compare ./data/casmi2017_unseen.mgf qtof casmi2017_unseen --config_path ./msfiddle/config/fiddle_tcn_casmi.yml
-compare ./data/embl_unseen.mgf orbitrap embl_unseen --config_path ./msfiddle/config/fiddle_tcn_embl.yml
+compare ./data/embl_unseen.mgf orbitrap embl_unseen
 
 python scripts/plot_benchmarks.py --subsets all unseen \
     --csv ./result/benchmarks.csv --figure ./docs/_static/benchmarks.png
