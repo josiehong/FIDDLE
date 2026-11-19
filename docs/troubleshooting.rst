@@ -2,9 +2,17 @@ Troubleshooting Low Accuracy
 ============================
 
 When msfiddle finds the right formula less often than you expect, the cause is
-usually the input or the evaluation rather than the model. Work through these
-checks before retraining, and reproduce a published benchmark (below) to rule
-out the installation.
+usually the input or the evaluation rather than the model. Rule out the
+installation first, then work through the checks below before retraining.
+
+Rule out the installation
+-------------------------
+
+Run FIDDLE alone on the benchmarks, as :ref:`reproducing-benchmarks`
+describes (``experiments_test_benchmark.sh --fiddle_only``, which needs
+nothing but msfiddle). If its accuracy matches the FIDDLE bars of the
+:doc:`benchmarks` figure, the installation and checkpoints are fine and the
+cause lies in your data or evaluation.
 
 Read the numbers first
 ----------------------
@@ -80,54 +88,13 @@ Checks before retraining
    gather in one group, such as one adduct or one energy range, check that
    group's metadata before anything else.
 
-8. **Add BUDDY and SIRIUS candidates.** On the benchmarks, ranking their
-   candidates together with FIDDLE's raised top-1 on CASMI 2016 and
-   EMBL-MCF 2.0 (by 9 points on EMBL), though not on CASMI 2017. See
-   :doc:`usage`.
+8. **Add BUDDY and SIRIUS candidates.** Ranking their candidates together
+   with FIDDLE's often raises accuracy; :doc:`benchmarks` shows by how much,
+   and :doc:`usage` how to run them.
 
 Only when the input passes these checks and your data differ from the
 training libraries (another instrument, an unusual compound class) is
 retraining worth considering.
-
-Reproducing a benchmark
------------------------
-
-This reproduces FIDDLE alone on the three benchmarks, all compounds, which
-needs nothing but msfiddle. The benchmark scripts are in the repository, so
-clone it at the tag of the release you want to check and install it from the
-clone:
-
-.. code-block:: bash
-
-   git clone --branch v<release> https://github.com/JosieHong/FIDDLE.git
-   cd FIDDLE
-   pip install -e .
-   msfiddle download
-   msfiddle paths
-
-``msfiddle paths`` shows the checkpoint directory, named after the model
-release (``v2.3.0`` for msfiddle 2.3.x). Then run:
-
-.. code-block:: bash
-
-   bash running_scripts/experiments_test_benchmark.sh --fiddle_only
-
-It downloads the benchmark data, converts it to MGF and predicts with
-``--eval``. The top-1, top-3 and top-5 accuracy per spectrum in
-``result/fiddle_casmi2016_eval.csv``, ``result/fiddle_casmi2017_eval.csv``
-and ``result/fiddle_embl_eval.csv`` should match the FIDDLE rows of the table
-in :doc:`benchmarks`; the script warns when a host now serves different data.
-To check a single file by hand, ``msfiddle validate`` and
-``msfiddle predict --eval_details`` work on ``data/casmi2016.mgf`` as on your
-own data:
-
-.. code-block:: bash
-
-   msfiddle validate --test_data data/casmi2016.mgf --instrument_type orbitrap
-   msfiddle predict --test_data data/casmi2016.mgf --instrument_type orbitrap \
-                    --result_path result/fiddle_casmi2016.csv --eval_details
-
-:doc:`benchmarks` also describes running BUDDY and SIRIUS.
 
 Reporting a problem
 -------------------

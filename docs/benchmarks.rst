@@ -47,125 +47,7 @@ spectrum moves their accuracy by several points.
    Top-k accuracy on all compounds (top row) and unseen compounds (bottom
    row), with each bar's value.
 
-On all compounds, per spectrum:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 30 16 16 16
-
-   * - Benchmark
-     - Method
-     - Top-1
-     - Top-3
-     - Top-5
-   * - CASMI 2016
-       (502 spectra)
-     - FIDDLE
-     - 90.0
-     - 94.8
-     - 96.4
-   * -
-     - FIDDLE w. BUDDY
-     - 90.4
-     - 94.2
-     - 94.6
-   * -
-     - FIDDLE w. BUDDY & SIRIUS
-     - 92.8
-     - 96.2
-     - 97.4
-   * - CASMI 2017
-       (40 spectra)
-     - FIDDLE
-     - 90.0
-     - 100.0
-     - 100.0
-   * -
-     - FIDDLE w. BUDDY
-     - 87.5
-     - 100.0
-     - 100.0
-   * -
-     - FIDDLE w. BUDDY & SIRIUS
-     - 87.5
-     - 100.0
-     - 100.0
-   * - EMBL-MCF 2.0
-       (383 spectra)
-     - FIDDLE
-     - 66.6
-     - 81.7
-     - 85.4
-   * -
-     - FIDDLE w. BUDDY
-     - 70.2
-     - 87.7
-     - 90.9
-   * -
-     - FIDDLE w. BUDDY & SIRIUS
-     - 75.5
-     - 90.3
-     - 95.0
-
-On unseen compounds, per spectrum:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 30 16 16 16
-
-   * - Benchmark
-     - Method
-     - Top-1
-     - Top-3
-     - Top-5
-   * - CASMI 2016
-       (63 spectra)
-     - FIDDLE
-     - 66.7
-     - 77.8
-     - 77.8
-   * -
-     - FIDDLE w. BUDDY
-     - 63.5
-     - 73.0
-     - 74.6
-   * -
-     - FIDDLE w. BUDDY & SIRIUS
-     - 69.8
-     - 77.8
-     - 81.0
-   * - CASMI 2017
-       (36 spectra)
-     - FIDDLE
-     - 91.7
-     - 100.0
-     - 100.0
-   * -
-     - FIDDLE w. BUDDY
-     - 88.9
-     - 100.0
-     - 100.0
-   * -
-     - FIDDLE w. BUDDY & SIRIUS
-     - 88.9
-     - 100.0
-     - 100.0
-   * - EMBL-MCF 2.0
-       (100 spectra)
-     - FIDDLE
-     - 62.0
-     - 73.0
-     - 74.0
-   * -
-     - FIDDLE w. BUDDY
-     - 65.0
-     - 81.0
-     - 84.0
-   * -
-     - FIDDLE w. BUDDY & SIRIUS
-     - 69.0
-     - 88.0
-     - 91.0
+.. _reproducing-benchmarks:
 
 Reproducing the results
 -----------------------
@@ -182,7 +64,7 @@ the clone, so that the scripts, configs and package are the same version:
    msfiddle download
 
 **FIDDLE alone, all compounds.** This needs nothing but msfiddle and should
-give the FIDDLE rows of the table exactly:
+give the FIDDLE bars of the figure's top row exactly:
 
 .. code-block:: bash
 
