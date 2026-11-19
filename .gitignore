@@ -179,3 +179,6 @@ MERGE_PLAN.md
 
 # SIRIUS install (running_scripts/install_sirius.sh)
 tools/
+
+# BUDDY and SIRIUS output of the benchmark scripts
+external/

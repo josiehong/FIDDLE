@@ -13,12 +13,24 @@ Prediction API
 
 .. autofunction:: msfiddle.api.predict_from_mgf
 
+.. autofunction:: msfiddle.api.validate_mgf
+
+.. autofunction:: msfiddle.api.summarize_validation
+
 Evaluation
 ----------
 
 .. autofunction:: msfiddle.evaluate.load_truth
 
 .. autofunction:: msfiddle.evaluate.topk_accuracy
+
+.. autofunction:: msfiddle.evaluate.load_eval_inputs
+
+.. autofunction:: msfiddle.evaluate.topk_details
+
+.. autofunction:: msfiddle.evaluate.grouped_accuracy
+
+.. autofunction:: msfiddle.evaluate.coverage
 
 Molecular Utilities
 -------------------

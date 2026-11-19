@@ -30,7 +30,7 @@ msfiddle predict --test_data spectra.mgf --instrument_type orbitrap --result_pat
 
 Use `--instrument_type qtof` for Q-TOF data and `--instrument_type timstof` for timsTOF data. Each spectrum needs `TITLE`, `PRECURSOR_MZ`, `PRECURSOR_TYPE` and `COLLISION_ENERGY`. The results list ranked candidates per spectrum in `Refined Formula (0)`, `Refined Formula (1)`, … with their scores in `Rescore (k)`.
 
-When the true formulas are known (a `SMILES` or `FORMULA` field in each spectrum), add `--eval` to also report top-k accuracy, saved as `results_eval.csv`.
+When the true formulas are known (a `SMILES` or `FORMULA` field in each spectrum), add `--eval` to also report top-k accuracy, saved as `results_eval.csv`. `msfiddle validate --test_data your.mgf` checks a file without the models and says why any spectrum would be skipped; if accuracy is lower than expected, see [troubleshooting](https://msfiddle.readthedocs.io/en/latest/troubleshooting.html).
 
 The [documentation](https://msfiddle.readthedocs.io) covers the Python API, BUDDY and SIRIUS integration, custom checkpoints, all output columns, and [benchmark results](https://msfiddle.readthedocs.io/en/latest/benchmarks.html).
 

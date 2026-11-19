@@ -1,0 +1,59 @@
+name: Low accuracy
+description: msfiddle finds the right formula less often than expected
+labels: ["accuracy"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please work through the [troubleshooting guide](https://msfiddle.readthedocs.io/en/latest/troubleshooting.html) first. Nothing below asks for your spectra; share them only if you want to.
+  - type: input
+    id: version
+    attributes:
+      label: msfiddle version
+      description: Output of `python -c "import msfiddle; print(msfiddle.__version__)"`
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Output of `msfiddle paths`, plus your OS, Python and PyTorch versions, and CPU or GPU.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: The full `msfiddle predict` command, or the Python call. Say if you changed a config or used your own checkpoints.
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Data
+      description: Instrument and model, ionization mode and adducts, how collision energy is written in your MGF (e.g. `35`, `35 nce`), and where the true formulas come from (SMILES or FORMULA field).
+    validations:
+      required: true
+  - type: textarea
+    id: validate
+    attributes:
+      label: Validation summary
+      description: Output of `msfiddle validate --test_data <file> --instrument_type <type>`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: eval
+    attributes:
+      label: Accuracy and coverage
+      description: What `--eval_details` printed (the top-k table and the coverage counts), and `<result>_eval_groups.csv` if you can share it.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected accuracy
+      description: What you expected and why (a benchmark, another tool, an earlier msfiddle version).
