@@ -132,7 +132,7 @@ esac
 run_instrument() {
     case $1 in
         qtof)
-            pipeline qtof "$DEVICE_QTOF" "" agilent nist20 nist23 mona waters gnps ;;
+            pipeline qtof "$DEVICE_QTOF" "--amp" agilent nist20 nist23 mona waters gnps ;;
         orbitrap)
             pipeline orbitrap "$DEVICE_ORBITRAP" "--amp" nist20 nist23 mona gnps ;;
         timstof)
