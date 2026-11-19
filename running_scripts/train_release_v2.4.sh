@@ -147,14 +147,14 @@ status=0
 jobs=()
 for inst in $INSTRUMENTS; do
     if [ "$PARALLEL" = 1 ]; then
-        run_instrument "$inst" > "${inst}_$TAG.log" 2>&1 &
+        run_instrument "$inst" >> "${inst}_$TAG.log" 2>&1 &
         jobs+=("$inst:$!")
     else
         echo "$(date) $inst: started, see ${inst}_$TAG.log"
         # As a job, so set -e still stops the pipeline at a failed step (it
         # is ignored inside a function called before ||); a failure does not
         # stop the other instruments
-        run_instrument "$inst" > "${inst}_$TAG.log" 2>&1 &
+        run_instrument "$inst" >> "${inst}_$TAG.log" 2>&1 &
         wait $! || { echo "$inst pipeline failed; see ${inst}_$TAG.log"; status=1; }
         echo "$(date) $inst: done"
     fi
