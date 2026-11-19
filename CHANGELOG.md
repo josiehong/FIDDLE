@@ -11,11 +11,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `msfiddle validate --test_data <mgf> --instrument_type <type>` checks every spectrum against the model's encoding without loading or downloading checkpoints, prints the counts by rejection reason, and with `--report_path` saves each spectrum's status, reason and message as CSV ([#12](https://github.com/JosieHong/FIDDLE/issues/12)). `predict` runs the same checks and skips exactly the rejected spectra; in verbose mode it prints the counts by reason. `msfiddle.validate_mgf` returns the report as a DataFrame.
 - `predict --eval_details` saves one row per spectrum (true formula, top-1 prediction, rank of the true formula, top-k correctness, precursor m/z, adduct, collision energy, peak count) to `<result>_eval_details.csv` and accuracy by precursor m/z, adduct, peak count and NCE to `<result>_eval_groups.csv`, and prints the evaluation coverage ([#13](https://github.com/JosieHong/FIDDLE/issues/13)). `--eval` output is unchanged.
 - A troubleshooting page for low accuracy in the documentation, with a step-by-step reproduction of the CASMI 2016 benchmark, and a GitHub issue form for low-accuracy reports ([#14](https://github.com/JosieHong/FIDDLE/issues/14)).
+- `scripts/download_benchmarks.py` downloads the benchmark data from their original hosts: CASMI 2016 and EMBL-MCF 2.0 from MoNA, looking up the current export in its catalog, and CASMI 2017 from casmi-contest.org. It records the URL, size and SHA-256 of each file in `data/benchmark/manifest.json`, since MoNA re-exports its libraries, and warns when a file differs from the one the documented results were computed from.
+
+### Changed
+
+- The benchmarks are split in two. `experiments_test_benchmark.sh` downloads the data and reports all compounds; it reads no training data, so anyone can run it, and `--fiddle_only` runs FIDDLE alone, without BUDDY and SIRIUS. `experiments_test_benchmark_unseen.sh` reports the compounds absent from the training and validation data, which it needs as MGF files, and runs where the models were trained; it draws the documentation's figure, all compounds above unseen ones. The figure names the methods as the paper does (FIDDLE w. BUDDY, FIDDLE w. BUDDY & SIRIUS) and labels each bar with its value.
 
 ### Fixed
 
 - `predict` and `--eval` read MGF files with pyteomics' indexed reader, which drops spectra without a `TITLE` and all but the last of a repeated `TITLE` without saying so. They now read every spectrum, and `validate` reports those as `missing_metadata` and `duplicate_id`; the spectra predicted and evaluated are the same as before.
 - A non-numeric `PRECURSOR_MZ` stopped `predict` with an error; that spectrum is now skipped as `invalid_precursor_mz`.
+- `scripts/run_buddy_sirius.py` read the MGF file with the same indexed reader.
 - `fiddle_tcn_casmi.yml` set `use_simulated_precursor_mz: True`, so CASMI 2017 was predicted from a precursor m/z drawn at random around the true molecule's m/z instead of the measured one: it gave FIDDLE information from the answer that BUDDY and SIRIUS did not get, and changed with every conversion of the data. It now uses the measured `PRECURSOR_MZ`, like the other benchmarks; FIDDLE's CASMI 2017 top-1 is 90.0% with it.
 
 - The demo spectra (`msfiddle/demo/input_msms.mgf`, from EMBL-MCF 2.0) give their collision energy as NCE (`50 nce`). They had a bare `50.0`, which is read as eV and turned into an NCE several times too high.

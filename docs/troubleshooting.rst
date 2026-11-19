@@ -92,43 +92,42 @@ retraining worth considering.
 Reproducing a benchmark
 -----------------------
 
-This reproduces FIDDLE alone on CASMI 2016, the top-left bars of the
-:doc:`benchmarks` figure (502 spectra). Run it from a clone of the repository
-with the version of msfiddle you want to check.
+This reproduces FIDDLE alone on the three benchmarks, all compounds, which
+needs nothing but msfiddle. The benchmark scripts are in the repository, so
+clone it at the tag of the release you want to check and install it from the
+clone:
 
-1. Record the environment:
+.. code-block:: bash
 
-   .. code-block:: bash
+   git clone --branch v<release> https://github.com/JosieHong/FIDDLE.git
+   cd FIDDLE
+   pip install -e .
+   msfiddle download
+   msfiddle paths
 
-      python -c "import msfiddle; print(msfiddle.__version__)"
-      msfiddle paths
+``msfiddle paths`` shows the checkpoint directory, named after the model
+release (``v2.3.0`` for msfiddle 2.3.x). Then run:
 
-   ``msfiddle paths`` shows the checkpoint directory, named after the model
-   release (``v2.3.0`` for msfiddle 2.3.x). Download the models with
-   ``msfiddle download`` if they are missing.
+.. code-block:: bash
 
-2. Put the raw files in ``data/benchmark/`` as listed in :doc:`benchmarks`.
-   The conversion script reads both CASMI sets, so CASMI 2017 is needed too.
+   bash running_scripts/experiments_test_benchmark.sh --fiddle_only
 
-3. Convert them to MGF. This writes ``data/casmi2016.mgf`` and
-   ``data/casmi2017.mgf``:
+It downloads the benchmark data, converts it to MGF and predicts with
+``--eval``. The top-1, top-3 and top-5 accuracy per spectrum in
+``result/fiddle_casmi2016_eval.csv``, ``result/fiddle_casmi2017_eval.csv``
+and ``result/fiddle_embl_eval.csv`` should match the FIDDLE rows of the table
+in :doc:`benchmarks`; the script warns when a host now serves different data.
+To check a single file by hand, ``msfiddle validate`` and
+``msfiddle predict --eval_details`` work on ``data/casmi2016.mgf`` as on your
+own data:
 
-   .. code-block:: bash
+.. code-block:: bash
 
-      python scripts/casmi2mgf.py --data_config_path ./msfiddle/config/fiddle_tcn_casmi.yml
+   msfiddle validate --test_data data/casmi2016.mgf --instrument_type orbitrap
+   msfiddle predict --test_data data/casmi2016.mgf --instrument_type orbitrap \
+                    --result_path result/fiddle_casmi2016.csv --eval_details
 
-4. Validate, predict and evaluate with the Orbitrap models and their release
-   config:
-
-   .. code-block:: bash
-
-      msfiddle validate --test_data data/casmi2016.mgf --instrument_type orbitrap
-      msfiddle predict --test_data data/casmi2016.mgf --instrument_type orbitrap \
-                       --result_path result/fiddle_casmi2016.csv --eval_details
-
-The top-1, top-3 and top-5 accuracy per spectrum in
-``result/fiddle_casmi2016_eval.csv`` should match the figure. ``running_scripts/experiments_test_benchmark.sh`` runs all
-three benchmarks, with BUDDY and SIRIUS and on unseen compounds.
+:doc:`benchmarks` also describes running BUDDY and SIRIUS.
 
 Reporting a problem
 -------------------

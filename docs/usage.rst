@@ -214,8 +214,8 @@ msfiddle can rank candidate formulas from the
 and the `SIRIUS command-line interface <https://v6.docs.sirius-ms.io/cli/>`_
 together with its own.
 Neither tool comes with msfiddle; install them separately. The steps below run
-both on ``data.mgf`` and compare FIDDLE alone, FIDDLE + BUDDY and
-FIDDLE + BUDDY + SIRIUS.
+both on ``data.mgf`` and compare FIDDLE alone, FIDDLE w. BUDDY and
+FIDDLE w. BUDDY & SIRIUS.
 
 **1. Prepare the input for the tools.** Both tools read the precursor m/z from
 ``PEPMASS``, the charge from ``CHARGE`` and the adduct from ``ION``. SIRIUS
