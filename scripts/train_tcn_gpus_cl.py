@@ -330,13 +330,30 @@ if __name__ == "__main__":
         "--amp",
         action="store_true",
         default=False,
-        help="Mixed-precision training (autocast fp16 + GradScaler); CUDA only",
+        help="Mixed-precision training (autocast fp16 + GradScaler); CUDA only. "
+        "On an H100 it was 6x slower than the default TF32 for this model",
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=0,
+        help="Pairs per step, overriding the config's train.batch_size",
+    )
+    parser.add_argument(
+        "--grad_accum_steps",
+        type=int,
+        default=0,
+        help="Steps per optimizer step, overriding the config's train.grad_accum_steps",
     )
     args = parser.parse_args()
 
     init_random_seed(args.seed)
     config = load_config(args.config_path)
     print("Load the model & training configuration from {}".format(args.config_path))
+    if args.batch_size:
+        config["train"]["batch_size"] = args.batch_size
+    if args.grad_accum_steps:
+        config["train"]["grad_accum_steps"] = args.grad_accum_steps
 
     # Input size is fixed (padded spectra, constant batch), the exact case
     # cuDNN's algorithm autotuner exists for.

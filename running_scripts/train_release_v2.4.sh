@@ -16,7 +16,10 @@
 # TIMSTOF_TRANSFER_FROM (a Q-TOF TCN to fine-tune from) and
 # CASMI2026_MAX_PER_COMPOUND (fewer timsTOF spectra, to save RAM),
 # SIMULATE_PPM_QTOF / SIMULATE_PPM_ORBITRAP (0: keep the library values),
-# SIMULATE_DATASETS (default "nist20 nist23") and SIMULATION_SEED.
+# SIMULATE_DATASETS (default "nist20 nist23"), SIMULATION_SEED, and
+# TCN_BATCH_SIZE / TCN_GRAD_ACCUM (the TCN's batch, default the config's).
+# The TCNs train in fp32 with TF32 matrix multiplies: on an H100, fp16 AMP
+# was 6x slower for this model.
 # Each TCN keeps its training data in RAM. Update this file only through git
 # while it runs: bash reads it as it goes.
 set -e
@@ -37,6 +40,10 @@ SIMULATE_PPM_QTOF=${SIMULATE_PPM_QTOF:-10}
 SIMULATE_PPM_ORBITRAP=${SIMULATE_PPM_ORBITRAP:-5}
 SIMULATE_DATASETS=${SIMULATE_DATASETS:-"nist20 nist23"}
 SIMULATION_SEED=${SIMULATION_SEED:-0}
+# TCN batch: empty keeps the config's (256 pairs x 2 accumulated, for 11 GB
+# GPUs); 512 x 1 is the same effective batch in one step on a large GPU
+TCN_BATCH_SIZE=${TCN_BATCH_SIZE:-}
+TCN_GRAD_ACCUM=${TCN_GRAD_ACCUM:-}
 PKL_DIR=./data/cl_pkl_$DATA_TAG
 TAG=${DATA_TAG}_muon
 
@@ -74,12 +81,15 @@ pipeline() {
         elif [ -n "$TRANSFER_FROM" ]; then
             resume=(--resume_path "$TRANSFER_FROM" --transfer)
         fi
+        local batch=()
+        [ -n "$TCN_BATCH_SIZE" ] && batch+=(--batch_size "$TCN_BATCH_SIZE")
+        [ -n "$TCN_GRAD_ACCUM" ] && batch+=(--grad_accum_steps "$TCN_GRAD_ACCUM")
         local n_gpus
         n_gpus=$(echo $devices | wc -w)
         CUDA_VISIBLE_DEVICES=${devices// /,} python -u scripts/train_tcn_gpus_cl.py \
             --train_data "${data}_train.pkl" --val_data "${data}_val.pkl" \
             --config_path "$config" --checkpoint_path "$tcn" --result_path "$tcn_done" \
-            "${resume[@]}" $tcn_extra --device $(seq -s' ' 0 $((n_gpus - 1)))
+            "${resume[@]}" "${batch[@]}" $tcn_extra --device $(seq -s' ' 0 $((n_gpus - 1)))
         # Drop rescore pairs and rescorers built on an earlier TCN
         rm -f "$rescore_dir/${inst}_${split}_rescore_"*.pkl "${rescore%.pt}"*.pt
     fi
@@ -132,13 +142,13 @@ esac
 run_instrument() {
     case $1 in
         qtof)
-            pipeline qtof "$DEVICE_QTOF" "--amp" agilent nist20 nist23 mona waters gnps ;;
+            pipeline qtof "$DEVICE_QTOF" "" agilent nist20 nist23 mona waters gnps ;;
         orbitrap)
-            pipeline orbitrap "$DEVICE_ORBITRAP" "--amp" nist20 nist23 mona gnps ;;
+            pipeline orbitrap "$DEVICE_ORBITRAP" "" nist20 nist23 mona gnps ;;
         timstof)
             SPLIT=scaffold TRANSFER_FROM=$TIMSTOF_TRANSFER_FROM \
             PREP_EXTRA="--casmi_parquet $CASMI2026_PARQUET --holdout_lib enveda-np-examples --max_spectra_per_compound $CASMI2026_MAX_PER_COMPOUND" \
-            pipeline timstof "$DEVICE_TIMSTOF" "--amp" casmi2026 ;;
+            pipeline timstof "$DEVICE_TIMSTOF" "" casmi2026 ;;
         *) echo "Unknown instrument $1"; return 1 ;;
     esac
 }
