@@ -135,7 +135,7 @@ PY
         --device 0 --batch_size 64 --num_workers "$NUM_WORKERS" --eval
 }
 
-mkdir -p "$PKL_DIR" ./result
+mkdir -p "$PKL_DIR" ./result ./check_point
 case " $INSTRUMENTS " in
     *" timstof "*) [ -s "$CASMI2026_PARQUET" ] || { echo "Missing $CASMI2026_PARQUET"; exit 1; } ;;
 esac
