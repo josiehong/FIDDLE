@@ -6,7 +6,7 @@
 # documentation's figure: all compounds above, unseen compounds below.
 #
 # Which compounds are unseen comes from MANIFEST (default the release's,
-# benchmarks/unseen_v2.4.0.csv), so the script runs anywhere. Where the
+# benchmark/unseen_v2.4.0.csv), so the script runs anywhere. Where the
 # training data are (MGF files in data/cl_pkl_<DATA_TAG>/, default 112026),
 # it splits by them instead and rewrites the manifest; do that for each new
 # release, with DATA_TAG and MANIFEST set to its data and version.
@@ -14,7 +14,7 @@ set -e
 source running_scripts/compare.sh
 
 DATA=./data/cl_pkl_${DATA_TAG:-112026}
-MANIFEST=${MANIFEST:-./benchmarks/unseen_v2.4.0.csv}
+MANIFEST=${MANIFEST:-./benchmark/unseen_v2.4.0.csv}
 for f in ./data/casmi2016.mgf ./data/casmi2017.mgf ./data/embl.mgf; do
     [ -f "$f" ] || { echo "$f is missing; run experiments_test_benchmark.sh first"; exit 1; }
 done

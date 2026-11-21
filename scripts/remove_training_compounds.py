@@ -18,10 +18,10 @@ Usage:
     python scripts/remove_training_compounds.py \\
         --train_data ./data/cl_pkl_112026/qtof_maxmin_train.mgf \\
                      ./data/cl_pkl_112026/qtof_maxmin_val.mgf \\
-        --mgf ./data/casmi2017.mgf --manifest_out ./benchmarks/unseen_v2.4.0.csv
+        --mgf ./data/casmi2017.mgf --manifest_out ./benchmark/unseen_v2.4.0.csv
     # anywhere: split by the manifest
     python scripts/remove_training_compounds.py \\
-        --manifest ./benchmarks/unseen_v2.4.0.csv --mgf ./data/casmi2017.mgf
+        --manifest ./benchmark/unseen_v2.4.0.csv --mgf ./data/casmi2017.mgf
 """
 
 import argparse

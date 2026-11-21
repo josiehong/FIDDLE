@@ -119,7 +119,7 @@ can differ.
 It keeps the spectra whose compounds are absent from the models' training and
 validation data, runs the same methods on them, and draws the figure above.
 Which compounds those are comes from the release's manifest,
-``benchmarks/unseen_v<release>.csv``, which lists every benchmark spectrum and
+``benchmark/unseen_v<release>.csv``, which lists every benchmark spectrum and
 whether its compound is unseen, so the training data are not needed. It warns
 when a downloaded benchmark differs from the spectra the manifest lists.
 
