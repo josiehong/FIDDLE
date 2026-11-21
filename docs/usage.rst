@@ -16,8 +16,8 @@ Alternatively, install the optional inference extra:
 
    pip install "msfiddle[inference]"
 
-Downloading Pre-trained Models
--------------------------------
+Downloading the models
+----------------------
 
 Model weights must be downloaded before running predictions:
 
@@ -57,7 +57,7 @@ source checkout without installing the package. ``msfiddle-download-models``
 and ``msfiddle-checkpoint-paths`` remain as aliases for ``download`` and
 ``paths``.
 
-Checking the Input
+Checking the input
 ------------------
 
 ``validate`` checks each spectrum against an instrument's encoding, the same
@@ -87,13 +87,14 @@ exactly the rejected spectra. The reasons are:
      - another spectrum later in the file has the same ``TITLE``; only the
        last one is predicted
    * - ``invalid_precursor_mz``
-     - the precursor m/z is not a finite number
+     - the precursor m/z is not a positive number
    * - ``unsupported_adduct``
      - the precursor type is not one the model encodes
    * - ``insufficient_peaks``
      - fewer than 5 peaks
    * - ``invalid_peaks``
-     - non-finite or mismatched m/z and intensity values
+     - non-finite or negative m/z values, or m/z and intensity values that do
+       not match
    * - ``peak_mz_out_of_range``
      - the largest peak m/z is below 50 or above the encoder's ``max_mz``
    * - ``stepped_collision_energy``
@@ -110,8 +111,8 @@ repeated ``TITLE``). ``validate`` exits with status 1 when the file cannot be
 read or no spectrum is usable. ``msfiddle.validate_mgf`` returns the report as
 a DataFrame.
 
-Running Predictions
---------------------
+Running predictions
+-------------------
 
 **Demo data:**
 
@@ -154,7 +155,7 @@ checkpoints record a hash of that TCN's weights, and prediction warns when
 config control which candidate masses refinement considers.
 
 - ``mass_tolerance`` is the precursor mass error allowed, in ppm of the
-  precursor m/z (5 for Orbitrap, 10 for Q-TOF). It is converted to the neutral
+  precursor m/z (5 for Orbitrap, 10 for Q-TOF and timsTOF). It is converted to the neutral
   mass of each adduct.
 - ``isotope_errors`` lists 13C isotope offsets to try. With ``[0, 1]``,
   msfiddle also refines as if the precursor m/z were read from the M+1 isotope
@@ -162,7 +163,7 @@ config control which candidate masses refinement considers.
   candidates found that way. The results then gain ``Isotope Shift (k)``
   columns. The default ``[0]`` searches the measured mass only.
 
-Evaluating Predictions
+Evaluating predictions
 ----------------------
 
 If the true formulas are known, add ``--eval`` to ``predict``. After saving the
@@ -207,7 +208,7 @@ from a formula that refinement never generated.
 :doc:`troubleshooting` describes what to check when the accuracy is low.
 
 Integration with BUDDY and SIRIUS
------------------------------------
+---------------------------------
 
 msfiddle can rank candidate formulas from the
 `BUDDY/msbuddy command-line tool <https://msbuddy.readthedocs.io/en/latest/cmdapi.html>`_

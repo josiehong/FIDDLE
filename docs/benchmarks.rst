@@ -38,8 +38,8 @@ Some benchmark compounds are also in the training libraries, so each result
 is given twice: on all compounds, and on unseen compounds, which are absent
 from the models' training and validation data. Compounds are matched on the
 first block of the InChIKey, so a stereoisomer of a training compound counts
-as seen. The unseen sets of CASMI 2017 and EMBL-MCF 2.0 are small, so one
-spectrum moves their accuracy by several points.
+as seen. The unseen sets are small (36 to 66 spectra), so one spectrum moves
+their accuracy by 1.5 to 3 points.
 
 .. figure:: _static/benchmarks.png
    :alt: Top-1, top-3 and top-5 accuracy of FIDDLE alone, with BUDDY, and

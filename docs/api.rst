@@ -1,4 +1,4 @@
-API Reference
+API reference
 =============
 
 Prediction API
@@ -32,7 +32,7 @@ Evaluation
 
 .. autofunction:: msfiddle.evaluate.coverage
 
-Molecular Utilities
+Molecular utilities
 -------------------
 
 .. automodule:: msfiddle.utils.mol_utils
@@ -40,7 +40,7 @@ Molecular Utilities
    :show-inheritance:
    :exclude-members: ATOMS_WEIGHT, ATOMS_VALENCE, ATOMS_INDEX, ATOMS_INDEX_re
 
-MS/MS Utilities
+MS/MS utilities
 ---------------
 
 .. automodule:: msfiddle.utils.msms_utils
@@ -48,7 +48,7 @@ MS/MS Utilities
    :show-inheritance:
    :exclude-members: MSLEVEL_MAP, mgf_key_order
 
-Formula Refinement
+Formula refinement
 ------------------
 
 .. automodule:: msfiddle.utils.refine_utils
