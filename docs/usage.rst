@@ -6,15 +6,18 @@ Installation
 
 .. code-block:: bash
 
-   pip install msfiddle
-
-PyTorch must be installed separately following the
-`official PyTorch installation guide <https://pytorch.org/get-started/locally/>`_.
-Alternatively, install the optional inference extra:
-
-.. code-block:: bash
-
    pip install "msfiddle[inference]"
+
+The ``inference`` extra installs PyTorch, which prediction needs: a CUDA build
+on Linux, a CPU build on macOS and Windows. For another build, such as another
+CUDA version or CPU only on a cluster, install PyTorch first as the
+`PyTorch guide <https://pytorch.org/get-started/locally/>`_ describes and then
+run ``pip install msfiddle``; pip keeps the PyTorch that is already installed.
+Without PyTorch, ``validate``, ``download`` and ``paths`` still work, and
+``predict`` stops with an error that says what to install.
+
+msfiddle needs NumPy 1.x, so use Python 3.8 to 3.12: NumPy 1.x has no
+releases for newer Python versions.
 
 Downloading the models
 ----------------------
