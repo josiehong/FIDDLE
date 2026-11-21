@@ -110,11 +110,18 @@ It runs BUDDY and SIRIUS through ``scripts/run_buddy_sirius.py``, writes
 figure to ``result/benchmarks_all.png``. Results from another SIRIUS version
 can differ.
 
-**Unseen compounds.** ``running_scripts/experiments_test_benchmark_unseen.sh``
-removes the compounds of the models' training and validation data with
-``scripts/remove_training_compounds.py``, runs the same methods on the rest,
-and draws the figure above. It needs the training data, so it can only be run
-where the models were trained.
+**Unseen compounds.** After the all-compounds run:
+
+.. code-block:: bash
+
+   bash running_scripts/experiments_test_benchmark_unseen.sh
+
+It keeps the spectra whose compounds are absent from the models' training and
+validation data, runs the same methods on them, and draws the figure above.
+Which compounds those are comes from the release's manifest,
+``benchmarks/unseen_v<release>.csv``, which lists every benchmark spectrum and
+whether its compound is unseen, so the training data are not needed. It warns
+when a downloaded benchmark differs from the spectra the manifest lists.
 
 The `paper <https://www.nature.com/articles/s41467-025-66060-9>`_ reports the
 full evaluation, including held-out test sets and comparisons with other
