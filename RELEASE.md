@@ -90,3 +90,17 @@ pip install msfiddle==2.3.0
 msfiddle-download-models
 msfiddle --demo --result_path ./output_demo.csv --no_cuda
 ```
+
+## 7. Benchmarks (every minor release)
+
+With the new checkpoints unpacked as `check_point/fiddle_{tcn,rescore}_<instrument>_v<x.y.0>.pt`, and BUDDY and SIRIUS installed (see `docs/benchmarks.rst`):
+
+```bash
+MODEL_TAG=v2.4.0 bash running_scripts/experiments_test_benchmark.sh
+MODEL_TAG=v2.4.0 DATA_TAG=<data tag> MANIFEST=./data/benchmark/unseen_v2.4.0.csv \
+    bash running_scripts/experiments_test_benchmark_unseen.sh
+cp result/benchmarks.png docs/_static/benchmarks.png
+```
+
+Where the training data are (`data/cl_pkl_<data tag>/`), the unseen script also writes the release's manifest of unseen compounds; commit it (`data/benchmark/unseen_v<x.y.0>.csv`) with the figure. The scripts write only to `result/` and `data/`, so running them never changes the documentation.
+

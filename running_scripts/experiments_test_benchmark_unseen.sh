@@ -3,7 +3,8 @@
 # models' training and validation data. Run experiments_test_benchmark.sh
 # first: this script reuses its benchmark MGF files. Run from the repository
 # root. MODEL_TAG selects local checkpoints (see compare.sh). Ends with the
-# documentation's figure: all compounds above, unseen compounds below.
+# figure of the documentation, result/benchmarks.png: all compounds above,
+# unseen compounds below (for a release, copy it to docs/_static/).
 #
 # Which compounds are unseen comes from MANIFEST (default the release's,
 # data/benchmark/unseen_v2.4.0.csv), so the script runs anywhere. Where the
@@ -41,4 +42,4 @@ compare ./data/casmi2017_unseen.mgf qtof casmi2017_unseen --config_path ./msfidd
 compare ./data/embl_unseen.mgf orbitrap embl_unseen
 
 python scripts/plot_benchmarks.py --subsets all unseen \
-    --csv ./result/benchmarks.csv --figure ./docs/_static/benchmarks.png
+    --csv ./result/benchmarks.csv --figure ./result/benchmarks.png

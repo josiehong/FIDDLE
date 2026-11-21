@@ -117,7 +117,8 @@ can differ.
    bash running_scripts/experiments_test_benchmark_unseen.sh
 
 It keeps the spectra whose compounds are absent from the models' training and
-validation data, runs the same methods on them, and draws the figure above.
+validation data, runs the same methods on them, and draws the figure above
+to ``result/benchmarks.png``.
 Which compounds those are comes from the release's manifest,
 ``data/benchmark/unseen_v<release>.csv``, which lists every benchmark spectrum and
 whether its compound is unseen, so the training data are not needed. It warns
