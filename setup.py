@@ -24,14 +24,14 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=[
-        "numpy>=1.20.0,<2.0.0",
+        "numpy>=1.20.0",
         "pandas>=2.0.0",
         "tqdm>=4.60.0",
         "pyyaml>=6.0",
         "scikit-learn>=1.0.0",
         "scipy>=1.8.0",
         "pyarrow>=10.0.0",
-        "rdkit>=2022.03.5",
+        "rdkit>=2022.03.5,!=2026.9.2",  # 2026.9.2 breaks MurckoDecompose ("bad any cast")
         "molmass",
         "pyteomics",
     ],

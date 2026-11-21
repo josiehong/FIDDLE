@@ -65,13 +65,19 @@ def read_manifest(path):
 
 def write_manifest(path, rows, benchmarks):
     """Replace the rows of these benchmarks in the manifest, keeping the others."""
-    kept = [r for r in read_manifest(path) if r["benchmark"] not in benchmarks] if os.path.exists(path) else []
+    kept = (
+        [r for r in read_manifest(path) if r["benchmark"] not in benchmarks]
+        if os.path.exists(path)
+        else []
+    )
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = path + ".part"
     with open(tmp, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=MANIFEST_FIELDS)
         writer.writeheader()
-        writer.writerows(sorted(kept + rows, key=lambda r: (r["benchmark"], r["title"])))
+        writer.writerows(
+            sorted(kept + rows, key=lambda r: (r["benchmark"], r["title"]))
+        )
     os.replace(tmp, path)
 
 
@@ -93,9 +99,13 @@ def split_by_manifest(name, spectra, manifest):
             f"Warning: {name} differs from the manifest: {len(titles - found)} of its "
             f"{len(titles)} spectra are missing and {len(found - titles)} are new"
         )
-    unknown = {k for s in spectra if (k := manifest_key(s)) not in unseen_keys | seen_keys}
+    unknown = {
+        k for s in spectra if (k := manifest_key(s)) not in unseen_keys | seen_keys
+    }
     if unknown:
-        print(f"Warning: {len(unknown)} compounds of {name} are not in the manifest; left out of the unseen set")
+        print(
+            f"Warning: {len(unknown)} compounds of {name} are not in the manifest; left out of the unseen set"
+        )
     return [s for s in spectra if manifest_key(s) in unseen_keys]
 
 
@@ -131,7 +141,9 @@ if __name__ == "__main__":
         name = benchmark_name(path)
         spectra = list(mgf.read(path, use_index=False))
         if args.train_data:
-            unseen = [s for s in spectra if compound_key(s["params"]["smiles"]) not in seen]
+            unseen = [
+                s for s in spectra if compound_key(s["params"]["smiles"]) not in seen
+            ]
             unseen_titles = {s["params"]["title"] for s in unseen}
             rows += [
                 {

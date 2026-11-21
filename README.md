@@ -28,7 +28,7 @@ msfiddle predict --demo --result_path demo.csv        # 21 bundled example spect
 msfiddle predict --test_data spectra.mgf --instrument_type orbitrap --result_path results.csv
 ```
 
-The `inference` extra installs PyTorch. For a particular PyTorch build (another CUDA version, CPU only), install it [from pytorch.org](https://pytorch.org/get-started/locally/) first, then `pip install msfiddle`. msfiddle needs Python 3.8 to 3.12.
+The `inference` extra installs PyTorch. For a particular PyTorch build (another CUDA version, CPU only), install it [from pytorch.org](https://pytorch.org/get-started/locally/) first, then `pip install msfiddle`.
 
 Use `--instrument_type qtof` for Q-TOF data and `--instrument_type timstof` for timsTOF data. Each spectrum needs `TITLE`, `PRECURSOR_MZ`, `PRECURSOR_TYPE` and `COLLISION_ENERGY`. The results list ranked candidates per spectrum in `Refined Formula (0)`, `Refined Formula (1)`, … with their scores in `Rescore (k)`.
 

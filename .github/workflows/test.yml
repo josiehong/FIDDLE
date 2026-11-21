@@ -27,15 +27,21 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
+        python: ['3.10', '3.13']
+        include:
+          # keep NumPy 1.x covered; the other jobs get NumPy 2
+          - os: ubuntu-latest
+            python: '3.10'
+            numpy: '<2'
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: ${{ matrix.python }}
 
       - name: Install package and dependencies
-        run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[inference]" pytest
+        run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[inference]" pytest "numpy${{ matrix.numpy }}"
 
       - name: Run tests
         run: pytest tests/ -v

@@ -16,9 +16,6 @@ run ``pip install msfiddle``; pip keeps the PyTorch that is already installed.
 Without PyTorch, ``validate``, ``download`` and ``paths`` still work, and
 ``predict`` stops with an error that says what to install.
 
-msfiddle needs NumPy 1.x, so use Python 3.8 to 3.12: NumPy 1.x has no
-releases for newer Python versions.
-
 Downloading the models
 ----------------------
 
