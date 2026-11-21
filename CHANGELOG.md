@@ -4,9 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.3.1] - 2026-11-18
+## [2.4.0] - 2026-11-21
 
-Uses the v2.3.0 checkpoints, so models downloaded for 2.3.0 keep working.
+New Q-TOF, Orbitrap and timsTOF models, retrained as the paper describes: the theoretical precursor m/z of NIST20 and NIST23 is replaced by a simulated measured one, with the electron mass fixed (see Fixed), on a fresh data build (`running_scripts/train_release_v2.4.sh`). `msfiddle-download-models` installs them from the v2.4.0 release into `~/.msfiddle/check_point/v2.4.0`. Top-1 on the held-out test sets, per spectrum / per compound: Q-TOF 78.4% / 84.0% (12,613 spectra), Orbitrap 83.3% / 83.0% (121,793) and timsTOF 66.4% / 68.9% (97,346, split by scaffold). These test sets differ from v2.3.0's, so the numbers do not compare with its results. On the public benchmarks, with the same input for both, FIDDLE's top-1 is 92.4% on CASMI 2016 (91.4% with the v2.3.0 models), 87.5% on CASMI 2017 (90.0%, one spectrum of 40) and 89.6% on EMBL-MCF 2.0 (89.0%); the documentation's benchmark page gives the results with BUDDY and SIRIUS and on unseen compounds.
+
+This release includes the changes prepared for 2.3.1, which was not released.
 
 ### Added
 
@@ -20,7 +22,7 @@ Uses the v2.3.0 checkpoints, so models downloaded for 2.3.0 keep working.
 
 ### Changed
 
-- The benchmarks are split in two. `experiments_test_benchmark.sh` downloads the data and reports all compounds; it reads no training data, so anyone can run it, and `--fiddle_only` runs FIDDLE alone, without BUDDY and SIRIUS. `experiments_test_benchmark_unseen.sh` reports the compounds absent from the training and validation data, which it needs as MGF files, and runs where the models were trained; it draws the documentation's figure, all compounds above unseen ones. The figure names the methods as the paper does (FIDDLE w. BUDDY, FIDDLE w. BUDDY & SIRIUS) and labels each bar with its value.
+- The benchmarks are split in two. `experiments_test_benchmark.sh` downloads the data and reports all compounds; it reads no training data, so anyone can run it, and `--fiddle_only` runs FIDDLE alone, without BUDDY and SIRIUS. `experiments_test_benchmark_unseen.sh` reports the compounds absent from the training and validation data (by the release's manifest; see Added) and draws the documentation's figure, all compounds above unseen ones. The figure names the methods as the paper does (FIDDLE w. BUDDY, FIDDLE w. BUDDY & SIRIUS) and labels each bar with its value.
 - As in the paper, `casmi2mgf.py` gives CASMI 2016 and CASMI 2017 spectra the theoretical m/z plus a Gaussian error with a standard deviation of a third of `--simulate_ppm` (5, the paper's Orbitrap setting) and `--simulate_ppm_casmi2017` (10, its Q-TOF setting), drawn with a fixed `--seed`, and keeps the library value as `LIBRARY_PRECURSOR_MZ` (`msfiddle.utils.msms_utils.simulate_precursor_mz`). Every method gets the simulated value, and each conversion gives the same file. EMBL-MCF 2.0 keeps its library value, which is computed too (`embl2mgf.py --simulate_ppm` simulates it).
 - EMBL-MCF 2.0 is predicted with the Orbitrap release config instead of `fiddle_tcn_embl.yml`'s 50 ppm window. Its larger precursor mass errors, the reason for that window, came from the electron mass error: EMBL's compounds are smaller, and the error was 549 ppm divided by the m/z.
 - `filter_spec` draws the `simulated_precursor_mz` it writes with a generator seeded per spectrum instead of numpy's global state, so preprocessing gives the same file every time.
