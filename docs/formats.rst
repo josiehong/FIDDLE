@@ -151,7 +151,8 @@ SIRIUS
 
 * a directory written by ``sirius summaries``, containing
   ``formula_identifications`` files;
-* one ``formula_identifications`` file, as TSV, CSV or XLSX; or
+* one ``formula_identifications`` file, as TSV, CSV or XLSX (which needs
+  ``pip install openpyxl``); or
 * an msfiddle-normalized CSV with the columns below (**deprecated**).
 
 msfiddle reads the identifier, molecular formula, adduct, rank and score

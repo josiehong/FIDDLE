@@ -416,7 +416,7 @@ if __name__ == "__main__":
     valid_set = MS2FDataset(args.val_data, padding_dim=config["model"]["padding_dim"])
     valid_loader = DataLoader(
         valid_set,
-        batch_size=int(config["train"]["batch_size"] / 4),
+        batch_size=max(1, config["train"]["batch_size"] // 4),
         shuffle=False,
         num_workers=config["train"]["num_workers"],
         drop_last=True,

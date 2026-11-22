@@ -217,8 +217,7 @@ def _filter_spec_single(spectrum, config, type2charge):
     if simulate_ppm:
         spectrum["params"]["library_precursor_mz"] = spectrum["params"]["precursor_mz"]
         simulated = simulate_experimental_mz(theo_mz, simulate_ppm, rng)
-        spectrum["params"]["precursor_mz"] = round(simulated, 6)
-        spectrum["params"]["ppm"] = abs(simulated - theo_mz) / theo_mz * 10**6
+        _replace_precursor_mz(spectrum["params"], round(simulated, 6), theo_mz)
     spectrum["params"]["charge"] = type2charge[precursor_type]  # add charge
     return spectrum, None
 
@@ -354,6 +353,19 @@ def simulate_experimental_mz(theoretical_mz, relative_mass_tolerance_ppm, rng=No
     return experimental_mz
 
 
+def _replace_precursor_mz(params, mz, theo_mz):
+    """Set a spectrum's precursor m/z, keeping the fields derived from it in
+    step: ppm (the error against the theoretical m/z) and PEPMASS, whose
+    intensity, if any, is kept."""
+    params["precursor_mz"] = mz
+    params["ppm"] = abs(mz - theo_mz) / theo_mz * 10**6
+    pepmass = params.get("pepmass")
+    if isinstance(pepmass, (tuple, list)):
+        params["pepmass"] = (mz, *pepmass[1:])
+    elif pepmass is not None:
+        params["pepmass"] = mz
+
+
 def simulate_precursor_mz(spectra, ppm, seed=0):
     """Give spectra whose library precursor m/z is computed from the structure
     a realistic one: the theoretical m/z shifted by a Gaussian error with a
@@ -382,7 +394,9 @@ def simulate_precursor_mz(spectra, ppm, seed=0):
             mass = monoisotopic_mass_calculator(mol, mode="mol")
         theo = precursor_mz_calculator(params["precursor_type"], mass)
         params["library_precursor_mz"] = params["precursor_mz"]
-        params["precursor_mz"] = round(simulate_experimental_mz(theo, ppm, rng), 6)
+        _replace_precursor_mz(
+            params, round(simulate_experimental_mz(theo, ppm, rng), 6), theo
+        )
         # filter_spec's unseeded draw would be a second, conflicting value
         params.pop("simulated_precursor_mz", None)
         out.append(spectrum)

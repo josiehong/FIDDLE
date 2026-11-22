@@ -129,7 +129,14 @@ def _resolve_path(path: str | Path, label: str) -> Path:
 def _read_table(path: Path, dtype=None) -> pd.DataFrame:
     suffix = path.suffix.lower()
     if suffix in {".xlsx", ".xls"}:
-        return _clean_columns(pd.read_excel(path, dtype=dtype))
+        try:
+            return _clean_columns(pd.read_excel(path, dtype=dtype))
+        except ImportError as e:
+            raise ImportError(
+                f"Reading {path.name} needs an Excel reader, which msfiddle does "
+                f"not install: {e}. Install it (pip install openpyxl for XLSX) "
+                "or save the file as TSV or CSV."
+            ) from e
     if suffix == ".tsv":
         return _clean_columns(pd.read_csv(path, sep="\t", dtype=dtype))
     if suffix == ".csv":

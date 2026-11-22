@@ -141,16 +141,13 @@ if __name__ == "__main__":
         name = benchmark_name(path)
         spectra = list(mgf.read(path, use_index=False))
         if args.train_data:
-            unseen = [
-                s for s in spectra if compound_key(s["params"]["smiles"]) not in seen
-            ]
-            unseen_titles = {s["params"]["title"] for s in unseen}
+            unseen = [s for s in spectra if manifest_key(s) not in seen]
             rows += [
                 {
                     "benchmark": name,
                     "title": s["params"]["title"],
                     "inchikey_block": manifest_key(s),
-                    "unseen": "1" if s["params"]["title"] in unseen_titles else "0",
+                    "unseen": "0" if manifest_key(s) in seen else "1",
                 }
                 for s in spectra
             ]

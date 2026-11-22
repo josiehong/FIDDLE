@@ -48,7 +48,12 @@ class Source:
         self.name = name
 
     def exists(self):
-        return os.path.exists(self.path) or bool(self.zip and os.path.exists(self.zip))
+        if os.path.exists(self.path):
+            return True
+        if not (self.zip and os.path.exists(self.zip)):
+            return False
+        with zipfile.ZipFile(self.zip) as z:
+            return self.name in z.namelist()
 
     def binary(self):
         if os.path.exists(self.path):
@@ -257,9 +262,11 @@ if __name__ == "__main__":
                 formatters={f"share_{b}": "{:.1%}".format for b in BAND_NAMES},
             )
         )
-    computed = table.loc[
-        table.get("looks_computed", False) == True, "library"
-    ]  # noqa: E712
+    # Libraries without a valid comparison have no looks_computed value
+    if "looks_computed" in table:
+        computed = table.loc[table["looks_computed"] == True, "library"]  # noqa: E712
+    else:
+        computed = []
     if len(computed):
         print(
             "\nPrecursor m/z looks computed (most spectra within 0.2 ppm of the "

@@ -32,6 +32,13 @@ This release includes the changes prepared for 2.3.1, which was not released.
 ### Fixed
 
 - RDKit 2026.9.2 fails in `MurckoDecompose` ("bad any cast"), which the timsTOF scaffold split uses; `setup.py` excludes that version.
+- `experiments_test_benchmark_unseen.sh` takes `--fiddle_only`; after a FIDDLE-only run it failed reading the BUDDY and SIRIUS results. It now splits by the release's manifest even where the training data are; `--rebuild_manifest` splits by the training data and rewrites the manifest.
+- `remove_training_compounds.py` marked manifest rows unseen by title, so a training compound sharing a title with an unseen one was marked unseen too. The v2.4.0 manifest has no shared titles and is unchanged.
+- The simulated precursor m/z of the EMBL and CASMI conversions left `ppm` and `PEPMASS` at the library values.
+- Reading SIRIUS results from XLSX without `openpyxl` installed now says what to install.
+- `train_release_v2.4.sh` reused checkpoints trained on another `SPLIT` with the same `DATA_TAG`; it now stops.
+- `train_tcn_gpus_cl.py --batch_size` below 4 gave a validation batch of 0.
+- `check_precursor_origin.py` crashed on a zip without the requested file and on a library with no valid mass comparison.
 - `precursor_mz_calculator` and `mass_calculator` left out the electron mass: an `[M+H]+` ion was given a hydrogen atom (1.007825 Da) instead of a proton (1.007276 Da), so every theoretical precursor m/z, and the neutral mass refinement searches around, was 0.55 mDa off (about 1.8 ppm at m/z 300; beyond the 5 ppm Orbitrap window below about m/z 110). This affected the refinement window, the ppm filters of preprocessing, the simulated precursor m/z and `check_precursor_error.py`, and benchmark and preprocessing results change with the fix. Data preprocessed before it carries the shifted `ppm` and `simulated_precursor_mz` values. With realistic precursor mass error, the offset pushed the true formula out of the Orbitrap window often: with the same models and input, the fix raises FIDDLE's top-1 from 83.7% to 91.4% on CASMI 2016, from 68.3% to 82.5% on its unseen compounds, and from 73.4% to 88.3% on EMBL-MCF 2.0.
 - `predict` and `--eval` read MGF files with pyteomics' indexed reader, which drops spectra without a `TITLE` and all but the last of a repeated `TITLE` without saying so. They now read every spectrum, and `validate` reports those as `missing_metadata` and `duplicate_id`; the spectra predicted and evaluated are the same as before.
 - A non-numeric `PRECURSOR_MZ` stopped `predict` with an error, as did a zero one; such spectra, and negative ones, are now skipped as `invalid_precursor_mz`. A peak with a negative m/z was binned among the highest m/z; such spectra are skipped as `invalid_peaks`.

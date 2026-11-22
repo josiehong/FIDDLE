@@ -61,6 +61,15 @@ pipeline() {
     local rescore_dir=./data/rescore_$TAG
     local gpu=${devices%% *}
 
+    # The checkpoint and result names leave out the split: record it, and
+    # refuse to reuse a run trained on another split
+    local split_mark=${tcn%.pt}.split
+    if [ -s "$split_mark" ] && [ "$(cat "$split_mark")" != "$split" ]; then
+        echo "$tcn was trained on the $(cat "$split_mark") split, not $split; set another DATA_TAG"
+        return 1
+    fi
+    echo "$split" > "$split_mark"
+
     # 1. Data (train_pairs.pkl is written last)
     if [ ! -s "${data}_train_pairs.pkl" ]; then
         local simulate_var=SIMULATE_PPM_$(echo "$inst" | tr '[:lower:]' '[:upper:]')
