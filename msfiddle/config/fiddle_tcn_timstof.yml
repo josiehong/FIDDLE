@@ -38,7 +38,7 @@ encoding:
   resolution: 0.2
   max_mz: 1500
   max_atom_num: 300
-  use_simulated_precursor_mz: False # train and predict on PRECURSOR_MZ: measured, or simulated for NIST20/23 (prepare_msms.py --simulate_ppm)
+  use_simulated_precursor_mz: False # train and predict on PRECURSOR_MZ, the measured value
   # timsTOF libraries (and the CASMI 2026 test set) also hold spectra merged
   # over several collision energies ('20,40,60' eV). 'mean' encodes them at
   # the mean energy; 'drop' (the default elsewhere) skips them.

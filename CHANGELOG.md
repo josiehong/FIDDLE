@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The precursor m/z simulation for NIST20 and NIST23 is set in the configs (`simulate_precursor_ppm` in their sections: 10 ppm for Q-TOF, 5 for Orbitrap), so every data build simulates them: `prepare_msms.py` without flags, `train_release_v2.4.sh`, and the NIST23 hold-out (`prepare_msms_nist23.py`), which did not simulate before. `prepare_msms.py --simulate_ppm` overrides the tolerance (0 keeps the library values); `--simulate_datasets` and the release script's `SIMULATE_PPM_*` and `SIMULATE_DATASETS` are gone.
+
 ### Removed
 
 - `train_tcn_gpus_cl.py --amp` (fp16 mixed precision): on an H100 it was 6x slower than the fp32 training with TF32 matrix multiplies that the v2.4.0 models used, and every config fits in memory without it. `experiments_test_nist23.sh` now trains its Orbitrap model in fp32 too.
@@ -13,7 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
-- Training encoded every spectrum with its theoretical precursor m/z, whatever `use_simulated_precursor_mz` said, while prediction reads `PRECURSOR_MZ`. The TCN's mass input, the precursor-peak removal and the eV-to-NCE conversion therefore saw the exact mass in training and a measured one at test time, and the rescorer learned from candidate lists centred on the exact mass. Training now reads the same field as prediction: `PRECURSOR_MZ`, which is measured, or simulated for NIST20 and NIST23 by `prepare_msms.py --simulate_ppm`; or `SIMULATED_PRECURSOR_MZ` with `use_simulated_precursor_mz: True`. The v2.4.0 models were trained before this fix, so the simulation of 2.4.0 reached only the test sets; the `.pkl` files need rebuilding and the models retraining.
+- Training encoded every spectrum with its theoretical precursor m/z, whatever `use_simulated_precursor_mz` said, while prediction reads `PRECURSOR_MZ`. The TCN's mass input, the precursor-peak removal and the eV-to-NCE conversion therefore saw the exact mass in training and a measured one at test time, and the rescorer learned from candidate lists centred on the exact mass. Training now reads the same field as prediction: `PRECURSOR_MZ`, which is measured, or simulated for NIST20 and NIST23; or `SIMULATED_PRECURSOR_MZ` with `use_simulated_precursor_mz: True`. The v2.4.0 models were trained before this fix, so the simulation of 2.4.0 reached only the test sets; the `.pkl` files need rebuilding and the models retraining.
 
 ## [2.4.0] - 2026-11-21
 

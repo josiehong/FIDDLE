@@ -38,8 +38,9 @@ def precursor_mz_key(encoder):
     """The spectrum field the model reads its precursor m/z from, in training
     and in prediction alike: PRECURSOR_MZ, or SIMULATED_PRECURSOR_MZ with the
     encoding's use_simulated_precursor_mz set. PRECURSOR_MZ is the measured
-    value; prepare_msms.py --simulate_ppm replaces it for the libraries whose
-    value is computed from the structure (NIST20 and NIST23)."""
+    value; the data filter replaces it for the libraries whose value is
+    computed from the structure (simulate_precursor_ppm in their config
+    section: NIST20 and NIST23)."""
     if encoder.get("use_simulated_precursor_mz", False):
         return "simulated_precursor_mz"
     return "precursor_mz"

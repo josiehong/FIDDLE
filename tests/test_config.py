@@ -33,3 +33,24 @@ def test_filter_wider_than_refinement_window_warns(tmp_path):
     path = _write(tmp_path, dict(POST_PROCESSING), casmi={"ppm_tolerance": 10})
     with pytest.warns(UserWarning, match="casmi.ppm_tolerance"):
         load_config(path)
+
+
+@pytest.mark.parametrize("instrument, ppm", [("qtof", 10), ("orbitrap", 5)])
+def test_only_nist_precursor_mz_is_simulated(instrument, ppm):
+    # NIST20/23 list a precursor m/z computed from the structure; the paper
+    # simulates it, and every other library keeps its measured value
+    config = load_config(f"./msfiddle/config/fiddle_tcn_{instrument}.yml")
+    simulated = {
+        name: section["simulate_precursor_ppm"]
+        for name, section in config.items()
+        if isinstance(section, dict) and "simulate_precursor_ppm" in section
+    }
+    assert simulated == {f"nist20_{instrument}": ppm, f"nist23_{instrument}": ppm}
+
+
+def test_timstof_precursor_mz_is_measured():
+    config = load_config("./msfiddle/config/fiddle_tcn_timstof.yml")
+    assert not any(
+        isinstance(section, dict) and section.get("simulate_precursor_ppm")
+        for section in config.values()
+    )

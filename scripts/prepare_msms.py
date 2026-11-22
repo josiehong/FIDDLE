@@ -128,19 +128,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--simulate_ppm",
         type=float,
-        default=0,
-        help="Replace the precursor m/z of every spectrum of --simulate_datasets "
-        "by the theoretical m/z plus a Gaussian error with a standard deviation "
-        "of a third of this tolerance in ppm, as the paper does for libraries "
-        "with theoretical precursor m/z (5 for Orbitrap, 10 for Q-TOF). "
-        "0 (default): keep every library value",
-    )
-    parser.add_argument(
-        "--simulate_datasets",
-        nargs="+",
-        default=["nist20", "nist23"],
-        help="Datasets whose precursor m/z is simulated with --simulate_ppm "
-        "(default: nist20 nist23, the training libraries the paper names)",
+        default=None,
+        help="Override simulate_precursor_ppm of the libraries whose config "
+        "section sets it (NIST20 and NIST23: 10 ppm for Q-TOF, 5 for "
+        "Orbitrap). Their precursor m/z is replaced by the theoretical m/z "
+        "plus a Gaussian error with a standard deviation of a third of this "
+        "tolerance, as in the paper; 0 keeps the library values",
     )
     parser.add_argument(
         "--simulation_seed",
@@ -336,7 +329,9 @@ if __name__ == "__main__":
                     ins, config_name
                 )
             )
-            simulate_ppm = args.simulate_ppm if ds in args.simulate_datasets else 0
+            simulate_ppm = config[config_name].get("simulate_precursor_ppm", 0)
+            if simulate_ppm and args.simulate_ppm is not None:
+                simulate_ppm = args.simulate_ppm
             filter_config = {
                 **config[config_name],
                 "simulate_precursor_ppm": simulate_ppm,

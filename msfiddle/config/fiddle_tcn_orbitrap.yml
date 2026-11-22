@@ -17,6 +17,9 @@ nist20_orbitrap:
   max_atom_num: 300
   min_atom_num: 10
   ppm_tolerance: 5
+  # NIST's precursor m/z is computed from the structure: as in the paper,
+  # replace it by the theoretical m/z plus a Gaussian error (sd = ppm / 3)
+  simulate_precursor_ppm: 5
 
 nist23_orbitrap: 
   instrument_type: HCD
@@ -34,6 +37,9 @@ nist23_orbitrap:
   max_atom_num: 300
   min_atom_num: 10
   ppm_tolerance: 5
+  # NIST's precursor m/z is computed from the structure: as in the paper,
+  # replace it by the theoretical m/z plus a Gaussian error (sd = ppm / 3)
+  simulate_precursor_ppm: 5
 
 mona_orbitrap: 
   intrument_type: ['LC-ESI-QFT', 'LC-ESI-Q-Orbitrap']
@@ -68,7 +74,7 @@ encoding:
   max_mz: 1500
   max_peak_num: 512
   max_atom_num: 300
-  use_simulated_precursor_mz: False # train and predict on PRECURSOR_MZ: measured, or simulated for NIST20/23 (prepare_msms.py --simulate_ppm)
+  use_simulated_precursor_mz: False # train and predict on PRECURSOR_MZ: measured, or simulated for NIST20/23 (simulate_precursor_ppm)
 
   precursor_type:
     '[M+H]+': 1
