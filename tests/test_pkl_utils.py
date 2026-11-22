@@ -1,12 +1,16 @@
 import random
 
+import numpy as np
 import pandas as pd
 import pytest
 
+from msfiddle.settings import load_config
 from msfiddle.utils.pkl_utils import (
     generate_ms,
     generate_pairs,
     is_stepped_collision_energy,
+    precursor_mz_key,
+    spec2arr_single,
 )
 
 # Precursor far from the test peaks so isotopic-peak removal leaves them intact.
@@ -62,3 +66,36 @@ def test_generate_pairs():
 )
 def test_stepped_collision_energy(ce, stepped):
     assert is_stepped_collision_energy(ce) is stepped
+
+
+def _caffeine_spectrum():
+    # [M+H]+ of caffeine (theoretical m/z 195.087652), measured 2 ppm high
+    return {
+        "m/z array": np.array([110.0713, 138.0662, 195.0880]),
+        "intensity array": np.array([20.0, 100.0, 50.0]),
+        "params": {
+            "title": "caffeine",
+            "smiles": "Cn1c(=O)c2c(ncn2C)n(C)c1=O",
+            "precursor_type": "[M+H]+",
+            "collision_energy": "30",
+            "precursor_mz": 195.0880,
+            "simulated_precursor_mz": 195.0870,
+            "theoretical_precursor_mz": 195.087652,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "use_simulated, expected",
+    [(False, "precursor_mz"), (True, "simulated_precursor_mz")],
+)
+def test_training_encodes_the_configured_precursor_mz(use_simulated, expected):
+    # Training must see the precursor m/z prediction sees, not the theoretical one
+    encoder = dict(
+        load_config("./msfiddle/config/fiddle_tcn_qtof.yml")["encoding"],
+        use_simulated_precursor_mz=use_simulated,
+    )
+    assert precursor_mz_key(encoder) == expected
+    spectrum = _caffeine_spectrum()
+    record = spec2arr_single(spectrum, encoder)
+    assert record["env"][0] == pytest.approx(spectrum["params"][expected], abs=1e-4)

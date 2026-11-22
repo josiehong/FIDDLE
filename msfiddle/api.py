@@ -36,6 +36,7 @@ from .utils.pkl_utils import (
     generate_ms,
     is_stepped_collision_energy,
     parse_collision_energy,
+    precursor_mz_key,
     resolve_collision_energy,
     unify_precursor_type,
 )
@@ -487,12 +488,8 @@ class MsFiddlePredictor:
             print(len(spectra), "spectra loaded from", str(path))
 
         encoder = self.config["encoding"]
-        precursor_mz_key = (
-            "simulated_precursor_mz"
-            if encoder["use_simulated_precursor_mz"]
-            else "precursor_mz"
-        )
-        required = ("title", precursor_mz_key, "precursor_type", "collision_energy")
+        mz_key = precursor_mz_key(encoder)
+        required = ("title", mz_key, "precursor_type", "collision_energy")
         stepped_mode = encoder.get("stepped_collision_energy", "drop")
         titles = [str(s.get("params", {}).get("title", "")) for s in spectra]
         title_counts: dict[str, int] = {}
@@ -554,7 +551,7 @@ class MsFiddlePredictor:
                 encoded = self._encode_spectrum(
                     mz_array=spectrum.get("m/z array", []),
                     intensity_array=spectrum.get("intensity array", []),
-                    precursor_mz=params[precursor_mz_key],
+                    precursor_mz=params[mz_key],
                     adduct=params["precursor_type"],
                     collision_energy=ce,
                     spec_id=spec_id,

@@ -68,7 +68,7 @@ encoding:
   max_mz: 1500
   max_peak_num: 512
   max_atom_num: 300
-  use_simulated_precursor_mz: False
+  use_simulated_precursor_mz: False # train and predict on PRECURSOR_MZ: measured, or simulated for NIST20/23 (prepare_msms.py --simulate_ppm)
 
   precursor_type:
     '[M+H]+': 1

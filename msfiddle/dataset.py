@@ -11,6 +11,7 @@ from .utils.mol_utils import ATOMS_INDEX, formula_to_dict
 from .utils.pkl_utils import (
     generate_ms,
     parse_collision_energy,
+    precursor_mz_key,
     resolve_collision_energy,
     unify_precursor_type,
 )
@@ -214,10 +215,7 @@ class MGFDataset(Dataset):
             "min_peak_num": 5,
         }
         self.use_simulated_precursor_mz = encoder["use_simulated_precursor_mz"]
-        if self.use_simulated_precursor_mz:
-            self.precursor_mz_key = "simulated_precursor_mz"
-        else:
-            self.precursor_mz_key = "precursor_mz"
+        self.precursor_mz_key = precursor_mz_key(encoder)
 
         # read data from mgf file
         spectra = mgf.read(path)

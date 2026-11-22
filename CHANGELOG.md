@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Training encoded every spectrum with its theoretical precursor m/z, whatever `use_simulated_precursor_mz` said, while prediction reads `PRECURSOR_MZ`. The TCN's mass input, the precursor-peak removal and the eV-to-NCE conversion therefore saw the exact mass in training and a measured one at test time, and the rescorer learned from candidate lists centred on the exact mass. Training now reads the same field as prediction: `PRECURSOR_MZ`, which is measured, or simulated for NIST20 and NIST23 by `prepare_msms.py --simulate_ppm`; or `SIMULATED_PRECURSOR_MZ` with `use_simulated_precursor_mz: True`. The v2.4.0 models were trained before this fix, so the simulation of 2.4.0 reached only the test sets; the `.pkl` files need rebuilding and the models retraining.
+
 ## [2.4.0] - 2026-11-21
 
 New Q-TOF, Orbitrap and timsTOF models, retrained as the paper describes: the theoretical precursor m/z of NIST20 and NIST23 is replaced by a simulated measured one, with the electron mass fixed (see Fixed), on a fresh data build (`running_scripts/train_release_v2.4.sh`). `msfiddle-download-models` installs them from the v2.4.0 release into `~/.msfiddle/check_point/v2.4.0`. Top-1 on the held-out test sets, per spectrum / per compound: Q-TOF 78.4% / 84.0% (12,613 spectra), Orbitrap 83.3% / 83.0% (121,793) and timsTOF 66.4% / 68.9% (97,346, split by scaffold). These test sets differ from v2.3.0's, so the numbers do not compare with its results. On the public benchmarks, with the same input for both, FIDDLE's top-1 is 92.4% on CASMI 2016 (91.4% with the v2.3.0 models), 87.5% on CASMI 2017 (90.0%, one spectrum of 40) and 89.6% on EMBL-MCF 2.0 (89.0%); the documentation's benchmark page gives the results with BUDDY and SIRIUS and on unseen compounds.

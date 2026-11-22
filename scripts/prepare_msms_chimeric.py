@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from msfiddle.settings import load_config
 from msfiddle.utils import parse_collision_energy, mgf_key_order
+from msfiddle.utils.pkl_utils import precursor_mz_key
 
 
 def combine_spectra(spec1_mz, spec1_intensity, spec2_mz, spec2_intensity, alpha):
@@ -43,7 +44,7 @@ def extract_ce(spectrum, encoder):
     charge = int(encoder["type2charge"][spectrum["params"]["precursor_type"]])
     ce, _ = parse_collision_energy(
         ce_str=spectrum["params"]["collision_energy"],
-        precursor_mz=float(spectrum["params"]["theoretical_precursor_mz"]),
+        precursor_mz=float(spectrum["params"][precursor_mz_key(encoder)]),
         charge=abs(charge),
     )
     if ce is None:
