@@ -8,12 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
-- The precursor m/z simulation for NIST20 and NIST23 is set in the configs (`simulate_precursor_ppm` in their sections: 10 ppm for Q-TOF, 5 for Orbitrap), so every data build simulates them: `prepare_msms.py` without flags, `train_release_v2.4.sh`, and the NIST23 hold-out (`prepare_msms_nist23.py`), which did not simulate before. `prepare_msms.py --simulate_ppm` overrides the tolerance (0 keeps the library values); `--simulate_datasets` and the release script's `SIMULATE_PPM_*` and `SIMULATE_DATASETS` are gone.
+- `running_scripts/train_release_v2.4.sh` is now `train_release_v2.5.sh`, the release recipe, with `DATA_TAG=v2.5` by default (data in `data/cl_pkl_v2.5/`, checkpoints `check_point/fiddle_{tcn,rescore}_<instrument>_v2.5_muon.pt`). The v2.4 data (`112026`) encode the theoretical precursor m/z (see Fixed) and must not be reused. The noise, chimeric and unseen-compound scripts default to the v2.5 data and the v2.5.0 manifest (`data/benchmark/unseen_v2.5.0.csv`, written by `experiments_test_benchmark_unseen.sh --rebuild_manifest`); for the v2.4.0 models, set `DATA_TAG=112026` and `MANIFEST=./data/benchmark/unseen_v2.4.0.csv`.
+- The precursor m/z simulation for NIST20 and NIST23 is set in the configs (`simulate_precursor_ppm` in their sections: 10 ppm for Q-TOF, 5 for Orbitrap), so every data build simulates them: `prepare_msms.py` without flags, `train_release_v2.5.sh`, and the NIST23 hold-out (`prepare_msms_nist23.py`), which did not simulate before. `prepare_msms.py --simulate_ppm` overrides the tolerance (0 keeps the library values); `--simulate_datasets` and the release script's `SIMULATE_PPM_*` and `SIMULATE_DATASETS` are gone.
 
 ### Removed
 
 - `train_tcn_gpus_cl.py --amp` (fp16 mixed precision): on an H100 it was 6x slower than the fp32 training with TF32 matrix multiplies that the v2.4.0 models used, and every config fits in memory without it. `experiments_test_nist23.sh` now trains its Orbitrap model in fp32 too.
-- `running_scripts/train_release_v2.3.sh`, which could no longer reproduce the v2.3.0 models since the precursor m/z fixes; `train_release_v2.4.sh` is the release recipe.
+- `running_scripts/train_release_v2.3.sh`, which could no longer reproduce the v2.3.0 models since the precursor m/z fixes.
 
 ### Fixed
 

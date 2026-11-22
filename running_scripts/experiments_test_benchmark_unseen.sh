@@ -7,10 +7,10 @@
 # unseen compounds below (for a release, copy it to docs/_static/).
 #
 # Which compounds are unseen comes from MANIFEST (default the release's,
-# data/benchmark/unseen_v2.4.0.csv), so the script runs anywhere and gives the
+# data/benchmark/unseen_v2.5.0.csv), so the script runs anywhere and gives the
 # release's results. For a new release, run it with --rebuild_manifest where
 # the training data are (MGF files in data/cl_pkl_<DATA_TAG>/, default
-# 112026): it splits by them and writes the split to MANIFEST; set DATA_TAG
+# v2.5): it splits by them and writes the split to MANIFEST; set DATA_TAG
 # and MANIFEST to the release's data and version.
 # --fiddle_only runs FIDDLE alone, as for experiments_test_benchmark.sh.
 set -e
@@ -29,8 +29,8 @@ if [ -n "$FIDDLE_ONLY" ]; then
     methods="--methods fiddle"
 fi
 
-DATA=./data/cl_pkl_${DATA_TAG:-112026}
-MANIFEST=${MANIFEST:-./data/benchmark/unseen_v2.4.0.csv}
+DATA=./data/cl_pkl_${DATA_TAG:-v2.5}
+MANIFEST=${MANIFEST:-./data/benchmark/unseen_v2.5.0.csv}
 for f in ./data/casmi2016.mgf ./data/casmi2017.mgf ./data/embl.mgf; do
     [ -f "$f" ] || { echo "$f is missing; run experiments_test_benchmark.sh first"; exit 1; }
 done

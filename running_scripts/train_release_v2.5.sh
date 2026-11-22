@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Train and evaluate the v2.4 models, one instrument after another on all
+# Train and evaluate the v2.5 models, one instrument after another on all
 # GPUs (PARALLEL=1 runs them at once; then give each instrument its own
 # DEVICE_* GPUs, since all default to "0 1"):
 #   1. Build train, validation and test sets, split by compound: MaxMin for
@@ -9,9 +9,8 @@
 #      paper, NIST20's and NIST23's, which are computed from the structure,
 #      are replaced by the theoretical m/z plus a seeded Gaussian error with
 #      a standard deviation of a third of the instrument's tolerance
-#      (simulate_precursor_ppm in the configs). Data built before 2.5 (DATA_TAG 112026 and earlier)
-#      encode the theoretical m/z instead: build new data under a new
-#      DATA_TAG.
+#      (simulate_precursor_ppm in the configs). The v2.4 data (DATA_TAG
+#      112026) encode the theoretical m/z instead: do not reuse them.
 #   2. Train the TCN, choosing the checkpoint on validation.
 #   3. Build rescore pairs, train SEEDS rescorers and keep the best on validation.
 #   4. Evaluate on the test set, its only use.
@@ -19,7 +18,7 @@
 # and, for timsTOF, data/origin/casmi2026/train.parquet.
 # A rerun skips finished steps 1-3, resumes an interrupted TCN and repeats
 # the evaluation:
-#   nohup bash running_scripts/train_release_v2.4.sh > train_v2.4.log 2>&1 &
+#   nohup bash running_scripts/train_release_v2.5.sh > train_v2.5.log 2>&1 &
 # Env: INSTRUMENTS, DATA_TAG, SEEDS, NUM_WORKERS, PARALLEL, DEVICE_QTOF /
 # DEVICE_ORBITRAP / DEVICE_TIMSTOF (space-separated GPUs, default "0 1", for
 # two 11 GB GPUs; the TCN uses all of them, rescore and evaluation the first),
@@ -33,7 +32,7 @@
 # while it runs: bash reads it as it goes.
 set -e
 
-DATA_TAG=${DATA_TAG:-112026}
+DATA_TAG=${DATA_TAG:-v2.5}
 SEEDS=${SEEDS:-"1 2 3"}
 NUM_WORKERS=${NUM_WORKERS:-8}
 PARALLEL=${PARALLEL:-0}

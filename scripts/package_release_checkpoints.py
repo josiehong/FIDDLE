@@ -15,11 +15,11 @@ the TCN; older ones get it here. Each zip is reloaded and compared against
 its sources before the script reports success.
 
 Usage:
-  python scripts/package_release_checkpoints.py --tag 112026_muon \
-      --out_dir ./release_v2.4.0
+  python scripts/package_release_checkpoints.py --tag v2.5_muon \
+      --out_dir ./release_v2.5.0
   # one instrument at a time, e.g. on the server that trained it
-  python scripts/package_release_checkpoints.py --tag 112026_muon \
-      --out_dir ./release_v2.4.0 --instruments timstof
+  python scripts/package_release_checkpoints.py --tag v2.5_muon \
+      --out_dir ./release_v2.5.0 --instruments timstof
 """
 
 import argparse
@@ -124,8 +124,8 @@ def main():
     ap.add_argument(
         "--tag",
         default="",
-        help="suffix of the training checkpoints, e.g. 112026_muon to read "
-        "fiddle_tcn_qtof_112026_muon.pt; the released files drop it",
+        help="suffix of the training checkpoints, e.g. v2.5_muon to read "
+        "fiddle_tcn_qtof_v2.5_muon.pt; the released files drop it",
     )
     ap.add_argument("--checkpoint_dir", default="./check_point")
     ap.add_argument("--out_dir", required=True, help="where the zips are written")

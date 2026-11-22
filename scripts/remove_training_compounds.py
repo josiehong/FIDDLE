@@ -16,12 +16,12 @@ out of the unseen set.
 Usage:
     # where the models were trained: split and save the manifest
     python scripts/remove_training_compounds.py \\
-        --train_data ./data/cl_pkl_112026/qtof_maxmin_train.mgf \\
-                     ./data/cl_pkl_112026/qtof_maxmin_val.mgf \\
-        --mgf ./data/casmi2017.mgf --manifest_out ./data/benchmark/unseen_v2.4.0.csv
+        --train_data ./data/cl_pkl_v2.5/qtof_maxmin_train.mgf \\
+                     ./data/cl_pkl_v2.5/qtof_maxmin_val.mgf \\
+        --mgf ./data/casmi2017.mgf --manifest_out ./data/benchmark/unseen_v2.5.0.csv
     # anywhere: split by the manifest
     python scripts/remove_training_compounds.py \\
-        --manifest ./data/benchmark/unseen_v2.4.0.csv --mgf ./data/casmi2017.mgf
+        --manifest ./data/benchmark/unseen_v2.5.0.csv --mgf ./data/casmi2017.mgf
 """
 
 import argparse

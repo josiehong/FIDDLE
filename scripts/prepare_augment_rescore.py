@@ -13,11 +13,11 @@ Prepare rescore training and validation pairs.
 
 Usage:
     python scripts/prepare_augment_rescore.py \\
-        --train_data ./data/cl_pkl_112026/qtof_maxmin_train.pkl \\
-        --val_data ./data/cl_pkl_112026/qtof_maxmin_val.pkl \\
+        --train_data ./data/cl_pkl_v2.5/qtof_maxmin_train.pkl \\
+        --val_data ./data/cl_pkl_v2.5/qtof_maxmin_val.pkl \\
         --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \\
-        --resume_path ./check_point/fiddle_tcn_qtof_112026_muon.pt \\
-        --rescore_dir ./data/rescore_112026_muon \\
+        --resume_path ./check_point/fiddle_tcn_qtof_v2.5_muon.pt \\
+        --rescore_dir ./data/rescore_v2.5_muon \\
         --pos_cap 10 --neg_per_pos 8 --tolerance 50 --device 0
 """
 

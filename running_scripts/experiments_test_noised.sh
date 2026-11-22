@@ -5,10 +5,10 @@ set -e
 source running_scripts/compare.sh
 
 # DATA_TAG must name the data build the models were trained on, so the test
-# compounds stay unseen: the default, 112026, is the v2.4.0 models' (the
+# compounds stay unseen: the default, v2.5, is the v2.5.0 models' (the
 # released checkpoints, used unless MODEL_TAG selects local ones; see
 # compare.sh).
-DATA=./data/cl_pkl_${DATA_TAG:-112026}
+DATA=./data/cl_pkl_${DATA_TAG:-v2.5}
 
 for INST in qtof orbitrap; do
     python scripts/prepare_msms_noised.py \

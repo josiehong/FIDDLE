@@ -58,8 +58,8 @@ Go to this repo on GitHub → **Releases** → **Draft a new release**:
 Any `v*` tag triggers the PyPI publish workflow, so only tag when you intend to release the package. For a minor release, attach the checkpoint zips (step 6) to the release before publishing it: the new version is on PyPI a minute later, and `msfiddle-download-models` fails until the zips are there. From the command line, `gh release create` attaches them in the same step:
 
 ```bash
-gh release create v2.4.0 release_v2.4.0/fiddle_{qtof,orbitrap,timstof}.zip \
-    --target main --title "v2.4.0" --notes-file release_v2.4.0/RELEASE_NOTES.md
+gh release create v2.5.0 release_v2.5.0/fiddle_{qtof,orbitrap,timstof}.zip \
+    --target main --title "v2.5.0" --notes-file release_v2.5.0/RELEASE_NOTES.md
 ```
 
 ## 5. Verify
@@ -84,7 +84,7 @@ Each holds the instrument's TCN and rescore model (`fiddle_tcn_<instrument>.pt` 
 Build them from the training checkpoints with:
 
 ```bash
-python scripts/package_release_checkpoints.py --tag 112026_muon --out_dir ./release_v2.4.0
+python scripts/package_release_checkpoints.py --tag v2.5_muon --out_dir ./release_v2.5.0
 ```
 
 `--tag` is the suffix of `check_point/fiddle_<model>_<instrument>_<tag>.pt`; `--instruments` packages some of them, for example on the server that trained them. The script keeps only the weights inference needs, checks that each rescore model was trained with the TCN it is packaged with (by a hash of the TCN's weights), and checks each zip against its sources. If the model weights did not change, upload the previous release's zips again under the new tag.
@@ -102,8 +102,8 @@ msfiddle --demo --result_path ./output_demo.csv --no_cuda
 With the new checkpoints unpacked as `check_point/fiddle_{tcn,rescore}_<instrument>_v<x.y.0>.pt`, and BUDDY and SIRIUS installed (see `docs/benchmarks.rst`):
 
 ```bash
-MODEL_TAG=v2.4.0 bash running_scripts/experiments_test_benchmark.sh
-MODEL_TAG=v2.4.0 DATA_TAG=<data tag> MANIFEST=./data/benchmark/unseen_v2.4.0.csv \
+MODEL_TAG=v2.5.0 bash running_scripts/experiments_test_benchmark.sh
+MODEL_TAG=v2.5.0 DATA_TAG=v2.5 MANIFEST=./data/benchmark/unseen_v2.5.0.csv \
     bash running_scripts/experiments_test_benchmark_unseen.sh --rebuild_manifest
 cp result/benchmarks.png docs/_static/benchmarks.png
 ```

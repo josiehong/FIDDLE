@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # NIST23 hold-out: compounds new in NIST23 are the test set. Train the TCN and
 # rescore models on the rest and evaluate, alone and with BUDDY and SIRIUS.
-# Run from the repository root with the raw data of train_release_v2.4.sh
+# Run from the repository root with the raw data of train_release_v2.5.sh
 # (data/origin/).
 set -e
 source running_scripts/compare.sh
 
 DATA=./data/nist23_pkl
 
-# The release models' libraries, as in train_release_v2.4.sh
+# The release models' libraries, as in train_release_v2.5.sh
 for spec in "qtof agilent nist20 nist23 mona waters gnps" "orbitrap nist20 nist23 mona gnps"; do
     set -- $spec; INST=$1; shift
     CONFIG=./msfiddle/config/fiddle_tcn_$INST.yml
