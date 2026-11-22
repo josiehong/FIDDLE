@@ -2,10 +2,9 @@
 # Train and evaluate the v2.5 models, one instrument after another on all
 # GPUs (PARALLEL=1 runs them at once; then give each instrument its own
 # DEVICE_* GPUs, since all default to "0 1"):
-#   1. Build train, validation and test sets, split by compound: MaxMin for
-#      Q-TOF and Orbitrap, by scaffold for timsTOF (SPLIT). The split is
-#      recorded next to the TCN checkpoint; another split needs another
-#      DATA_TAG. The models train on the measured precursor m/z; as in the
+#   1. Build train, validation and test sets, split by compound with MaxMin
+#      picking for every instrument (SPLIT). The split is recorded next to
+#      the TCN checkpoint; another split needs another DATA_TAG. The models train on the measured precursor m/z; as in the
 #      paper, NIST20's and NIST23's, which are computed from the structure,
 #      are replaced by the theoretical m/z plus a seeded Gaussian error with
 #      a standard deviation of a third of the instrument's tolerance
@@ -156,7 +155,7 @@ run_instrument() {
         orbitrap)
             pipeline orbitrap "$DEVICE_ORBITRAP" "" nist20 nist23 mona gnps ;;
         timstof)
-            SPLIT=scaffold TRANSFER_FROM=$TIMSTOF_TRANSFER_FROM \
+            TRANSFER_FROM=$TIMSTOF_TRANSFER_FROM \
             PREP_EXTRA="--casmi_parquet $CASMI2026_PARQUET --holdout_lib enveda-np-examples --max_spectra_per_compound $CASMI2026_MAX_PER_COMPOUND" \
             pipeline timstof "$DEVICE_TIMSTOF" "" casmi2026 ;;
         *) echo "Unknown instrument $1"; return 1 ;;
