@@ -1,7 +1,7 @@
 # ------------------------
-# EMBL MCF 2.0 (Orbitrap Exploris 240): run with the Orbitrap models, so the
-# model settings and post-processing follow fiddle_tcn_orbitrap.yml except
-# for the refinement window
+# EMBL MCF 2.0 (Orbitrap Exploris 240): scripts/embl2mgf.py filters the
+# library with the `embl` section. The benchmark predicts with the Orbitrap
+# release config (fiddle_tcn_orbitrap.yml); the settings below follow it
 # ------------------------
 embl:  
   atom_type: ['C', 'O', 'N', 'H', 'P', 'S', 'F', 'Cl', 'B', 'Br', 'I', 'Na', 'K']
@@ -96,7 +96,7 @@ post_processing:
   refine_atom_type: ['C', 'O', 'N', 'H', 'Cl', 'Br', 'F', 'I', 'S', 'P'] # atom types refinement may change
   refine_atom_num: [5, 5, 5, -1, 2, 1, 2, 1, 2, 1] # maximum change per atom type from the predicted formula; -1: no limit
 
-  mass_tolerance: 50.0 # ppm of the precursor m/z; as wide as the embl filter, since these precursor errors are large
+  mass_tolerance: 50.0 # ppm of the precursor m/z; the benchmark uses fiddle_tcn_orbitrap.yml (5 ppm)
   ppm_mode: True
   isotope_errors: [0] # 13C isotope offsets k to search; [0, 1] also tries a precursor read from the M+1 peak
   isotope_penalty: 0.5 # subtracted from the rescore per unit of k

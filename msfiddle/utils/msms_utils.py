@@ -1,5 +1,6 @@
 import random
 import re
+import zlib
 import numpy as np
 from tqdm import tqdm
 
@@ -196,13 +197,27 @@ def _filter_spec_single(spectrum, config, type2charge):
     if spectrum["intensity array"].max() == spectrum["intensity array"].min():
         return None, "invalid_intensity_array"
 
+    # Seeded per spectrum, so serial and pooled runs draw the same values
+    title = str(spectrum["params"].get("title", smiles))
+    rng = np.random.default_rng(
+        [int(config.get("simulation_seed", 0)), zlib.crc32(title.encode())]
+    )
     spectrum["params"]["theoretical_precursor_mz"] = theo_mz
     spectrum["params"]["ppm"] = ppm
     spectrum["params"]["simulated_precursor_mz"] = (
-        simulate_experimental_mz(theo_mz, config["ppm_tolerance"])
+        simulate_experimental_mz(theo_mz, config["ppm_tolerance"], rng)
         if "ppm_tolerance" in config.keys()
         else theo_mz
     )
+    # With simulate_precursor_ppm set (by prepare_msms.py for the libraries
+    # whose precursor m/z the paper treats as theoretical), the library value
+    # is replaced by the theoretical m/z plus a Gaussian error within that
+    # tolerance, as in the paper.
+    simulate_ppm = config.get("simulate_precursor_ppm", 0)
+    if simulate_ppm:
+        spectrum["params"]["library_precursor_mz"] = spectrum["params"]["precursor_mz"]
+        simulated = simulate_experimental_mz(theo_mz, simulate_ppm, rng)
+        _replace_precursor_mz(spectrum["params"], round(simulated, 6), theo_mz)
     spectrum["params"]["charge"] = type2charge[precursor_type]  # add charge
     return spectrum, None
 
@@ -313,13 +328,14 @@ def split_by_scaffold(smiles_list, train_ratio, val_ratio, seed=42):
     return train, val, test
 
 
-def simulate_experimental_mz(theoretical_mz, relative_mass_tolerance_ppm):
+def simulate_experimental_mz(theoretical_mz, relative_mass_tolerance_ppm, rng=None):
     """Simulate experimental precursor m/z by shifting the theoretical value
     within a Gaussian distribution of mass deviations.
 
     Args:
         theoretical_mz: Theoretical precursor m/z value.
         relative_mass_tolerance_ppm: Relative mass tolerance in ppm.
+        rng: numpy Generator to draw from; the global numpy state if None.
 
     Returns:
         float: Simulated experimental precursor m/z value.
@@ -329,7 +345,7 @@ def simulate_experimental_mz(theoretical_mz, relative_mass_tolerance_ppm):
     std_dev = (relative_mass_tolerance_ppm / 1e6 * theoretical_mz) / 3
 
     # Randomly sample a mass deviation from the Gaussian distribution
-    mass_deviation = np.random.normal(0, std_dev)
+    mass_deviation = (rng or np.random).normal(0, std_dev)
 
     # Shift the theoretical m/z value by the sampled mass deviation to simulate the experimental value
     experimental_mz = theoretical_mz + mass_deviation
@@ -337,19 +353,60 @@ def simulate_experimental_mz(theoretical_mz, relative_mass_tolerance_ppm):
     return experimental_mz
 
 
-def precursor_mz_calculator(precursor_type, mass):
-    """Compute the expected precursor m/z from neutral monoisotopic mass.
+def _replace_precursor_mz(params, mz, theo_mz):
+    """Set a spectrum's precursor m/z, keeping the fields derived from it in
+    step: ppm (the error against the theoretical m/z) and PEPMASS, whose
+    intensity, if any, is kept."""
+    params["precursor_mz"] = mz
+    params["ppm"] = abs(mz - theo_mz) / theo_mz * 10**6
+    pepmass = params.get("pepmass")
+    if isinstance(pepmass, (tuple, list)):
+        params["pepmass"] = (mz, *pepmass[1:])
+    elif pepmass is not None:
+        params["pepmass"] = mz
+
+
+def simulate_precursor_mz(spectra, ppm, seed=0):
+    """Give spectra whose library precursor m/z is computed from the structure
+    a realistic one: the theoretical m/z shifted by a Gaussian error with a
+    standard deviation of ppm / 3, as in the FIDDLE paper. The draws are
+    seeded, so a file is converted the same way every time. The library value
+    is kept as library_precursor_mz.
 
     Args:
-            precursor_type: Adduct string, e.g. '[M+H]+'.
-            mass: Neutral monoisotopic mass in Da.
+        spectra: Spectra (pyteomics dicts) with precursor_mz, precursor_type
+            and a SMILES or molmass to compute the theoretical m/z from.
+        ppm: Mass tolerance the error is drawn within (5 for Orbitrap, 10 for
+            Q-TOF in the paper).
+        seed: Seed of the random generator.
 
     Returns:
-            float: Theoretical precursor m/z.
-
-    Raises:
-            ValueError: If precursor_type is not supported.
+        list: The spectra, with precursor_mz replaced.
     """
+    rng = np.random.default_rng(seed)
+    out = []
+    for spectrum in spectra:
+        params = spectrum["params"]
+        if params.get("molmass") not in (None, "", "Unknown"):
+            mass = float(params["molmass"])
+        else:
+            mol = Chem.MolFromSmiles(params["smiles"])
+            mass = monoisotopic_mass_calculator(mol, mode="mol")
+        theo = precursor_mz_calculator(params["precursor_type"], mass)
+        params["library_precursor_mz"] = params["precursor_mz"]
+        _replace_precursor_mz(
+            params, round(simulate_experimental_mz(theo, ppm, rng), 6), theo
+        )
+        # filter_spec's unseeded draw would be a second, conflicting value
+        params.pop("simulated_precursor_mz", None)
+        out.append(spectrum)
+    return out
+
+
+def _atom_precursor_mz(precursor_type, mass):
+    """Precursor m/z from the atom masses alone, without the electron mass;
+    precursor_mz_calculator adds that. Raises ValueError for an unsupported
+    precursor type."""
     if precursor_type == "[M+H]+":
         return mass + ATOMS_WEIGHT["H"]
     elif precursor_type == "[M+2H]2+":
@@ -398,21 +455,10 @@ def precursor_mz_calculator(precursor_type, mass):
         raise ValueError("Unsupported precursor type: {}".format(precursor_type))
 
 
-def mass_calculator(precursor_type, precursor_mz):
-    """Back-calculate neutral monoisotopic mass from observed precursor m/z.
-
-    The inverse of precursor_mz_calculator.
-
-    Args:
-            precursor_type: Adduct string, e.g. '[M+H]+'.
-            precursor_mz: Observed precursor m/z.
-
-    Returns:
-            float: Neutral monoisotopic mass in Da.
-
-    Raises:
-            ValueError: If precursor_type is not supported.
-    """
+def _atom_neutral_mass(precursor_type, precursor_mz):
+    """The inverse of _atom_precursor_mz, without the electron mass;
+    mass_calculator applies that. Raises ValueError for an unsupported
+    precursor type."""
     if precursor_type == "[M+H]+":
         return precursor_mz - ATOMS_WEIGHT["H"]
     elif precursor_type == "[M+2H]2+":
@@ -481,6 +527,58 @@ def mass_calculator(precursor_type, precursor_mz):
         )
     else:
         raise ValueError("Unsupported precursor type: {}".format(precursor_type))
+
+
+# Mass of an electron (Da). An ion's m/z is the mass of its atoms minus that of
+# the electrons it lost (or plus those it gained), per charge: [M+H]+ adds a
+# proton (1.007276 Da), not a hydrogen atom (1.007825 Da).
+ELECTRON_MASS = 0.000548579909
+
+
+def _charge_sign(precursor_type):
+    text = str(precursor_type).strip()
+    if text.endswith("+"):
+        return 1
+    if text.endswith("-"):
+        return -1
+    raise ValueError("Unsupported precursor type: {}".format(precursor_type))
+
+
+def precursor_mz_calculator(precursor_type, mass):
+    """Compute the theoretical precursor m/z from a neutral monoisotopic mass.
+
+    Args:
+            precursor_type: Adduct string, e.g. '[M+H]+'.
+            mass: Neutral monoisotopic mass in Da.
+
+    Returns:
+            float: Theoretical precursor m/z, with the electron mass accounted
+            for (an [M+H]+ ion is M plus a proton).
+
+    Raises:
+            ValueError: If precursor_type is not supported.
+    """
+    atoms = _atom_precursor_mz(precursor_type, mass)
+    return atoms - _charge_sign(precursor_type) * ELECTRON_MASS
+
+
+def mass_calculator(precursor_type, precursor_mz):
+    """Back-calculate the neutral monoisotopic mass from a precursor m/z.
+
+    The inverse of precursor_mz_calculator.
+
+    Args:
+            precursor_type: Adduct string, e.g. '[M+H]+'.
+            precursor_mz: Observed precursor m/z.
+
+    Returns:
+            float: Neutral monoisotopic mass in Da.
+
+    Raises:
+            ValueError: If precursor_type is not supported.
+    """
+    sign = _charge_sign(precursor_type)
+    return _atom_neutral_mass(precursor_type, precursor_mz + sign * ELECTRON_MASS)
 
 
 def precursor_charge(precursor_type):

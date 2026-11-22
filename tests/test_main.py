@@ -41,3 +41,39 @@ def test_no_arguments_prints_help_and_fails(capsys):
         cli.main([])
     assert exc.value.code == 1
     assert "predict" in capsys.readouterr().out
+
+
+def test_eval_details_writes_per_spectrum_and_grouped_csvs(tmp_path, capsys):
+    truth = tmp_path / "t.mgf"
+    truth.write_text(
+        "BEGIN IONS\nTITLE=s1\nFORMULA=CH4\nPRECURSOR_MZ=17.03\n"
+        "PRECURSOR_TYPE=[M+H]+\nCOLLISION_ENERGY=30\n85.0 100.0\nEND IONS\n"
+    )
+    res = pd.DataFrame(
+        {"ID": ["s1"], "Refined Formula (0)": ["C2H6"], "Refined Formula (1)": ["CH4"]}
+    )
+    args = argparse.Namespace(
+        result_path=str(tmp_path / "out.csv"), eval_details=True, instrument_type="qtof"
+    )
+    cli._evaluate(res, str(truth), args, cli.build_parser())
+    assert "evaluated_rows                1" in capsys.readouterr().out
+    details = pd.read_csv(tmp_path / "out_eval_details.csv")
+    assert details.loc[0, "true_rank"] == 2
+    assert details.loc[0, "instrument_type"] == "qtof"
+    assert details.loc[0, "compound"] == "CH4"
+    groups = pd.read_csv(tmp_path / "out_eval_groups.csv")
+    assert set(groups["group"]) == {"precursor_mz", "adduct", "peak_count", "nce"}
+
+
+def test_eval_details_are_saved_when_no_row_matches(tmp_path, capsys):
+    truth = tmp_path / "t.mgf"
+    truth.write_text("BEGIN IONS\nTITLE=s1\nFORMULA=CH4\n85.0 100.0\nEND IONS\n")
+    res = pd.DataFrame({"ID": ["other"], "Refined Formula (0)": ["CH4"]})
+    args = argparse.Namespace(result_path=str(tmp_path / "out.csv"), eval_details=True)
+    with pytest.raises(SystemExit) as exc:
+        cli._evaluate(res, str(truth), args, cli.build_parser())
+    assert exc.value.code == 1
+    assert "evaluated_rows                0" in capsys.readouterr().out
+    details = pd.read_csv(tmp_path / "out_eval_details.csv")
+    assert sorted(details["eval_status"]) == ["no_truth", "not_predicted"]
+    assert not (tmp_path / "out_eval.csv").exists()

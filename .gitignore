@@ -161,7 +161,11 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-data/
+# data/ is local, except the benchmark manifests of the unseen compounds
+data/*
+!data/benchmark/
+data/benchmark/*
+!data/benchmark/unseen_*.csv
 release/
 nplib_bak/
 notebook/
@@ -179,3 +183,6 @@ MERGE_PLAN.md
 
 # SIRIUS install (running_scripts/install_sirius.sh)
 tools/
+
+# BUDDY and SIRIUS output of the benchmark scripts
+external/

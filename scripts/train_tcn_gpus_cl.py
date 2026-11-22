@@ -1,4 +1,5 @@
 import argparse
+import multiprocessing
 from tqdm import tqdm
 import os
 
@@ -205,24 +206,20 @@ def train_step(
                     warmup_scheduler.step()
 
             # (tmp) for debug
-            mae = (
-                mae
-                + torch.mean(torch.abs(y - pred_f.detach()), dim=1).tolist()
+            mae.extend(
+                torch.mean(torch.abs(y - pred_f.detach()), dim=1).tolist()
                 + torch.mean(torch.abs(y2 - pred_f2.detach()), dim=1).tolist()
             )
-            mass_mae = (
-                mass_mae
-                + torch.abs(mass - pred_mass).tolist()
+            mass_mae.extend(
+                torch.abs(mass - pred_mass).tolist()
                 + torch.abs(mass2 - pred_mass2).tolist()
             )
-            atomnum_mae = (
-                atomnum_mae
-                + torch.abs(atomnum - pred_atomnum).tolist()
+            atomnum_mae.extend(
+                torch.abs(atomnum - pred_atomnum).tolist()
                 + torch.abs(atomnum2 - pred_atomnum2).tolist()
             )
-            hcnum_mae = (
-                hcnum_mae
-                + torch.abs(hcnum - pred_hcnum).tolist()
+            hcnum_mae.extend(
+                torch.abs(hcnum - pred_hcnum).tolist()
                 + torch.abs(hcnum2 - pred_hcnum2).tolist()
             )
             record_loss.append(loss.item())
@@ -260,12 +257,12 @@ def eval_step(model, loader, device):
             y_true.append(y.detach().cpu())
             y_pred.append(pred_f.detach().cpu())
 
-            mae = mae + torch.mean(torch.abs(y - pred_f), dim=1).tolist()
-            spec_ids = spec_ids + list(spec_id)
+            mae.extend(torch.mean(torch.abs(y - pred_f), dim=1).tolist())
+            spec_ids.extend(spec_id)
 
             mass_true.append(mass.detach().cpu())
             mass_pred.append(pred_mass.detach().cpu())
-            mass_mae = mass_mae + torch.abs(mass - pred_mass).tolist()
+            mass_mae.extend(torch.abs(mass - pred_mass).tolist())
 
     y_true = torch.cat(y_true, dim=0)
     y_pred = torch.cat(y_pred, dim=0)
@@ -333,17 +330,36 @@ if __name__ == "__main__":
         "--amp",
         action="store_true",
         default=False,
-        help="Mixed-precision training (autocast fp16 + GradScaler); CUDA only",
+        help="Mixed-precision training (autocast fp16 + GradScaler); CUDA only. "
+        "On an H100 it was 6x slower than the default TF32 for this model",
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=0,
+        help="Pairs per step, overriding the config's train.batch_size",
+    )
+    parser.add_argument(
+        "--grad_accum_steps",
+        type=int,
+        default=0,
+        help="Steps per optimizer step, overriding the config's train.grad_accum_steps",
     )
     args = parser.parse_args()
 
     init_random_seed(args.seed)
     config = load_config(args.config_path)
     print("Load the model & training configuration from {}".format(args.config_path))
+    if args.batch_size:
+        config["train"]["batch_size"] = args.batch_size
+    if args.grad_accum_steps:
+        config["train"]["grad_accum_steps"] = args.grad_accum_steps
 
     # Input size is fixed (padded spectra, constant batch), the exact case
     # cuDNN's algorithm autotuner exists for.
     torch.backends.cudnn.benchmark = True
+    # fp32 matrix multiplies on tensor cores (TF32), as convolutions already do
+    torch.set_float32_matmul_precision("high")
 
     device_1st = (
         torch.device("cuda:" + str(args.device[0]))
@@ -363,7 +379,15 @@ if __name__ == "__main__":
         [ATOMS_WEIGHT[ATOMS_INDEX_re[i]] for i in range(len(ATOMS_INDEX_re))]
     ).to(device_1st)
 
-    # 1. Data
+    # 1. Data. Fork the workers so they share the in-RAM data copy-on-write:
+    # Python 3.14 starts them with forkserver on Linux, which pickles the whole
+    # data set to each worker at every epoch (slow, and a copy per worker).
+    # Persistent workers are started once instead of every epoch.
+    loader_mp = {}
+    if config["train"]["num_workers"] > 0:
+        loader_mp["persistent_workers"] = True
+        if "fork" in multiprocessing.get_all_start_methods():
+            loader_mp["multiprocessing_context"] = "fork"
     train_set = MS2FDataset_CL(
         args.train_data,
         noised_times=config["train"]["noised_times"],
@@ -375,6 +399,8 @@ if __name__ == "__main__":
         shuffle=True,
         num_workers=config["train"]["num_workers"],
         drop_last=True,
+        pin_memory=True,
+        **loader_mp,
     )
     # Optimizer step = grad_accum_steps loader batches, so the effective
     # batch is batch_size * grad_accum_steps (e.g. 256 x 2 on 11GB GPUs
@@ -390,10 +416,11 @@ if __name__ == "__main__":
     valid_set = MS2FDataset(args.val_data, padding_dim=config["model"]["padding_dim"])
     valid_loader = DataLoader(
         valid_set,
-        batch_size=int(config["train"]["batch_size"] / 4),
+        batch_size=max(1, config["train"]["batch_size"] // 4),
         shuffle=False,
         num_workers=config["train"]["num_workers"],
         drop_last=True,
+        **loader_mp,
     )
 
     # 2. Models

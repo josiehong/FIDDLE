@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from msfiddle.settings import load_config
 from msfiddle.utils import filter_spec
+from msfiddle.utils.msms_utils import simulate_precursor_mz
 
 
 # Function to parse the input text
@@ -148,6 +149,15 @@ if __name__ == "__main__":
         default="./msfiddle/config/fiddle_tcn_embl.yml",
         help="path to configuration",
     )
+    parser.add_argument(
+        "--simulate_ppm",
+        type=float,
+        default=0.0,
+        help="Replace the library's precursor m/z by the theoretical m/z plus a "
+        "Gaussian error within this tolerance in ppm (5 for Orbitrap). "
+        "0 (default) keeps the library value, as the paper does for EMBL-MCF 2.0.",
+    )
+    parser.add_argument("--seed", type=int, default=0, help="Seed of the simulation")
     args = parser.parse_args()
 
     # load the configurations
@@ -179,6 +189,10 @@ if __name__ == "__main__":
     spectra = mgf.read(args.mgf_path)
     print("Read {} spectra from {}".format(len(spectra), args.mgf_path))
     filtered_spectra, _ = filter_spec(spectra, config["embl"], type2charge)
+    if args.simulate_ppm > 0:
+        filtered_spectra = simulate_precursor_mz(
+            filtered_spectra, args.simulate_ppm, args.seed
+        )
     print(
         "Filtered out {} invalid spectra".format(len(spectra) - len(filtered_spectra))
     )

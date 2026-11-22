@@ -1,4 +1,4 @@
-API Reference
+API reference
 =============
 
 Prediction API
@@ -13,6 +13,10 @@ Prediction API
 
 .. autofunction:: msfiddle.api.predict_from_mgf
 
+.. autofunction:: msfiddle.api.validate_mgf
+
+.. autofunction:: msfiddle.api.summarize_validation
+
 Evaluation
 ----------
 
@@ -20,7 +24,15 @@ Evaluation
 
 .. autofunction:: msfiddle.evaluate.topk_accuracy
 
-Molecular Utilities
+.. autofunction:: msfiddle.evaluate.load_eval_inputs
+
+.. autofunction:: msfiddle.evaluate.topk_details
+
+.. autofunction:: msfiddle.evaluate.grouped_accuracy
+
+.. autofunction:: msfiddle.evaluate.coverage
+
+Molecular utilities
 -------------------
 
 .. automodule:: msfiddle.utils.mol_utils
@@ -28,7 +40,7 @@ Molecular Utilities
    :show-inheritance:
    :exclude-members: ATOMS_WEIGHT, ATOMS_VALENCE, ATOMS_INDEX, ATOMS_INDEX_re
 
-MS/MS Utilities
+MS/MS utilities
 ---------------
 
 .. automodule:: msfiddle.utils.msms_utils
@@ -36,7 +48,7 @@ MS/MS Utilities
    :show-inheritance:
    :exclude-members: MSLEVEL_MAP, mgf_key_order
 
-Formula Refinement
+Formula refinement
 ------------------
 
 .. automodule:: msfiddle.utils.refine_utils

@@ -106,8 +106,8 @@ model:
 # ------------------------
 train:
   epochs: 200
-  batch_size: 512 # about 25 GB with --amp on one 48 GB GPU; use 256 x grad_accum_steps 2 on a shared card
-  grad_accum_steps: 1
+  batch_size: 256 # per step; 512 takes about 25 GB with --amp, 256 split over two 11 GB GPUs about 6 GB each
+  grad_accum_steps: 2 # optimizer step every N batches; effective batch = batch_size x N = 512, as for v2.3
   num_workers: 8
   lr: 0.002 # as Q-TOF; 0.001 when fine-tuning from a Q-TOF checkpoint
   muon_lr: 0.005 # Muon's rate for weight matrices; the default 0.02 diverged on timsTOF

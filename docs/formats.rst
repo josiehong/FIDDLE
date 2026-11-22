@@ -1,4 +1,4 @@
-File Formats
+File formats
 ============
 
 Input: MGF
@@ -15,15 +15,18 @@ required per spectrum; all others are ignored.
      - Description
    * - ``TITLE``
      - Unique spectrum identifier, propagated to the ``ID`` column in output.
+       Of spectra sharing a title, only the last is predicted.
    * - ``PRECURSOR_MZ``
      - Observed precursor m/z.
    * - ``PRECURSOR_TYPE``
      - Adduct type (e.g. ``[M+H]+``, ``[M-H]-``). See supported types below.
    * - ``COLLISION_ENERGY``
-     - A single collision energy, in eV (``50.0``) or as NCE (``NCE=35%``).
+     - A single collision energy, in eV (``50.0``) or as NCE (``35 nce``,
+       ``NCE=35%``). A bare number is read as eV.
        Spectra with a stepped or ranged energy (``HCD (NCE 20-30-40%)``,
-       ``30-50 eV``) are skipped with a warning: the models were trained on
-       single-energy spectra.
+       ``30-50 eV``) are skipped by the Orbitrap and Q-TOF models, which were
+       trained on single-energy spectra, and encoded at their mean energy by
+       the timsTOF model.
 
 **Example:**
 
@@ -35,7 +38,7 @@ required per spectrum; all others are ignored.
    CHARGE=1-
    PRECURSOR_TYPE=[M-H]-
    PRECURSOR_MZ=111.02016
-   COLLISION_ENERGY=50.0
+   COLLISION_ENERGY=50 nce
    41.0148 0.329893
    68.0258 0.402906
    111.0203 100.0
@@ -92,87 +95,32 @@ One row is produced per input spectrum.
        ``isotope_penalty`` times this offset.
 
 The number of ranked columns is set by ``top_k`` in the configuration file
-(20 in the bundled Orbitrap and Q-TOF configs) unless ``top_k`` is passed
+(20 in the bundled configs) unless ``top_k`` is passed
 explicitly.
 
-Native/Original BUDDY and SIRIUS Outputs
-----------------------------------------
+BUDDY and SIRIUS results
+------------------------
 
-The commands below use the same MGF input file used by ``msfiddle``. They
-produce native BUDDY/msbuddy and SIRIUS outputs that can be passed directly to
-``msfiddle`` with ``--buddy_path`` or ``--sirius_path``.
+:doc:`usage` shows how to run BUDDY and SIRIUS. msfiddle reads their native
+output, so pass it as it is; the formats below are what it accepts.
 
-BUDDY / msbuddy
-~~~~~~~~~~~~~~~
-
-BUDDY is available through the `msbuddy command-line tool
-<https://msbuddy.readthedocs.io/en/latest/cmdapi.html>`_. It writes a
-result-summary TSV file to the output directory; ``-d`` also writes detailed
-per-query candidate results.
-
-.. code-block:: bash
-
-   msbuddy -mgf /path/to/data.mgf \
-           -output /path/to/buddy_output \
-           -ms orbitrap \
-           -p -n_cpu 12 \
-           -d -hal
-
-Use ``-ms qtof`` or ``-ms fticr`` instead of ``-ms orbitrap`` when appropriate.
-Native summary fields include ``identifier``, ``mz``, ``rt``, ``adduct``,
-``formula_rank_1`` through ``formula_rank_5``, and ``estimated_fdr``. Keep the
-MGF ``TITLE`` values aligned with the identifiers reported by msbuddy.
-
-SIRIUS
-~~~~~~
-
-The `SIRIUS command-line interface <https://v6.docs.sirius-ms.io/cli/>`_ first
-writes results to a project space. The ``summaries`` / ``write-summaries``
-step exports tabular `summary files <https://v6.docs.sirius-ms.io/io/>`_ from
-that project space.
-
-.. code-block:: bash
-
-   sirius --input /path/to/data.mgf \
-          --project /path/to/sirius_project \
-          formulas --profile orbitrap
-
-   sirius --project /path/to/sirius_project \
-          summaries --top-k-summary=5 \
-          --output /path/to/sirius_output
-
-Use ``--profile qtof`` instead of ``--profile orbitrap`` for Q-TOF data. The
-molecular formula summary is exported as ``formula_identifications.tsv`` by
-default, or as ``formula_identifications.[tsv|csv|xlsx]`` depending on the
-selected export format. SIRIUS summary columns include formula/adduct
-identifiers and scores such as ``molecularFormula``, ``adduct``, ``rank`` or
-``rankingScore``, ``SiriusScore``, ``TreeScore``, ``IsotopeScore``,
-mass-error fields, and explained-peak fields. SIRIUS 6 may require
-``sirius login`` before formula computation.
-
-If the project space already exists, run only the ``summaries`` command. The
-resulting top-k or all-hit SIRIUS summaries can be passed to ``--sirius_path``
-directly.
-
-Optional BUDDY/msbuddy Results
-------------------------------
+BUDDY
+~~~~~
 
 ``--buddy_path`` accepts:
 
-* a native/original msbuddy output directory containing
-  ``msbuddy_result_summary.tsv``;
-* the native/original ``msbuddy_result_summary.tsv`` file itself; or
+* an msbuddy output directory containing ``msbuddy_result_summary.tsv``;
+* the ``msbuddy_result_summary.tsv`` file itself; or
 * an msfiddle-normalized CSV with the columns below (**deprecated**).
 
-When a native/original msbuddy output directory includes detailed
-``formula_results.tsv`` files from the ``-d`` option, msfiddle uses their
-per-candidate FDR scores. Passing the full output directory is preferred.
-When only the summary TSV is available, msfiddle can use the top-ranked formula
-and its ``estimated_fdr`` score; lower ranks are retained without scores and
-are therefore ignored by the configured FDR threshold.
+Pass the output directory where you can. When it holds the per-spectrum
+``formula_results.tsv`` files that msbuddy's ``-d`` option writes, msfiddle
+uses each candidate's FDR score. The summary TSV scores only the top-ranked
+formula (``estimated_fdr``), so the configured FDR threshold drops the other
+ranks.
 
-msfiddle-normalized BUDDY CSV schema (deprecated)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Deprecated msfiddle-normalized BUDDY CSV
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. deprecated:: 2.1.0
    Use native msbuddy output instead. The msfiddle-normalized BUDDY CSV format
@@ -196,23 +144,22 @@ Required columns:
    * - ``BUDDY Score (1–5)``
      - Confidence scores; candidates below the configured threshold are excluded.
 
-Optional SIRIUS Results
------------------------
+SIRIUS
+~~~~~~
 
 ``--sirius_path`` accepts:
 
-* a SIRIUS summary output directory containing ``formula_identifications``
-  files;
-* a native/original SIRIUS ``formula_identifications`` summary file in TSV,
-  CSV, or XLSX form; or
+* a directory written by ``sirius summaries``, containing
+  ``formula_identifications`` files;
+* one ``formula_identifications`` file, as TSV, CSV or XLSX (which needs
+  ``pip install openpyxl``); or
 * an msfiddle-normalized CSV with the columns below (**deprecated**).
 
-For native SIRIUS summaries, msfiddle reads identifier, molecular formula,
-adduct, rank, and score columns from the formula-identification output, then
-keeps the top five candidates per spectrum.
+msfiddle reads the identifier, molecular formula, adduct, rank and score
+columns, and keeps the top five candidates per spectrum.
 
-msfiddle-normalized SIRIUS CSV schema (deprecated)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Deprecated msfiddle-normalized SIRIUS CSV
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. deprecated:: 2.1.0
    Use native SIRIUS output instead. The msfiddle-normalized SIRIUS CSV format

@@ -2,77 +2,128 @@ Benchmarks
 ==========
 
 This page reports how often the msfiddle |release| models find the right
-formula on three public benchmarks. Top-k is the share of spectra whose true
-formula is among the k highest-ranked candidates.
+formula on three public benchmarks, alone and together with BUDDY and SIRIUS.
+Top-k is the share of spectra whose true formula is among the k
+highest-ranked candidates.
 
 Each benchmark is run with the models of its instrument type. CASMI 2016
-(Q Exactive) uses the Orbitrap models with their release config, as
-``--instrument_type orbitrap`` would. EMBL-MCF 2.0 (Orbitrap Exploris 240)
-also uses the Orbitrap models, with a 50 ppm refinement window in
-``fiddle_tcn_embl.yml`` because its precursor m/z errors are large. Its
-spectra were acquired with stepped normalized collision energies (30, 50 and
-70%), which ``scripts/embl2mgf.py`` averages and writes as NCE (``50 nce``).
-CASMI 2017 uses the Q-TOF models with ``fiddle_tcn_casmi.yml``. Each benchmark
-is run three ways:
+(Q Exactive) and EMBL-MCF 2.0 (Orbitrap Exploris 240) use the Orbitrap models
+with their release config, as ``--instrument_type orbitrap`` would. EMBL-MCF
+2.0 was acquired with stepped normalized collision energies (30, 50 and 70%),
+which ``scripts/embl2mgf.py`` averages and writes as NCE (``50 nce``). CASMI
+2017 uses the Q-TOF models with ``fiddle_tcn_casmi.yml``.
+
+As in the paper, the precursor m/z of CASMI 2016 and CASMI 2017 is replaced
+by the theoretical m/z plus a Gaussian error with a standard deviation of a
+third of 5 ppm (CASMI 2016, Orbitrap) or 10 ppm (CASMI 2017, Q-TOF), drawn
+with a fixed seed so every run gets the same values. EMBL-MCF 2.0 keeps the
+precursor m/z of its MoNA export, which is computed from the structure and so
+carries no mass error. Every method is given the same precursor m/z and the
+adduct. Each benchmark is run three ways:
 
 - **FIDDLE**: FIDDLE's own candidates.
-- **FIDDLE + BUDDY**: BUDDY's candidates added to FIDDLE's, all ranked by the
+- **FIDDLE w. BUDDY**: BUDDY's candidates added to FIDDLE's, all ranked by the
   FIDDLE rescore model.
-- **FIDDLE + BUDDY + SIRIUS**: SIRIUS's candidates added as well.
+- **FIDDLE w. BUDDY & SIRIUS**: SIRIUS's candidates added as well.
+
+SIRIUS 6.5.4 runs with its default settings. These include bottom-up formula
+search, new in SIRIUS 6 and `inspired by BUDDY
+<https://v6.docs.sirius-ms.io/methods-background/>`_: it looks up each
+fragment and its loss from the precursor in a database of subformulas derived
+from known biomolecules, and combines the matches into precursor candidates.
+De novo formula generation, the only strategy of earlier SIRIUS versions, is
+used only below m/z 400. FIDDLE uses no compound database.
 
 Some benchmark compounds are also in the training libraries, so each result
 is given twice: on all compounds, and on unseen compounds, which are absent
 from the models' training and validation data. Compounds are matched on the
 first block of the InChIKey, so a stereoisomer of a training compound counts
-as seen. The unseen sets of CASMI 2017 and EMBL-MCF 2.0 are small, so one
-spectrum moves their accuracy by several points.
+as seen. The unseen sets are small (36 to 66 spectra), so one spectrum moves
+their accuracy by 1.5 to 3 points.
 
 .. figure:: _static/benchmarks.png
-   :alt: Top-1, top-3 and top-5 accuracy of FIDDLE alone, with BUDDY, and with
-         BUDDY and SIRIUS on CASMI 2016, CASMI 2017 and EMBL-MCF 2.0, on all
-         and on unseen compounds.
+   :alt: Top-1, top-3 and top-5 accuracy of FIDDLE alone, with BUDDY, and
+         with BUDDY and SIRIUS on CASMI 2016, CASMI 2017 and EMBL-MCF 2.0,
+         on all and on unseen compounds.
    :width: 100%
 
    Top-k accuracy on all compounds (top row) and unseen compounds (bottom
-   row). The dots below mark the tools each method combines.
+   row), with each bar's value.
+
+.. _reproducing-benchmarks:
 
 Reproducing the results
 -----------------------
 
-From a clone of the repository, with BUDDY (``msbuddy``) and SIRIUS on the
-``PATH`` and the raw benchmark files in ``data/benchmark/``:
+The benchmark scripts are in the repository, not in the pip package. Clone the
+repository at the tag of the release you want to check and install it from
+the clone, so that the scripts, configs and package are the same version:
 
 .. code-block:: bash
 
+   git clone --branch v<release> https://github.com/JosieHong/FIDDLE.git
+   cd FIDDLE
+   pip install -e ".[inference]" matplotlib
    msfiddle download
+
+The ``inference`` extra installs PyTorch, which prediction needs, and
+matplotlib draws the figure. For a GPU build of PyTorch, install it first as
+the `PyTorch guide <https://pytorch.org/get-started/locally/>`_ describes.
+
+**FIDDLE alone, all compounds.** This needs nothing but msfiddle and should
+give the FIDDLE bars of the figure's top row exactly:
+
+.. code-block:: bash
+
+   bash running_scripts/experiments_test_benchmark.sh --fiddle_only
+
+It downloads the raw data to ``data/benchmark/`` with
+``scripts/download_benchmarks.py``: CASMI 2016 and EMBL-MCF 2.0 from
+`MoNA <https://mona.fiehnlab.ucdavis.edu>`_ and CASMI 2017 from the
+`CASMI contest <http://www.casmi-contest.org/2017/>`_. MoNA re-exports its
+libraries now and then, so the script warns when a file differs from the one
+these results were computed from; the numbers can then differ too. It
+converts the files to MGF, predicts with ``--eval``, and writes top-1 to
+top-k accuracy to ``result/fiddle_<benchmark>_eval.csv``, where the
+benchmark is ``casmi2016``, ``casmi2017`` or ``embl``.
+
+**With BUDDY and SIRIUS, all compounds.** Install both tools first; SIRIUS
+needs a free account and one login:
+
+.. code-block:: bash
+
+   bash running_scripts/install_buddy.sh
+   bash running_scripts/install_sirius.sh
+   tools/sirius.app/Contents/MacOS/sirius login -u <email> -p   # macOS
+   # tools/sirius/bin/sirius login -u <email> -p                # Linux
+
+``install_sirius.sh`` installs SIRIUS 6.5.4, the version these results come
+from, into ``tools/``. Then run the same script without ``--fiddle_only``:
+
+.. code-block:: bash
+
    bash running_scripts/experiments_test_benchmark.sh
 
-The raw files are the CASMI 2016 and EMBL-MCF 2.0 HRMS library exports from
-`MoNA <https://mona.fiehnlab.ucdavis.edu>`_ and the CASMI 2017 challenge
-files and solutions from the `CASMI contest <http://www.casmi-contest.org>`_:
+It runs BUDDY and SIRIUS through ``scripts/run_buddy_sirius.py``, writes
+``result/<method>_<benchmark>_eval.csv`` for the methods ``fiddle``,
+``fiddle_buddy`` and ``fiddle_buddy_sirius``, and draws the top row of the
+figure to ``result/benchmarks_all.png``. Results from another SIRIUS version
+can differ.
 
-.. code-block:: text
+**Unseen compounds.** After the all-compounds run:
 
-   data/benchmark/
-   ├── casmi2016/MoNA-export-CASMI_2016.sdf
-   ├── casmi2017/
-   │   ├── Chal1to45Summary.csv
-   │   ├── CASMI-solutions.csv
-   │   ├── challenges-001-045-msms-mgf-20170908/
-   │   └── challenges-001-045-ms-mgf-20170908/
-   └── embl/MoNA-export-EMBL-MCF_2.0_HRMS_Library.sdf
+.. code-block:: bash
 
-The script writes top-1 to top-20 accuracy, per spectrum and per compound, to
-``result/<method>_<benchmark>_eval.csv``, where the method is ``fiddle``,
-``fiddle_buddy`` or ``fiddle_buddy_sirius`` and the benchmark ``casmi2016``,
-``casmi2017`` or ``embl``, with an ``_unseen`` suffix for the unseen compounds.
-It ends with ``scripts/plot_benchmarks.py``, which saves the figure's numbers
-to ``result/benchmarks.csv`` and draws the figure.
+   bash running_scripts/experiments_test_benchmark_unseen.sh
 
-The unseen sets come from ``scripts/remove_training_compounds.py``, which reads
-the training and validation MGF files of the models each benchmark is run
-with (Orbitrap for CASMI 2016 and EMBL-MCF 2.0, Q-TOF for CASMI 2017) from
-``data/cl_pkl_<DATA_TAG>/``, so those files must be present.
+Add ``--fiddle_only`` if the all-compounds run used it. The script keeps the
+spectra whose compounds are absent from the models' training and validation
+data, runs the same methods on them, and draws the figure above to
+``result/benchmarks.png``.
+Which compounds those are comes from the release's manifest,
+``data/benchmark/unseen_v<release>.csv``, which lists every benchmark spectrum and
+whether its compound is unseen, so the training data are not needed. It warns
+when a downloaded benchmark differs from the spectra the manifest lists.
 
 The `paper <https://www.nature.com/articles/s41467-025-66060-9>`_ reports the
 full evaluation, including held-out test sets and comparisons with other

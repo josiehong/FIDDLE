@@ -34,7 +34,7 @@ encoding:
   resolution: 0.2
   max_mz: 1500
   max_atom_num: 300
-  use_simulated_precursor_mz: True
+  use_simulated_precursor_mz: False # benchmarks use the measured PRECURSOR_MZ; the simulated one is drawn around the true mass
   precursor_type:
     '[M+H]+': 1
     '[M-H]-': 2

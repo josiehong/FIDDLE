@@ -126,6 +126,29 @@ if __name__ == "__main__":
         help="Process count for parallel filtering/encoding (0 = serial)",
     )
     parser.add_argument(
+        "--simulate_ppm",
+        type=float,
+        default=0,
+        help="Replace the precursor m/z of every spectrum of --simulate_datasets "
+        "by the theoretical m/z plus a Gaussian error with a standard deviation "
+        "of a third of this tolerance in ppm, as the paper does for libraries "
+        "with theoretical precursor m/z (5 for Orbitrap, 10 for Q-TOF). "
+        "0 (default): keep every library value",
+    )
+    parser.add_argument(
+        "--simulate_datasets",
+        nargs="+",
+        default=["nist20", "nist23"],
+        help="Datasets whose precursor m/z is simulated with --simulate_ppm "
+        "(default: nist20 nist23, the training libraries the paper names)",
+    )
+    parser.add_argument(
+        "--simulation_seed",
+        type=int,
+        default=0,
+        help="Seed of the precursor m/z simulation (per spectrum, by title)",
+    )
+    parser.add_argument(
         "--report_only",
         action="store_true",
         help="Load and filter only, and report what each dataset keeps and "
@@ -313,13 +336,25 @@ if __name__ == "__main__":
                     ins, config_name
                 )
             )
+            simulate_ppm = args.simulate_ppm if ds in args.simulate_datasets else 0
+            filter_config = {
+                **config[config_name],
+                "simulate_precursor_ppm": simulate_ppm,
+                "simulation_seed": args.simulation_seed,
+            }
             filter_spectra, filter_smiles_list = filter_spec(
                 origin_spectra[ds],
-                config[config_name],
+                filter_config,
                 type2charge=config["encoding"]["type2charge"],
                 num_workers=args.num_workers,
             )
 
+            if simulate_ppm:
+                print(
+                    "Simulated the precursor m/z of all {} spectra ({} ppm)".format(
+                        len(filter_spectra), simulate_ppm
+                    )
+                )
             filter_smiles_list = sorted(set(filter_smiles_list))
             spectra += filter_spectra
             smiles_list += filter_smiles_list

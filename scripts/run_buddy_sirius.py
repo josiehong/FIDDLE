@@ -40,8 +40,10 @@ TRUTH_KEYS = (
 
 
 def with_ion(path):
-    for spec in mgf.read(path):
+    for spec in mgf.read(path, use_index=False):
         params = spec["params"]
+        if "title" not in params:  # msfiddle rejects these too
+            continue
         for key in list(params):
             if key in TRUTH_KEYS or key.startswith("ion") or "adduct" in key:
                 del params[key]

@@ -28,9 +28,11 @@ msfiddle predict --demo --result_path demo.csv        # 21 bundled example spect
 msfiddle predict --test_data spectra.mgf --instrument_type orbitrap --result_path results.csv
 ```
 
+The `inference` extra installs PyTorch. For a particular PyTorch build (another CUDA version, CPU only), install it [from pytorch.org](https://pytorch.org/get-started/locally/) first, then `pip install msfiddle`.
+
 Use `--instrument_type qtof` for Q-TOF data and `--instrument_type timstof` for timsTOF data. Each spectrum needs `TITLE`, `PRECURSOR_MZ`, `PRECURSOR_TYPE` and `COLLISION_ENERGY`. The results list ranked candidates per spectrum in `Refined Formula (0)`, `Refined Formula (1)`, … with their scores in `Rescore (k)`.
 
-When the true formulas are known (a `SMILES` or `FORMULA` field in each spectrum), add `--eval` to also report top-k accuracy, saved as `results_eval.csv`.
+When the true formulas are known (a `SMILES` or `FORMULA` field in each spectrum), add `--eval` to also report top-k accuracy, saved as `results_eval.csv`. `msfiddle validate --test_data your.mgf` checks a file without the models and says why any spectrum would be skipped; if accuracy is lower than expected, see [troubleshooting](https://msfiddle.readthedocs.io/en/latest/troubleshooting.html).
 
 The [documentation](https://msfiddle.readthedocs.io) covers the Python API, BUDDY and SIRIUS integration, custom checkpoints, all output columns, and [benchmark results](https://msfiddle.readthedocs.io/en/latest/benchmarks.html).
 
@@ -59,6 +61,7 @@ msfiddle download -d ./check_point
 
 | Script | Description |
 |---|---|
+| `running_scripts/train_release_v2.4.sh` | As `train_release_v2.3.sh`, but as in the paper the theoretical precursor m/z of NIST20 and NIST23 is replaced by the theoretical m/z plus a seeded Gaussian error within the instrument's tolerance; trains one instrument after another on two GPUs |
 | `running_scripts/train_release_v2.3.sh` | Build the data, train the release models (TCN and rescore) for Q-TOF, Orbitrap and timsTOF in parallel and evaluate them; `INSTRUMENTS=timstof` runs one of them. timsTOF trains on the Enveda CASMI 2026 library at `data/origin/casmi2026/train.parquet` |
 | `running_scripts/experiments_test_benchmark.sh` | Evaluate on external benchmarks (CASMI 2016, CASMI 2017, EMBL-MCF 2.0) |
 | `running_scripts/experiments_test_nist23.sh` | Train and evaluate with compounds new in NIST23 held out |

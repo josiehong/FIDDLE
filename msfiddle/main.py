@@ -40,7 +40,7 @@ def init_random_seed(seed):
     return
 
 
-SUBCOMMANDS = ("predict", "download", "paths")
+SUBCOMMANDS = ("predict", "validate", "download", "paths")
 
 
 def _add_predict_args(parser):
@@ -114,6 +114,16 @@ def _add_predict_args(parser):
         help=(
             "After predicting, report top-k accuracy against each spectrum's "
             "SMILES or FORMULA field and save it as <result>_eval.csv"
+        ),
+    )
+    parser.add_argument(
+        "--eval_details",
+        "--eval-details",
+        action="store_true",
+        help=(
+            "With --eval (implied), also save one row per spectrum to "
+            "<result>_eval_details.csv and accuracy by precursor m/z, adduct, "
+            "peak count and NCE to <result>_eval_groups.csv"
         ),
     )
 
@@ -204,22 +214,70 @@ def _predict(args, parser):
     res_df.to_csv(args.result_path, index=False)
     print(f"Done! Results saved to {args.result_path}")
 
-    if args.eval:
+    if args.eval or args.eval_details:
         _evaluate(res_df, test_data_path, args, parser)
 
 
 def _evaluate(res_df, truth_path, args, parser):
-    from .evaluate import load_truth, topk_accuracy
+    from .evaluate import load_eval_inputs, topk_accuracy
 
+    inputs = load_eval_inputs(truth_path)
+    stem = os.path.splitext(args.result_path)[0]
     try:
-        result = topk_accuracy(res_df, load_truth(truth_path))
+        result = topk_accuracy(res_df, inputs.truth)
     except ValueError as exc:
+        # With no matched rows the details still show why (no_truth and
+        # not_predicted rows), so save them before failing.
+        if getattr(args, "eval_details", False):
+            try:
+                _save_eval_details(res_df, inputs, args, stem)
+            except ValueError:
+                pass
         parser.exit(status=1, message=f"{exc}\n")
-    eval_path = os.path.splitext(args.result_path)[0] + "_eval.csv"
+    eval_path = stem + "_eval.csv"
     result.to_frame().to_csv(eval_path, index=False)
     print(f"\nEval against {truth_path}")
     print(result.format())
     print(f"Saved to {eval_path}")
+    if getattr(args, "eval_details", False):
+        _save_eval_details(res_df, inputs, args, stem)
+
+
+def _save_eval_details(res_df, inputs, args, stem):
+    from .evaluate import coverage, grouped_accuracy, topk_details
+
+    details = topk_details(res_df, inputs.truth, info=inputs.info)
+    details.insert(2, "instrument_type", getattr(args, "instrument_type", None))
+    # A compound without SMILES is keyed by its formula vector; write the formula
+    details["compound"] = details["compound"].where(
+        details["compound"].map(lambda c: isinstance(c, str) or c is None),
+        details["true_formula"],
+    )
+    details.to_csv(stem + "_eval_details.csv", index=False)
+    grouped_accuracy(details).to_csv(stem + "_eval_groups.csv", index=False)
+    print("\nCoverage")
+    for key, value in coverage(details, len(res_df), inputs).items():
+        print(f"  {key:<30s}{value}")
+    print(f"Saved to {stem}_eval_details.csv and {stem}_eval_groups.csv")
+
+
+def _validate(args, parser):
+    from .api import summarize_validation, validate_mgf
+
+    try:
+        report = validate_mgf(
+            args.test_data,
+            instrument_type=args.instrument_type,
+            config_path=args.config_path,
+        )
+    except Exception as exc:  # a missing or unparseable MGF file
+        parser.exit(status=1, message=f"Could not read {args.test_data}: {exc}\n")
+    print(summarize_validation(report))
+    if args.report_path:
+        report.to_csv(args.report_path, index=False)
+        print(f"Per-spectrum report saved to {args.report_path}")
+    if (report["status"] == "rejected").all():
+        parser.exit(status=1, message="No spectrum can be predicted.\n")
 
 
 def _download(args, parser):
@@ -242,11 +300,35 @@ def build_parser():
             "Without a subcommand, the arguments are passed to 'predict'."
         ),
     )
-    sub = parser.add_subparsers(dest="command", metavar="{predict,download,paths}")
+    sub = parser.add_subparsers(
+        dest="command", metavar="{predict,validate,download,paths}"
+    )
 
     p = sub.add_parser("predict", help="Predict formulas for an MGF file")
     _add_predict_args(p)
     p.set_defaults(func=_predict)
+
+    p = sub.add_parser(
+        "validate",
+        help="Check an MGF file's spectra without loading the models",
+    )
+    p.add_argument("--test_data", type=str, required=True, help="Path to data (.mgf)")
+    p.add_argument(
+        "--instrument_type",
+        type=str,
+        choices=["qtof", "orbitrap", "timstof"],
+        default="orbitrap",
+        help="Instrument type whose encoding to check against (default: orbitrap)",
+    )
+    p.add_argument(
+        "--report_path",
+        type=str,
+        help="Save the status and reason for each spectrum to this CSV",
+    )
+    p.add_argument(
+        "--config_path", type=str, help="Custom path to configuration (.yaml)"
+    )
+    p.set_defaults(func=_validate)
 
     p = sub.add_parser("download", help="Download the pre-trained models")
     p.add_argument("-d", "--destination", help="Directory to save the models")
