@@ -101,13 +101,10 @@ def train_step(
     device,
     batch_size,
     weight,
-    scaler=None,
     grad_accum_steps=1,
 ):
     f_criterion = lambda pred, y: formula_criterion(pred, y, weight)
     n_batches = len(loader)
-
-    use_amp = scaler is not None and scaler.is_enabled()
 
     mae = []
     mass_mae = []
@@ -154,50 +151,36 @@ def train_step(
             # members through one concatenated batch computes exactly the same
             # function as two passes, at better GPU occupancy.
             n1 = x.shape[0]
-            with torch.autocast(
-                device_type="cuda" if use_amp else "cpu", enabled=use_amp
-            ):
-                z_all, f_all, m_all, an_all, hc_all = model(
-                    torch.cat([x, x2], dim=0), torch.cat([env, env2], dim=0)
-                )
-                z1, z2 = z_all[:n1], z_all[n1:]
-                pred_f, pred_f2 = f_all[:n1], f_all[n1:]
-                pred_mass, pred_mass2 = m_all[:n1], m_all[n1:]
-                pred_atomnum, pred_atomnum2 = an_all[:n1], an_all[n1:]
-                pred_hcnum, pred_hcnum2 = hc_all[:n1], hc_all[n1:]
+            z_all, f_all, m_all, an_all, hc_all = model(
+                torch.cat([x, x2], dim=0), torch.cat([env, env2], dim=0)
+            )
+            z1, z2 = z_all[:n1], z_all[n1:]
+            pred_f, pred_f2 = f_all[:n1], f_all[n1:]
+            pred_mass, pred_mass2 = m_all[:n1], m_all[n1:]
+            pred_atomnum, pred_atomnum2 = an_all[:n1], an_all[n1:]
+            pred_hcnum, pred_hcnum2 = hc_all[:n1], hc_all[n1:]
 
-                loss = (
-                    mse_criterion(mass, pred_mass) * 0.01
-                    + mse_criterion(atomnum, pred_atomnum)
-                    + mse_criterion(hcnum, pred_hcnum) * 10
-                    + f_criterion(pred_f, y)
-                    + mse_criterion(mass2, pred_mass2) * 0.01
-                    + mse_criterion(atomnum2, pred_atomnum2)
-                    + mse_criterion(hcnum2, pred_hcnum2) * 10
-                    + f_criterion(pred_f2, y2)
-                    + cl_criterion(
-                        F.normalize(z1, dim=1), F.normalize(z2, dim=1), label
-                    )
-                )
+            loss = (
+                mse_criterion(mass, pred_mass) * 0.01
+                + mse_criterion(atomnum, pred_atomnum)
+                + mse_criterion(hcnum, pred_hcnum) * 10
+                + f_criterion(pred_f, y)
+                + mse_criterion(mass2, pred_mass2) * 0.01
+                + mse_criterion(atomnum2, pred_atomnum2)
+                + mse_criterion(hcnum2, pred_hcnum2) * 10
+                + f_criterion(pred_f2, y2)
+                + cl_criterion(F.normalize(z1, dim=1), F.normalize(z2, dim=1), label)
+            )
 
-            if use_amp:
-                scaler.scale(loss / group_size).backward()
-            else:
-                (loss / group_size).backward()
+            (loss / group_size).backward()
 
             if last_in_group:
-                if use_amp:
-                    scaler.unscale_(optimizer)  # so the clip sees true gradients
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    grad_norm = torch.nn.utils.clip_grad_norm_(
-                        model.parameters(), max_norm=1.0
-                    )
-                    # Skip a step with NaN/inf gradients, as GradScaler does
-                    if torch.isfinite(grad_norm):
-                        optimizer.step()
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    model.parameters(), max_norm=1.0
+                )
+                # Skip a step with NaN/inf gradients
+                if torch.isfinite(grad_norm):
+                    optimizer.step()
 
                 # Update the learning rate during warm-up phase (counted in
                 # optimizer steps). After warm-up phase, the learning rate
@@ -330,13 +313,6 @@ if __name__ == "__main__":
         "--no_cuda", action="store_true", default=False, help="Disables CUDA training"
     )
     parser.add_argument(
-        "--amp",
-        action="store_true",
-        default=False,
-        help="Mixed-precision training (autocast fp16 + GradScaler); CUDA only. "
-        "On an H100 it was 6x slower than the default TF32 for this model",
-    )
-    parser.add_argument(
         "--batch_size",
         type=int,
         default=0,
@@ -371,12 +347,6 @@ if __name__ == "__main__":
         if torch.cuda.is_available() and not args.no_cuda
         else torch.device("cpu")
     )
-    use_amp = args.amp and torch.cuda.is_available() and not args.no_cuda
-    if args.amp and not use_amp:
-        print("AMP requested but CUDA unavailable — training in full precision")
-    amp_scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
-    if use_amp:
-        print("Mixed-precision training enabled (autocast fp16 + GradScaler)")
     print(f"Device(s): {args.device}")
 
     # predifined tensors:
@@ -533,7 +503,6 @@ if __name__ == "__main__":
                 device_1st,
                 batch_size=config["train"]["batch_size"],
                 weight=weight,
-                scaler=amp_scaler,
                 grad_accum_steps=grad_accum_steps,
             )
         )
