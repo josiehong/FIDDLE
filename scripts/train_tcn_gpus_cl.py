@@ -283,7 +283,10 @@ if __name__ == "__main__":
     # Training settings
     parser = argparse.ArgumentParser(description="Mass Spectra to formula (train)")
     parser.add_argument(
-        "--train_data", type=str, required=True, help="Path to data (.pkl)"
+        "--train_data",
+        type=str,
+        required=True,
+        help="Training data (.pkl), with its <name>_pairs.pkl next to it",
     )
     parser.add_argument(
         "--val_data",
@@ -337,13 +340,15 @@ if __name__ == "__main__":
         "--batch_size",
         type=int,
         default=0,
-        help="Pairs per step, overriding the config's train.batch_size",
+        help="Pairs per loader batch (micro-batch), overriding the config's "
+        "train.batch_size",
     )
     parser.add_argument(
         "--grad_accum_steps",
         type=int,
         default=0,
-        help="Steps per optimizer step, overriding the config's train.grad_accum_steps",
+        help="Loader batches per optimizer step, overriding the config's "
+        "train.grad_accum_steps",
     )
     args = parser.parse_args()
 
@@ -403,8 +408,8 @@ if __name__ == "__main__":
         **loader_mp,
     )
     # Optimizer step = grad_accum_steps loader batches, so the effective
-    # batch is batch_size * grad_accum_steps (e.g. 256 x 2 on 11GB GPUs
-    # reproduces batch 512).
+    # batch is batch_size * grad_accum_steps (e.g. 256 x 2 = 512, split over
+    # two 11GB GPUs; 512 x 1 on one 80GB GPU).
     grad_accum_steps = config["train"].get("grad_accum_steps", 1)
     effective_batch_size = config["train"]["batch_size"] * grad_accum_steps
     optimizer_steps_per_epoch = -(-len(train_loader) // grad_accum_steps)
@@ -449,7 +454,7 @@ if __name__ == "__main__":
     )
     # Early stopping keeps runs short (tens of epochs), so StepLR(step_size=100) never
     # fired and the LR stayed pinned at its initial value. Use ReduceLROnPlateau so the
-    # LR halves when validation mass error plateaus, before early stop triggers.
+    # LR halves when the validation formula MAE (atom counts) plateaus, before early stop triggers.
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=config["train"]["patience"]
     )

@@ -4,7 +4,8 @@
 #   2. Train the TCN, choosing the checkpoint on validation.
 #   3. Build rescore pairs, train SEEDS rescorers and keep the best on validation.
 #   4. Evaluate on the test set, its only use.
-# A rerun skips finished steps and resumes an interrupted TCN:
+# A rerun skips finished steps 1-3, resumes an interrupted TCN and repeats
+# the evaluation:
 #   nohup bash running_scripts/train_release_v2.3.sh > train_v2.3.log 2>&1 &
 # Env: INSTRUMENTS, DATA_TAG, SEEDS, NUM_WORKERS, DEVICE_QTOF / DEVICE_ORBITRAP /
 # DEVICE_TIMSTOF (space-separated GPUs; rescore and evaluation use the first),

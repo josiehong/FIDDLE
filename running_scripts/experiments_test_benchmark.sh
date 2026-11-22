@@ -7,7 +7,8 @@
 # MODEL_TAG selects local checkpoints (see compare.sh). Ends with a summary
 # table and figure in result/; experiments_test_benchmark_unseen.sh draws the
 # documentation's figure, with unseen compounds as a second row.
-# --fiddle_only runs FIDDLE alone and needs nothing but msfiddle; otherwise
+# --fiddle_only (the only argument) runs FIDDLE alone and needs nothing but
+# msfiddle; otherwise
 # BUDDY and SIRIUS run as well (install_buddy.sh, install_sirius.sh).
 set -e
 source running_scripts/compare.sh

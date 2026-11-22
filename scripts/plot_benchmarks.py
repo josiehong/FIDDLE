@@ -9,7 +9,8 @@ each labelled with its value.
 
 Usage:
     python scripts/plot_benchmarks.py --subsets all unseen \\
-        --csv ./result/benchmarks.csv --figure ./docs/_static/benchmarks.png
+        --csv ./result/benchmarks.csv --figure ./result/benchmarks.png
+    # for a release, copy result/benchmarks.png to docs/_static/ by hand
 """
 
 import argparse

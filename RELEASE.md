@@ -84,7 +84,7 @@ Each holds the instrument's TCN and rescore model (`fiddle_tcn_<instrument>.pt` 
 Build them from the training checkpoints with:
 
 ```bash
-python scripts/package_release_checkpoints.py --tag 102026_muon --out_dir ./release_v2.3.0
+python scripts/package_release_checkpoints.py --tag 112026_muon --out_dir ./release_v2.4.0
 ```
 
 `--tag` is the suffix of `check_point/fiddle_<model>_<instrument>_<tag>.pt`; `--instruments` packages some of them, for example on the server that trained them. The script keeps only the weights inference needs, checks that each rescore model was trained with the TCN it is packaged with (by a hash of the TCN's weights), and checks each zip against its sources. If the model weights did not change, upload the previous release's zips again under the new tag.

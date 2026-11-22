@@ -103,8 +103,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_path",
         type=str,
-        default="./msfiddle/config/fiddle.yml",
-        help="Path to configuration",
+        required=True,
+        help="Model configuration, e.g. ./msfiddle/config/fiddle_tcn_qtof.yml",
     )
     parser.add_argument(
         "--split",
@@ -319,7 +319,7 @@ if __name__ == "__main__":
     # 2. filter the spectra
     # 3. split spectra into training and test set according to smiles
     # Note that there is not overlapped molecules between training set and tes set.
-    # 4. generate 3d conformattions & encoding data into arrays
+    # 4. encode spectra, formulas and env into arrays; build contrastive pairs
     print("\n>>> Step 2: filter out spectra by conditions and unify the SMILES; \n\
 \tStep 3: split SMILES into training set and test set; \n\
 \tStep 4: encode all the data into pkl format;")

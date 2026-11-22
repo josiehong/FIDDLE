@@ -155,8 +155,8 @@ if __name__ == "__main__":
             unseen = split_by_manifest(name, spectra, manifest)
         out_path = path[: -len(".mgf")] + "_unseen.mgf"
         mgf.write(unseen, out_path, key_order=mgf_key_order, file_mode="w")
-        n_compounds = len({s["params"]["smiles"] for s in spectra})
-        n_unseen = len({s["params"]["smiles"] for s in unseen})
+        n_compounds = len({manifest_key(s) for s in spectra})
+        n_unseen = len({manifest_key(s) for s in unseen})
         print(
             f"{path}: {n_unseen} of {n_compounds} compounds unseen "
             f"({len(unseen)} of {len(spectra)} spectra) -> {out_path}"

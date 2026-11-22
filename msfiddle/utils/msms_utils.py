@@ -381,7 +381,8 @@ def simulate_precursor_mz(spectra, ppm, seed=0):
         seed: Seed of the random generator.
 
     Returns:
-        list: The spectra, with precursor_mz replaced.
+        list: The spectra, with precursor_mz replaced (and ppm and pepmass
+        updated to match) and the library value in library_precursor_mz.
     """
     rng = np.random.default_rng(seed)
     out = []

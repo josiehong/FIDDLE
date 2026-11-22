@@ -1,14 +1,24 @@
 #!/usr/bin/env bash
 # Train and evaluate the v2.4 models, one instrument after another on all
-# GPUs (PARALLEL=1 runs them at once, each on its DEVICE_* GPUs):
-#   1. Build train, validation and test sets, split by compound. As in the
-#      paper, the theoretical precursor m/z of NIST20 and NIST23 is replaced
-#      by the theoretical m/z plus a seeded Gaussian error within the
-#      instrument's tolerance (SIMULATE_PPM_*).
+# GPUs (PARALLEL=1 runs them at once; then give each instrument its own
+# DEVICE_* GPUs, since all default to "0 1"):
+#   1. Build train, validation and test sets, split by compound: MaxMin for
+#      Q-TOF and Orbitrap, by scaffold for timsTOF (SPLIT). The split is
+#      recorded next to the TCN checkpoint; another split needs another
+#      DATA_TAG. The models train on the measured precursor m/z; as in the
+#      paper, NIST20's and NIST23's, which are computed from the structure,
+#      are replaced by the theoretical m/z plus a seeded Gaussian error with
+#      a standard deviation of a third of the instrument's tolerance
+#      (SIMULATE_PPM_*). Data built before 2.5 (DATA_TAG 112026 and earlier)
+#      encode the theoretical m/z instead: build new data under a new
+#      DATA_TAG.
 #   2. Train the TCN, choosing the checkpoint on validation.
 #   3. Build rescore pairs, train SEEDS rescorers and keep the best on validation.
 #   4. Evaluate on the test set, its only use.
-# A rerun skips finished steps and resumes an interrupted TCN:
+# Needs the raw libraries in data/origin/ (file names in prepare_msms.py)
+# and, for timsTOF, data/origin/casmi2026/train.parquet.
+# A rerun skips finished steps 1-3, resumes an interrupted TCN and repeats
+# the evaluation:
 #   nohup bash running_scripts/train_release_v2.4.sh > train_v2.4.log 2>&1 &
 # Env: INSTRUMENTS, DATA_TAG, SEEDS, NUM_WORKERS, PARALLEL, DEVICE_QTOF /
 # DEVICE_ORBITRAP / DEVICE_TIMSTOF (space-separated GPUs, default "0 1", for

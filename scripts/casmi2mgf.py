@@ -58,8 +58,9 @@ if __name__ == "__main__":
         type=float,
         default=5.0,
         help="As in the paper, replace CASMI 2016's precursor m/z by the "
-        "theoretical m/z plus a Gaussian error within this tolerance (the "
-        "paper's 5 ppm for Orbitrap). 0 keeps the library value.",
+        "theoretical m/z plus a Gaussian error with a standard deviation of a "
+        "third of this tolerance (the paper's 5 ppm for Orbitrap). 0 keeps the "
+        "library value.",
     )
     parser.add_argument(
         "--simulate_ppm_casmi2017",
@@ -95,7 +96,7 @@ if __name__ == "__main__":
     """mgf format
 	[{
 		'params': {
-			'title': prefix_<index>, 
+			'title': prefix_<index> (CASMI 2016) or the MS/MS file name (CASMI 2017),
 			'precursor_type': <precursor_type (e.g. [M+NH4]+ and [M+H]+)>, 
 			'precursor_mz': <precursor m/z>,
 			'molmass': <isotopic mass>, 
@@ -200,14 +201,8 @@ if __name__ == "__main__":
             spectrum["intensity array"] = org_spectrum["intensity array"]
         casmi17_spectra.append(spectrum)
 
-    # write ms data
-
-    # 2. filter the spectra
-    # 3. randomly split spectra into training and test set according to [smiles]
-    # Note that there is not overlapped molecules between training set and tes set.
-    print(
-        "\n>>> Step 2 & 3: filter out spectra by certain rules; randomly split SMILES into training set and test set;"
-    )
+    # 2. filter the spectra, simulate the precursor m/z and write one MGF per benchmark
+    print("\n>>> Step 2: filter out spectra by certain rules;")
     print("Filter CASMI2016 spectra...")
     casmi16_spectra, casmi_smiles_list = filter_spec(
         casmi16_spectra,

@@ -9,8 +9,9 @@
 Files are written in the layout scripts/casmi2mgf.py and scripts/embl2mgf.py
 read. Files already present are kept unless --force is given. manifest.json
 records the URL, size, SHA-256 and date of every file downloaded, since the
-hosts can re-export a library with other spectra, and warns when a file
-differs from the one behind the documentation's figures (EXPECTED).
+hosts can re-export a library with other spectra. After downloading, files
+that differ from those behind the documentation's figures (EXPECTED) are
+reported.
 
 Usage:
     python scripts/download_benchmarks.py --out_dir ./data/benchmark

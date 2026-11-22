@@ -106,7 +106,7 @@ model:
 # ------------------------
 train:
   epochs: 200
-  batch_size: 256 # per step; 512 takes about 25 GB with --amp, 256 split over two 11 GB GPUs about 6 GB each
+  batch_size: 256 # per step; 256 split over two 11 GB GPUs takes about 6 GB each, 512 in one step fits an 80 GB H100
   grad_accum_steps: 2 # optimizer step every N batches; effective batch = batch_size x N = 512, as for v2.3
   num_workers: 8
   lr: 0.002 # as Q-TOF; 0.001 when fine-tuning from a Q-TOF checkpoint
