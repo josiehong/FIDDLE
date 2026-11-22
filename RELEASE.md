@@ -55,12 +55,18 @@ Go to this repo on GitHub → **Releases** → **Draft a new release**:
 3. Paste the CHANGELOG entry into the description
 4. Click **Publish release**
 
-Any `v*` tag triggers the PyPI publish workflow, so only tag when you intend to release the package.
+Any `v*` tag triggers the PyPI publish workflow, so only tag when you intend to release the package. For a minor release, attach the checkpoint zips (step 6) to the release before publishing it: the new version is on PyPI a minute later, and `msfiddle-download-models` fails until the zips are there. From the command line, `gh release create` attaches them in the same step:
+
+```bash
+gh release create v2.4.0 release_v2.4.0/fiddle_{qtof,orbitrap,timstof}.zip \
+    --target main --title "v2.4.0" --notes-file release_v2.4.0/RELEASE_NOTES.md
+```
 
 ## 5. Verify
 
 - Check the **Actions** tab in the repo to confirm the workflow succeeded
 - Check [pypi.org/project/msfiddle](https://pypi.org/project/msfiddle/) to confirm the new version is live
+- Check that Read the Docs built `latest` and `stable` from the release commit (project → **Builds**), and that [the stable docs](https://msfiddle.readthedocs.io/en/stable/) show the new version. Pushes trigger the builds through a webhook, set up once in the Read the Docs project under **Settings → Integrations** (GitHub incoming webhook); GitHub lists it under the repository's **Settings → Webhooks**, with its recent deliveries. Without it, build both versions by hand with **Build version**.
 - Test the new release locally:
 
 ```bash
