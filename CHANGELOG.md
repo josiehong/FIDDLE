@@ -8,9 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Removed
 
-- `train_tcn_gpus_cl.py --amp` (fp16 mixed precision): on an H100 it was 6x slower than the fp32 training with TF32 matrix multiplies that the v2.4.0 models used, and every config fits in memory without it.
+- `train_tcn_gpus_cl.py --amp` (fp16 mixed precision): on an H100 it was 6x slower than the fp32 training with TF32 matrix multiplies that the v2.4.0 models used, and every config fits in memory without it. `experiments_test_nist23.sh` now trains its Orbitrap model in fp32 too.
 - `running_scripts/train_release_v2.3.sh`, which could no longer reproduce the v2.3.0 models since the precursor m/z fixes; `train_release_v2.4.sh` is the release recipe.
-- `running_scripts/experiments_test_nist23.sh`, the NIST23 hold-out experiment.
 
 ### Fixed
 
