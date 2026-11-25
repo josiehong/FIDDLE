@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- `scripts/export_split_manifest.py` writes the timsTOF compound split of a data build (split, InChIKey, spectrum count, source libraries; no spectra), for the release. The TCN and the rescorer share one split, so the list covers both stages, and test rows from `enveda-np-examples` are the natural-product holdout. The Q-TOF and Orbitrap splits include NIST data and are not exported.
+- `scripts/export_split_manifest.py` writes the timsTOF compound split of a data build (split, InChIKey, spectrum count, source libraries; no spectra), to share on request. The TCN and the rescorer share one split, so the list covers both stages, and test rows from `enveda-np-examples` are the natural-product holdout. The Q-TOF and Orbitrap splits include NIST data and are not exported.
 
 ### Changed
 
