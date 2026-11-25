@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+New Q-TOF, Orbitrap and timsTOF models, trained on the measured precursor m/z (simulated for NIST20 and NIST23, as in the paper) and on MaxMin splits for all three instruments (`running_scripts/train_release_v2.5.sh`). On the public benchmarks, FIDDLE's top-1 is 91.2% on CASMI 2016 (92.4% with the v2.4.0 models), 95.0% on CASMI 2017 (87.5%) and 89.0% on EMBL-MCF 2.0 (89.6%); with BUDDY and SIRIUS, 94.0%, 92.5% and 93.0%. On unseen compounds FIDDLE alone gives 77.1%, 94.4% and 80.3%. The documentation's benchmark page has the full figure.
+
 ### Added
 
 - `scripts/export_split_manifest.py` writes the timsTOF compound split of a data build (split, InChIKey, spectrum count, source libraries; no spectra), to share on request. The TCN and the rescorer share one split, so the list covers both stages, and test rows from `enveda-np-examples` are the natural-product holdout. The Q-TOF and Orbitrap splits include NIST data and are not exported.
