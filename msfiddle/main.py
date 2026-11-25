@@ -215,15 +215,16 @@ def _predict(args, parser):
     print(f"Done! Results saved to {args.result_path}")
 
     if args.eval or args.eval_details:
-        _evaluate(res_df, test_data_path, args, parser)
+        kept_index = getattr(predictor, "_kept_index", None)
+        _evaluate(res_df, test_data_path, args, parser, kept_index)
 
 
-def _evaluate(res_df, truth_path, args, parser):
+def _evaluate(res_df, truth_path, args, parser, kept_index=None):
     from .evaluate import load_eval_inputs, topk_accuracy
 
     stem = os.path.splitext(args.result_path)[0]
     try:
-        inputs = load_eval_inputs(truth_path)
+        inputs = load_eval_inputs(truth_path, kept_index)
     except ValueError as exc:  # e.g. an unparseable truth value in the MGF
         parser.exit(
             status=1, message=f"Could not read the truth in {truth_path}: {exc}\n"

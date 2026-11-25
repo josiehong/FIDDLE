@@ -17,6 +17,7 @@ import argparse
 import csv
 import gzip
 import os
+import sys
 from collections import defaultdict
 
 from rdkit import Chem, RDLogger
@@ -51,29 +52,33 @@ def main():
     parser.add_argument("--out", required=True, help=".csv, or .csv.gz to compress")
     args = parser.parse_args()
 
+    # A missing split would leave a manifest without it, so check all first
+    paths = {
+        part: os.path.join(args.pkl_dir, f"timstof_{args.split}_{part}.mgf")
+        for part in ("train", "val", "test")
+    }
+    missing = [path for path in paths.values() if not os.path.exists(path)]
+    if missing:
+        sys.exit("Missing split file(s): " + ", ".join(missing))
+
     opener = gzip.open if args.out.endswith(".gz") else open
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with opener(args.out, "wt", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["split", "inchikey", "n_spectra", "sources"])
-        for inst in ["timstof"]:
-            for part in ("train", "val", "test"):
-                path = os.path.join(args.pkl_dir, f"{inst}_{args.split}_{part}.mgf")
-                if not os.path.exists(path):
-                    print(f"Skip missing {path}")
-                    continue
-                # Different SMILES of one compound (e.g. other hydrogen
-                # notation) merge under its InChIKey
-                rows = defaultdict(lambda: [0, set()])
-                for smiles, (n, sources) in read_compounds(path).items():
-                    mol = Chem.MolFromSmiles(smiles)
-                    key = Chem.MolToInchiKey(mol) if mol is not None else ""
-                    rows[key][0] += n
-                    rows[key][1] |= sources
-                for key in sorted(rows):
-                    n, sources = rows[key]
-                    writer.writerow([part, key, n, ";".join(sorted(sources))])
-                print(f"{inst} {part}: {len(rows)} compounds")
+        for part, path in paths.items():
+            # Different SMILES of one compound (e.g. other hydrogen
+            # notation) merge under its InChIKey
+            rows = defaultdict(lambda: [0, set()])
+            for smiles, (n, sources) in read_compounds(path).items():
+                mol = Chem.MolFromSmiles(smiles)
+                key = Chem.MolToInchiKey(mol) if mol is not None else ""
+                rows[key][0] += n
+                rows[key][1] |= sources
+            for key in sorted(rows):
+                n, sources = rows[key]
+                writer.writerow([part, key, n, ";".join(sorted(sources))])
+            print(f"timstof {part}: {len(rows)} compounds")
     print(f"Saved {args.out}")
 
 

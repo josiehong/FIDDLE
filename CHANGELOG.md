@@ -30,6 +30,7 @@ New Q-TOF, Orbitrap and timsTOF models, trained on the measured precursor m/z (s
 - `train_release_v2.5.sh` stamped a TCN run that had no split record with the current split and reused it; it now stops instead. The TCN's data workers are forked only on Linux, since forking is unsafe on macOS.
 - A repeated `TITLE` whose last spectrum is unusable was not predicted at all, while `validate` said its last spectrum would be. The last usable spectrum of a `TITLE` is now predicted. An empty `TITLE` is rejected as `missing_metadata`, as evaluation already skipped it.
 - The simulated NIST precursor error was seeded by title alone, so spectra sharing a title drew the same error; the seed now includes each spectrum's position in the library.
+- `--eval` read a repeated `TITLE`'s truth from its last spectrum, even when prediction used an earlier copy because the last was unusable; it now reads the copy prediction kept. `export_split_manifest.py` stops if a split file is missing instead of writing a manifest without it.
 - `msfiddle validate` blamed the MGF file for a bad `--config_path`; it now names the config. `predict --eval` exits with a one-line error, not a traceback, when the MGF's truth values cannot be read. `experiments_test_benchmark.sh` rejects unknown arguments, so a typo such as `--fiddle-only` no longer runs BUDDY and SIRIUS.
 
 ## [2.4.0] - 2026-11-21

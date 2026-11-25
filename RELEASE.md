@@ -7,7 +7,7 @@ Follow these steps every time you want to publish a new `msfiddle` version to Py
 In `setup.py`, bump the version number:
 
 ```python
-version="2.3.0",  # e.g. 2.2.1 → 2.3.0
+version="2.5.0",  # e.g. 2.4.0 → 2.5.0
 ```
 
 `setup.py` is the single source of truth — `msfiddle.__version__` is derived
@@ -29,7 +29,7 @@ are the exception; both use the `v2.0.0` assets.
 Move the `[Unreleased]` items into a new versioned entry at the top of `CHANGELOG.md`:
 
 ```markdown
-## [2.3.0] - YYYY-MM-DD
+## [2.5.0] - YYYY-MM-DD
 ### Added
 - ...
 ### Changed
@@ -42,7 +42,7 @@ Move the `[Unreleased]` items into a new versioned entry at the top of `CHANGELO
 
 ```bash
 git add setup.py CHANGELOG.md
-git commit -m "Release v2.3.0"
+git commit -m "Release v2.5.0"
 git push origin main
 ```
 
@@ -50,10 +50,12 @@ git push origin main
 
 Go to this repo on GitHub → **Releases** → **Draft a new release**:
 
-1. Click **"Choose a tag"** → type `v2.3.0` → **"Create new tag: v2.3.0 on publish"**
-2. Set title to `v2.3.0`
-3. Paste the CHANGELOG entry into the description
+1. Click **"Choose a tag"** → type `v2.5.0` → **"Create new tag: v2.5.0 on publish"**
+2. Set title to `v2.5.0`
+3. Paste the release notes (below) into the description
 4. Click **Publish release**
+
+For the description, write the release notes to `release_v2.5.0/RELEASE_NOTES.md` (next to the checkpoint zips of step 6; `release_v*/` is not committed): a summary of the CHANGELOG entry for users, with the upgrade commands and the benchmark results, ending with a `**Full Changelog**: https://github.com/josiehong/FIDDLE/compare/v2.4.0...v2.5.0` link.
 
 Any `v*` tag triggers the PyPI publish workflow, so only tag when you intend to release the package. For a minor release, attach the checkpoint zips (step 6) to the release before publishing it: the new version is on PyPI a minute later, and `msfiddle-download-models` fails until the zips are there. From the command line, `gh release create` attaches them in the same step:
 
@@ -70,7 +72,7 @@ gh release create v2.5.0 release_v2.5.0/fiddle_{qtof,orbitrap,timstof}.zip \
 - Test the new release locally:
 
 ```bash
-pip install msfiddle==2.3.0
+pip install msfiddle==2.5.0
 ```
 
 ## 6. Checkpoints (every minor release)
@@ -92,7 +94,7 @@ python scripts/package_release_checkpoints.py --tag v2.5_muon --out_dir ./releas
 Then check the download path from a clean install:
 
 ```bash
-pip install msfiddle==2.3.0
+pip install msfiddle==2.5.0
 msfiddle-download-models
 msfiddle --demo --result_path ./output_demo.csv --no_cuda
 ```

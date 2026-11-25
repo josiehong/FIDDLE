@@ -640,6 +640,11 @@ class MsFiddlePredictor:
             key=lambda spectrum: first_index[spectrum.id],
         )
         rejected = [check for _, check in results if check.status == "rejected"]
+        # The file index of the spectrum predicted for each TITLE, so that
+        # evaluation reads the truth of the same copy (load_eval_inputs)
+        self._kept_index = {
+            check.id: check.index for spectrum, check in results if spectrum is not None
+        }
 
         stepped = [c for c in rejected if c.reason == "stepped_collision_energy"]
         if stepped:

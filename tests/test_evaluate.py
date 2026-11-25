@@ -183,3 +183,27 @@ def test_repeated_titles_take_the_last_truth_and_are_counted(tmp_path):
     assert cov["duplicate_input_titles"] == 1
     assert cov["duplicate_result_ids"] == 1
     assert cov["evaluated_rows"] == 2  # each result row counts, as before
+
+
+def test_truth_follows_the_copy_prediction_kept(tmp_path):
+    from msfiddle.api import MsFiddlePredictor
+    from msfiddle.evaluate import load_eval_inputs
+
+    peaks = "60.0 10.0\n85.0 50.0\n100.0 20.0\n125.0 35.0\n150.0 15.0\n"
+
+    def ion(smiles, ce):
+        return (
+            f"BEGIN IONS\nTITLE=s\nPRECURSOR_MZ=180.063\nPRECURSOR_TYPE=[M+H]+\n"
+            f"COLLISION_ENERGY={ce}\nSMILES={smiles}\n{peaks}END IONS\n"
+        )
+
+    # The later copy has a stepped energy, which the Orbitrap model skips
+    path = tmp_path / "dup.mgf"
+    path.write_text(ion("OCC(O)CO", "35") + ion("CCCCCC", "HCD (NCE 20-30-40%)"))
+    predictor = MsFiddlePredictor(instrument_type="orbitrap")
+    with pytest.warns(UserWarning, match="stepped"):
+        predictor._load_mgf_spectra(path)
+    assert predictor._kept_index == {"s": 0}
+    inputs = load_eval_inputs(path, predictor._kept_index)
+    assert inputs.truth["s"][0] == formula_vec("C3H8O3")
+    assert load_eval_inputs(path).truth["s"][0] == formula_vec("C6H14")
