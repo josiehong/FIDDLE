@@ -4,12 +4,13 @@
 # the Orbitrap models, CASMI 2017 the Q-TOF models. Run from the repository
 # root; the raw data are downloaded to data/benchmark/ from MoNA and
 # casmi-contest.org (files already there are kept). No training data is read.
-# MODEL_TAG selects local checkpoints (see compare.sh). Ends with a summary
-# table and figure in result/; experiments_test_benchmark_unseen.sh draws the
-# documentation's figure, with unseen compounds as a second row.
+# MODEL_TAG selects local checkpoints (see compare.sh). Writes each method's
+# accuracy to result/<method>_<benchmark>_eval.csv;
+# experiments_test_benchmark_unseen.sh then draws the documentation's figure,
+# all compounds and unseen ones.
 # --fiddle_only (the only argument) runs FIDDLE alone and needs nothing but
-# msfiddle; otherwise
-# BUDDY and SIRIUS run as well (install_buddy.sh, install_sirius.sh).
+# msfiddle; otherwise BUDDY and SIRIUS run as well (install_buddy.sh,
+# install_sirius.sh).
 set -e
 source running_scripts/compare.sh
 
@@ -19,11 +20,6 @@ for arg in "$@"; do
         *) echo "Unknown argument: $arg"; exit 1 ;;
     esac
 done
-methods=""
-if [ -n "$FIDDLE_ONLY" ]; then
-    methods="--methods fiddle"
-fi
-
 python scripts/download_benchmarks.py --out_dir ./data/benchmark
 python scripts/casmi2mgf.py --data_config_path ./msfiddle/config/fiddle_tcn_casmi.yml
 python scripts/embl2mgf.py \
@@ -34,6 +30,3 @@ python scripts/embl2mgf.py \
 compare ./data/casmi2016.mgf orbitrap casmi2016
 compare ./data/casmi2017.mgf qtof casmi2017 --config_path ./msfiddle/config/fiddle_tcn_casmi.yml
 compare ./data/embl.mgf orbitrap embl
-
-python scripts/plot_benchmarks.py $methods --csv ./result/benchmarks_all.csv \
-    --figure ./result/benchmarks_all.png
