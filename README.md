@@ -61,8 +61,7 @@ msfiddle download -d ./check_point
 
 | Script | Description |
 |---|---|
-| `running_scripts/train_release_v2.4.sh` | As `train_release_v2.3.sh`, but as in the paper the theoretical precursor m/z of NIST20 and NIST23 is replaced by the theoretical m/z plus a seeded Gaussian error within the instrument's tolerance; trains one instrument after another on two GPUs |
-| `running_scripts/train_release_v2.3.sh` | Build the data, train the release models (TCN and rescore) for Q-TOF, Orbitrap and timsTOF in parallel and evaluate them; `INSTRUMENTS=timstof` runs one of them. timsTOF trains on the Enveda CASMI 2026 library at `data/origin/casmi2026/train.parquet` |
+| `running_scripts/train_release_v2.5.sh` | Build the data, train the release models (TCN and rescore) for Q-TOF, Orbitrap and timsTOF and evaluate them; `INSTRUMENTS=timstof` runs one of them. As in the paper, the precursor m/z of NIST20 and NIST23, computed from the structure, is replaced by the theoretical m/z plus a seeded Gaussian error. timsTOF trains on the Enveda CASMI 2026 library at `data/origin/casmi2026/train.parquet` |
 | `running_scripts/experiments_test_benchmark.sh` | Evaluate on external benchmarks (CASMI 2016, CASMI 2017, EMBL-MCF 2.0) |
 | `running_scripts/experiments_test_nist23.sh` | Train and evaluate with compounds new in NIST23 held out |
 | `running_scripts/experiments_test_chimeric.sh` | Evaluate on chimeric spectra |

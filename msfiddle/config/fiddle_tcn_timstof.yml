@@ -38,7 +38,7 @@ encoding:
   resolution: 0.2
   max_mz: 1500
   max_atom_num: 300
-  use_simulated_precursor_mz: False
+  use_simulated_precursor_mz: False # train and predict on PRECURSOR_MZ, the measured value
   # timsTOF libraries (and the CASMI 2026 test set) also hold spectra merged
   # over several collision energies ('20,40,60' eV). 'mean' encodes them at
   # the mean energy; 'drop' (the default elsewhere) skips them.
@@ -106,7 +106,7 @@ model:
 # ------------------------
 train:
   epochs: 200
-  batch_size: 256 # per step; 512 takes about 25 GB with --amp, 256 split over two 11 GB GPUs about 6 GB each
+  batch_size: 256 # per step; 256 split over two 11 GB GPUs takes about 6 GB each, 512 in one step fits an 80 GB H100
   grad_accum_steps: 2 # optimizer step every N batches; effective batch = batch_size x N = 512, as for v2.3
   num_workers: 8
   lr: 0.002 # as Q-TOF; 0.001 when fine-tuning from a Q-TOF checkpoint

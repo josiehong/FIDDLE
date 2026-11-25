@@ -112,7 +112,13 @@ def sdf2mgf(path, prefix):
     return spectra
 
 
-def _filter_spec_single(spectrum, config, type2charge):
+def _filter_spec_indexed(item, config, type2charge):
+    """_filter_spec_single on an (index, spectrum) pair, for Pool.imap."""
+    index, spectrum = item
+    return _filter_spec_single(spectrum, config, type2charge, index)
+
+
+def _filter_spec_single(spectrum, config, type2charge, index=0):
     """Filter/clean one spectrum. Returns (kept_spectrum_or_None, reject_key).
 
     reject_key is the records category the rejection counts under, or None for
@@ -197,10 +203,11 @@ def _filter_spec_single(spectrum, config, type2charge):
     if spectrum["intensity array"].max() == spectrum["intensity array"].min():
         return None, "invalid_intensity_array"
 
-    # Seeded per spectrum, so serial and pooled runs draw the same values
+    # Seeded per spectrum, so serial and pooled runs draw the same values; the
+    # position in the input keeps spectra with one title (or none) independent
     title = str(spectrum["params"].get("title", smiles))
     rng = np.random.default_rng(
-        [int(config.get("simulation_seed", 0)), zlib.crc32(title.encode())]
+        [int(config.get("simulation_seed", 0)), zlib.crc32(title.encode()), index]
     )
     spectrum["params"]["theoretical_precursor_mz"] = theo_mz
     spectrum["params"]["ppm"] = ppm
@@ -253,18 +260,21 @@ def filter_spec(spectra, config, type2charge, num_workers=0):
                 tqdm(
                     pool.imap(
                         partial(
-                            _filter_spec_single,
+                            _filter_spec_indexed,
                             config=config,
                             type2charge=type2charge,
                         ),
-                        spectra,
+                        enumerate(spectra),
                         chunksize=256,
                     ),
                     total=len(spectra),
                 )
             )
     else:
-        results = [_filter_spec_single(s, config, type2charge) for s in tqdm(spectra)]
+        results = [
+            _filter_spec_single(s, config, type2charge, i)
+            for i, s in enumerate(tqdm(spectra))
+        ]
 
     clean_spectra = []
     smiles_list = []
@@ -381,7 +391,8 @@ def simulate_precursor_mz(spectra, ppm, seed=0):
         seed: Seed of the random generator.
 
     Returns:
-        list: The spectra, with precursor_mz replaced.
+        list: The spectra, with precursor_mz replaced (and ppm and pepmass
+        updated to match) and the library value in library_precursor_mz.
     """
     rng = np.random.default_rng(seed)
     out = []

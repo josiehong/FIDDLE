@@ -4,9 +4,38 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-11-25
+
+New Q-TOF, Orbitrap and timsTOF models, trained on the measured precursor m/z (simulated for NIST20 and NIST23, as in the paper) and on MaxMin splits for all three instruments (`running_scripts/train_release_v2.5.sh`). `msfiddle-download-models` installs them from the v2.5.0 release into `~/.msfiddle/check_point/v2.5.0`. On the public benchmarks, FIDDLE's top-1 is 91.2% on CASMI 2016 (92.4% with the v2.4.0 models), 95.0% on CASMI 2017 (87.5%) and 89.0% on EMBL-MCF 2.0 (89.6%); with BUDDY and SIRIUS, 94.0%, 92.5% and 93.0%. On unseen compounds FIDDLE alone gives 77.1%, 94.4% and 80.3%. The documentation's benchmark page has the full figure.
+
+### Added
+
+- `scripts/export_split_manifest.py` writes the timsTOF compound split of a data build (split, InChIKey, spectrum count, source libraries; no spectra), to share on request. The TCN and the rescorer share one split, so the list covers both stages, and test rows from `enveda-np-examples` are the natural-product holdout. The Q-TOF and Orbitrap splits include NIST data and are not exported.
+
+### Changed
+
+- `experiments_test_benchmark.sh` no longer draws `result/benchmarks_all.{csv,png}`; it writes each method's `result/<method>_<benchmark>_eval.csv`, and `experiments_test_benchmark_unseen.sh` draws the one figure, all compounds and unseen ones.
+- timsTOF trains on the MaxMin split like Q-TOF and Orbitrap, instead of the scaffold split, so all three test sets are drawn the same way. MaxMin picking makes its data step slower: about 25 minutes for the 181k CASMI 2026 compounds on one fast core, growing with the square of the count. `SPLIT=scaffold` still selects the scaffold split.
+- `running_scripts/train_release_v2.4.sh` is now `train_release_v2.5.sh`, the release recipe, with `DATA_TAG=v2.5` by default (data in `data/cl_pkl_v2.5/`, checkpoints `check_point/fiddle_{tcn,rescore}_<instrument>_v2.5_muon.pt`). The v2.4 data (`112026`) encode the theoretical precursor m/z (see Fixed) and must not be reused. The noise, chimeric and unseen-compound scripts default to the v2.5 data and the v2.5.0 manifest (`data/benchmark/unseen_v2.5.0.csv`, written by `experiments_test_benchmark_unseen.sh --rebuild_manifest`). The v2.4.0 manifest is removed; the `v2.4.0` tag keeps it (`git show v2.4.0:data/benchmark/unseen_v2.4.0.csv`).
+- The precursor m/z simulation for NIST20 and NIST23 is set in the configs (`simulate_precursor_ppm` in their sections: 10 ppm for Q-TOF, 5 for Orbitrap), so every data build simulates them: `prepare_msms.py` without flags, `train_release_v2.5.sh`, and the NIST23 hold-out (`prepare_msms_nist23.py`), which did not simulate before. `prepare_msms.py --simulate_ppm` overrides the tolerance (0 keeps the library values); `--simulate_datasets` and the release script's `SIMULATE_PPM_*` and `SIMULATE_DATASETS` are gone.
+
+### Removed
+
+- `train_tcn_gpus_cl.py --amp` (fp16 mixed precision): on an H100 it was 6x slower than the fp32 training with TF32 matrix multiplies that the v2.4.0 models used, and every config fits in memory without it. `experiments_test_nist23.sh` now trains its Orbitrap model in fp32 too.
+- `running_scripts/train_release_v2.3.sh`, which could no longer reproduce the v2.3.0 models since the precursor m/z fixes.
+
+### Fixed
+
+- Training encoded every spectrum with its theoretical precursor m/z, whatever `use_simulated_precursor_mz` said, while prediction reads `PRECURSOR_MZ`. The TCN's mass input, the precursor-peak removal and the eV-to-NCE conversion therefore saw the exact mass in training and a measured one at test time, and the rescorer learned from candidate lists centred on the exact mass. Training now reads the same field as prediction: `PRECURSOR_MZ`, which is measured, or simulated for NIST20 and NIST23; or `SIMULATED_PRECURSOR_MZ` with `use_simulated_precursor_mz: True`. The v2.4.0 models were trained before this fix, so the simulation of 2.4.0 reached only the test sets; the `.pkl` files need rebuilding and the models retraining.
+- `train_release_v2.5.sh` stamped a TCN run that had no split record with the current split and reused it; it now stops instead. The TCN's data workers are forked only on Linux, since forking is unsafe on macOS.
+- A repeated `TITLE` whose last spectrum is unusable was not predicted at all, while `validate` said its last spectrum would be. The last usable spectrum of a `TITLE` is now predicted. An empty `TITLE` is rejected as `missing_metadata`, as evaluation already skipped it.
+- The simulated NIST precursor error was seeded by title alone, so spectra sharing a title drew the same error; the seed now includes each spectrum's position in the library.
+- `--eval` read a repeated `TITLE`'s truth from its last spectrum, even when prediction used an earlier copy because the last was unusable; it now reads the copy prediction kept. `export_split_manifest.py` stops if a split file is missing instead of writing a manifest without it.
+- `msfiddle validate` blamed the MGF file for a bad `--config_path`; it now names the config. `predict --eval` exits with a one-line error, not a traceback, when the MGF's truth values cannot be read. `experiments_test_benchmark.sh` rejects unknown arguments, so a typo such as `--fiddle-only` no longer runs BUDDY and SIRIUS.
+
 ## [2.4.0] - 2026-11-21
 
-New Q-TOF, Orbitrap and timsTOF models, retrained as the paper describes: the theoretical precursor m/z of NIST20 and NIST23 is replaced by a simulated measured one, with the electron mass fixed (see Fixed), on a fresh data build (`running_scripts/train_release_v2.4.sh`). `msfiddle-download-models` installs them from the v2.4.0 release into `~/.msfiddle/check_point/v2.4.0`. Top-1 on the held-out test sets, per spectrum / per compound: Q-TOF 78.4% / 84.0% (12,613 spectra), Orbitrap 83.3% / 83.0% (121,793) and timsTOF 66.4% / 68.9% (97,346, split by scaffold). These test sets differ from v2.3.0's, so the numbers do not compare with its results. On the public benchmarks, with the same input for both, FIDDLE's top-1 is 92.4% on CASMI 2016 (91.4% with the v2.3.0 models), 87.5% on CASMI 2017 (90.0%, one spectrum of 40) and 89.6% on EMBL-MCF 2.0 (89.0%); the documentation's benchmark page gives the results with BUDDY and SIRIUS and on unseen compounds.
+New Q-TOF, Orbitrap and timsTOF models, retrained as the paper describes: the theoretical precursor m/z of NIST20 and NIST23 is replaced by a simulated measured one, with the electron mass fixed (see Fixed), on a fresh data build (`running_scripts/train_release_v2.4.sh`). `msfiddle-download-models` installs them from the v2.4.0 release into `~/.msfiddle/check_point/v2.4.0`. On the public benchmarks, with the same input for both, FIDDLE's top-1 is 92.4% on CASMI 2016 (91.4% with the v2.3.0 models), 87.5% on CASMI 2017 (90.0%, one spectrum of 40) and 89.6% on EMBL-MCF 2.0 (89.0%); the documentation's benchmark page gives the results with BUDDY and SIRIUS and on unseen compounds.
 
 This release includes the changes prepared for 2.3.1, which was not released.
 
@@ -141,7 +170,7 @@ This release includes the changes prepared for 2.3.1, which was not released.
 - Training: fused Siamese forward pass, optional mixed precision (`--amp`), cuDNN autotuning, ReduceLROnPlateau instead of StepLR, and early stopping on validation MAE with a minimum-epoch floor and a rolling last-epoch checkpoint.
 - Preprocessing: faster binning, O(n) pair generation, and parallel filtering/encoding.
 - Pre-trained checkpoints: from 2.2 on, each minor version downloads from its own release tag (`v2.2.0`), and the local cache is keyed by that tag (`~/.msfiddle/check_point/v2.2.0/`), so upgrading never silently reuses older weights. Run `msfiddle-download-models` after upgrading.
-- Released Q-TOF and Orbitrap models retrained from scratch with Muon on rebuilt data, with rescore models retrained on enumeration-generated candidates. Held-out top-1 (per spectrum / per compound): Q-TOF 78.8% / 82.9%, Orbitrap 63.2% / 68.7%.
+- Released Q-TOF and Orbitrap models retrained from scratch with Muon on rebuilt data, with rescore models retrained on enumeration-generated candidates.
 - Merged the [msfiddle](https://pypi.org/project/msfiddle/) PyPI package repository into this repo. The `msfiddle/` package directory is now the single source of truth for the shared core (`model_tcn.py`, `dataset.py`, `utils/`, `config/`, `demo/`); the research scripts import from it and the former top-level copies are removed. Packaging (`setup.py`), docs (readthedocs), package tests, and the PyPI publish workflow now live here. Pre-merge package release history is appended at the bottom of this file.
 - The package picks up fixes that had only landed on the research side: `fast_mass` refinement speedup, the `generate_ms` per-bin m/z fix, the Python 3.11 `random.sample` fix, and the halogen-extended refinement configs.
 - `msfiddle/utils/refine_utils.py`: refinement search internals optimised (deque frontier with O(1) membership, `f0_list` parsed once per call, hydrogen adjustment without string round-trips) — ~3.4× faster, output verified identical against the previous implementation on 400 randomised cases.

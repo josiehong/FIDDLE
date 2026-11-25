@@ -152,3 +152,36 @@ def test_non_positive_masses_are_rejected(tmp_path, kwargs, reason):
     path.write_text(_ion("s", **kwargs))
     report = validate_mgf(path)
     assert (report.loc[0, "status"], report.loc[0, "reason"]) == ("rejected", reason)
+
+
+def test_repeated_title_keeps_its_last_usable_spectrum(tmp_path):
+    # The last copy is unusable, so the earlier valid one is predicted
+    path = tmp_path / "dup.mgf"
+    path.write_text(_ion("A") + _ion("A", peaks=PEAKS[:3]))
+    report = validate_mgf(path)
+    assert list(report["status"]) == ["warning", "rejected"]
+    assert list(report["reason"]) == ["duplicate_id", "insufficient_peaks"]
+    loaded = MsFiddlePredictor(instrument_type="orbitrap")._load_mgf_spectra(path)
+    assert [s.id for s in loaded] == ["A"]
+
+
+def test_empty_title_is_missing_metadata(tmp_path):
+    path = tmp_path / "empty.mgf"
+    path.write_text(_ion("") + _ion("B"))
+    report = validate_mgf(path)
+    assert list(report["reason"]) == ["missing_metadata", ""]
+
+
+def test_cli_names_a_bad_config(mgf_path, tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        cli.main(
+            [
+                "validate",
+                "--test_data",
+                str(mgf_path),
+                "--config_path",
+                str(tmp_path / "typo.yml"),
+            ]
+        )
+    err = capsys.readouterr().err
+    assert "Could not load the config" in err and "typo.yml" in err

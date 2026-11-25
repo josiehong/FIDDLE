@@ -44,7 +44,7 @@ if __name__ == "__main__":
         nargs="+",
         required=True,
         choices=["qtof", "orbitrap"],
-        help="Dataset name",
+        help="Instrument type",
     )  # J0siee: remove later
     parser.add_argument(
         "--train_ratio", type=float, default=0.9, help="Ratio for train set"
@@ -58,8 +58,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_path",
         type=str,
-        default="./msfiddle/config/fiddle.yml",
-        help="Path to configuration",
+        required=True,
+        help="Model configuration, e.g. ./msfiddle/config/fiddle_tcn_qtof.yml",
     )
     args = parser.parse_args()
 
@@ -201,12 +201,13 @@ if __name__ == "__main__":
         )
 
     # 2. filter the spectra
-    # 3. split spectra into training and test set according to smiles
-    # Note that there is not overlapped molecules between training set and tes set.
-    # 4. generate 3d conformattions & encoding data into arrays
+    # 3. split spectra into training and test set according to smiles: test
+    #    compounds come first from those in nist23 but not nist20, topped up
+    #    from the rest; spectra titled nist23_* also go to the test set
+    # 4. encode spectra, formulas and env into arrays
     print("\n>>> Step 2: filter out spectra by conditions and unify the SMILES; \n\
 \tStep 3: split SMILES into training set and test set; \n\
-\t(Molecules that are in nist23 but not in nist20 are put in test set.) \n\
+\t(Test compounds come first from those in nist23 but not in nist20.) \n\
 \tStep 4: encode all the data into pkl format;")
     for ins in args.instrument_type:
         spectra = []

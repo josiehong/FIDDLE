@@ -30,6 +30,9 @@ nist20_qtof:
   max_atom_num: 300
   min_atom_num: 10
   ppm_tolerance: 10
+  # NIST's precursor m/z is computed from the structure: as in the paper,
+  # replace it by the theoretical m/z plus a Gaussian error (sd = ppm / 3)
+  simulate_precursor_ppm: 10
 
 nist23_qtof: 
   instrument_type: Q-TOF
@@ -47,6 +50,9 @@ nist23_qtof:
   max_atom_num: 300
   min_atom_num: 10
   ppm_tolerance: 10
+  # NIST's precursor m/z is computed from the structure: as in the paper,
+  # replace it by the theoretical m/z plus a Gaussian error (sd = ppm / 3)
+  simulate_precursor_ppm: 10
 
 mona_qtof:
   instrument_type: ['LC-ESI-QTOF', 
@@ -101,7 +107,7 @@ encoding:
   resolution: 0.2
   max_mz: 1500
   max_atom_num: 300
-  use_simulated_precursor_mz: False
+  use_simulated_precursor_mz: False # train and predict on PRECURSOR_MZ: measured, or simulated for NIST20/23 (simulate_precursor_ppm)
 
   precursor_type:
     '[M+H]+': 1

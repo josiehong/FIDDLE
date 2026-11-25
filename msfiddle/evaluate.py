@@ -77,26 +77,42 @@ def _truth_from_params(params: dict) -> Optional[tuple]:
     return None if vec is None else (vec, smiles or vec)
 
 
-def load_truth(path: str | os.PathLike[str]) -> dict[str, tuple]:
+def load_truth(
+    path: str | os.PathLike[str], kept_index: Optional[dict[str, int]] = None
+) -> dict[str, tuple]:
     """Map each MGF spectrum title to (formula vector, compound key).
 
-    A repeated title takes its last spectrum's truth, as prediction keeps that
-    spectrum.
+    ``kept_index`` maps a title to the file index of the spectrum prediction
+    kept for it (``MsFiddlePredictor._kept_index``); that spectrum gives the
+    title's truth. Without it, or for a title not in it, a repeated title
+    takes its last spectrum's truth.
     """
-    return _truth_from_records(_read_mgf(path))
+    return _truth_from_records(_read_mgf(path), kept_index)
 
 
-def _truth_from_records(records: list[dict]) -> dict[str, tuple]:
-    truth = {}
-    for params in records:
+def _kept_records(records, kept_index):
+    """(title, params) of the titled records, leaving out the copies of a
+    repeated title other than the one prediction kept."""
+    for idx, params in enumerate(records):
         title = params.get("title")
         if not title:
             continue
+        title = str(title)
+        if kept_index and title in kept_index and kept_index[title] != idx:
+            continue
+        yield title, params
+
+
+def _truth_from_records(
+    records: list[dict], kept_index: Optional[dict[str, int]] = None
+) -> dict[str, tuple]:
+    truth = {}
+    for title, params in _kept_records(records, kept_index):
         found = _truth_from_params(params)
         if found is not None:
-            truth[str(title)] = found
+            truth[title] = found
         else:
-            truth.pop(str(title), None)
+            truth.pop(title, None)
     return truth
 
 
@@ -110,19 +126,19 @@ class EvalInputs:
     n_duplicate_titles: int  # spectra whose title an earlier one already used
 
 
-def load_eval_inputs(path: str | os.PathLike[str]) -> EvalInputs:
+def load_eval_inputs(
+    path: str | os.PathLike[str], kept_index: Optional[dict[str, int]] = None
+) -> EvalInputs:
+    """Truth and spectrum metadata of a test MGF; see ``load_truth`` for
+    ``kept_index``."""
     records = _read_mgf(path)
     info = {}
-    titles = []
-    for params in records:
-        title = params.get("title")
-        if not title:
-            continue
-        titles.append(str(title))
+    titles = [str(params["title"]) for params in records if params.get("title")]
+    for title, params in _kept_records(records, kept_index):
         mz = params.get("precursor_mz", params.get("pepmass"))
         if isinstance(mz, (tuple, list)):
             mz = mz[0]
-        info[str(title)] = {
+        info[title] = {
             "precursor_mz": pd.to_numeric(mz, errors="coerce"),
             "adduct": params.get("precursor_type"),
             "collision_energy": params.get("collision_energy"),
@@ -134,7 +150,7 @@ def load_eval_inputs(path: str | os.PathLike[str]) -> EvalInputs:
         columns=["precursor_mz", "adduct", "collision_energy", "peak_count"],
     )
     return EvalInputs(
-        truth=_truth_from_records(records),
+        truth=_truth_from_records(records, kept_index),
         info=info_df,
         n_input=len(records),
         n_duplicate_titles=len(titles) - len(set(titles)),

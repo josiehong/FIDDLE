@@ -121,7 +121,7 @@ def generate_mgf_block(data, type2charge):
     mgf_block += f"SMILES={smiles}\n"
     mgf_block += f"FORMULA={formula}\n"
 
-    # Add peaks with proper formatting (remove trailing zeros)
+    # Add peaks
     for mz, intensity in zip(mz_array, intensity_array):
         mgf_block += f"{mz} {intensity}\n"
 
@@ -140,7 +140,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mgf_path",
         type=str,
-        default="./data/embl_mcf_2.0.mgf",
+        default="./data/embl.mgf",
         help="path to mgf data",
     )
     parser.add_argument(
@@ -154,7 +154,8 @@ if __name__ == "__main__":
         type=float,
         default=0.0,
         help="Replace the library's precursor m/z by the theoretical m/z plus a "
-        "Gaussian error within this tolerance in ppm (5 for Orbitrap). "
+        "Gaussian error with a standard deviation of a third of this tolerance "
+        "in ppm (5 for Orbitrap). "
         "0 (default) keeps the library value, as the paper does for EMBL-MCF 2.0.",
     )
     parser.add_argument("--seed", type=int, default=0, help="Seed of the simulation")

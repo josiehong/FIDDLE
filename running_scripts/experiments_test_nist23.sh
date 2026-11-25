@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 # NIST23 hold-out: compounds new in NIST23 are the test set. Train the TCN and
 # rescore models on the rest and evaluate, alone and with BUDDY and SIRIUS.
-# Run from the repository root with the raw data of train_release_v2.3.sh.
+# Run from the repository root with the raw data of train_release_v2.5.sh
+# (data/origin/).
 set -e
 source running_scripts/compare.sh
 
 DATA=./data/nist23_pkl
 
-# Training settings as in train_release_v2.3.sh
+# The release models' libraries, as in train_release_v2.5.sh
 for spec in "qtof agilent nist20 nist23 mona waters gnps" "orbitrap nist20 nist23 mona gnps"; do
     set -- $spec; INST=$1; shift
-    AMP=""
-    [ $INST = orbitrap ] && AMP=--amp
     CONFIG=./msfiddle/config/fiddle_tcn_$INST.yml
     TCN=./check_point/fiddle_tcn_${INST}_nist23.pt
     RESCORE=./check_point/fiddle_rescore_${INST}_nist23.pt
@@ -21,7 +20,7 @@ for spec in "qtof agilent nist20 nist23 mona waters gnps" "orbitrap nist20 nist2
 
     python -u scripts/train_tcn_gpus_cl.py \
         --train_data $DATA/${INST}_train.pkl --val_data $DATA/${INST}_val.pkl \
-        --config_path $CONFIG --checkpoint_path $TCN $AMP --device 0 1
+        --config_path $CONFIG --checkpoint_path $TCN --device 0 1
 
     python scripts/prepare_augment_rescore.py \
         --train_data $DATA/${INST}_train.pkl --val_data $DATA/${INST}_val.pkl \

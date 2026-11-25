@@ -199,6 +199,12 @@ def test_filter_simulates_the_precursor_mz_when_asked():
     # The same values on every run, and in a process pool
     again, _ = filter_spec(spectra(), config, {"[M+H]+": "+1"}, num_workers=2)
     assert [s["params"]["precursor_mz"] for s in again] == simulated
+    # Spectra sharing a title still get their own errors
+    shared = spectra()
+    for spectrum in shared:
+        spectrum["params"]["title"] = "same"
+    kept_shared, _ = filter_spec(shared, config, {"[M+H]+": "+1"})
+    assert len({s["params"]["precursor_mz"] for s in kept_shared}) == 5
     # Off by default: the library value is kept
     plain, _ = filter_spec(
         spectra(),

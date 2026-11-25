@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from msfiddle.settings import load_config
 from msfiddle.utils import parse_collision_energy, mgf_key_order
+from msfiddle.utils.pkl_utils import precursor_mz_key
 
 
 def combine_spectra(spec1_mz, spec1_intensity, spec2_mz, spec2_intensity, alpha):
@@ -43,7 +44,7 @@ def extract_ce(spectrum, encoder):
     charge = int(encoder["type2charge"][spectrum["params"]["precursor_type"]])
     ce, _ = parse_collision_energy(
         ce_str=spectrum["params"]["collision_energy"],
-        precursor_mz=float(spectrum["params"]["theoretical_precursor_mz"]),
+        precursor_mz=float(spectrum["params"][precursor_mz_key(encoder)]),
         charge=abs(charge),
     )
     if ce is None:
@@ -66,7 +67,7 @@ def group_entries(data, encoder, mz_tol=0.5):
 
 def make_chimeric_dataset(data, alpha, encoder, mz_tol=0.5, num_pairs=1000, seed=42):
     """
-    Generate chimeric spectra with matching precursor m/z (±mz_tol), same NCE and precursor type.
+    Generate chimeric spectra from partners in the same precursor m/z bin (width mz_tol / 2), with the same NCE and precursor type.
     Use formula and env from spectrum A.
     """
     chimeric_data = []
@@ -153,19 +154,20 @@ if __name__ == "__main__":
         "--num_pairs",
         type=int,
         default=1000,
-        help="Number of unique pairs to generate chimeras from",
+        help="Random draws of spectrum A; at most this many chimeras per ratio, "
+        "and pairs can repeat",
     )
     parser.add_argument(
         "--mz_tol",
         type=float,
         default=0.01,
-        help="Tolerance for precursor m/z matching",
+        help="Precursor m/z matching: partners share a bin of width mz_tol / 2",
     )
     parser.add_argument(
         "--config_path",
         type=str,
-        default="./msfiddle/config/fiddle.yml",
-        help="Path to configuration",
+        required=True,
+        help="Model configuration, e.g. ./msfiddle/config/fiddle_tcn_qtof.yml",
     )
     args = parser.parse_args()
 

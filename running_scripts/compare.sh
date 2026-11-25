@@ -18,18 +18,31 @@ compare() {
     [ -n "$MODEL_TAG" ] && models="--resume_path ./check_point/fiddle_tcn_${inst}_$MODEL_TAG.pt --rescore_resume_path ./check_point/fiddle_rescore_${inst}_$MODEL_TAG.pt"
     local predict="python -m msfiddle predict --test_data $mgf --instrument_type $inst --num_workers 8 --eval $models $*"
 
+    # Drop this benchmark's earlier results, so a step that does not run
+    # leaves no stale file for plot_benchmarks.py to pick up
+    local method suffix
+    for method in fiddle fiddle_buddy fiddle_buddy_sirius; do
+        for suffix in .csv _eval.csv _eval_details.csv _eval_groups.csv; do
+            rm -f "./result/${method}_$name$suffix"
+        done
+    done
+
     if [ -n "$FIDDLE_ONLY" ]; then
         $predict --result_path ./result/fiddle_$name.csv
         return
     fi
     python scripts/run_buddy_sirius.py --mgf "$mgf" --instrument_type "$inst" --out_dir "$ext"
+    # run_buddy_sirius.py skips a tool that is not installed
+    local tool
+    for tool in buddy sirius; do
+        if [ ! -d "$ext/$tool" ]; then
+            echo "No $tool results in $ext: install it (running_scripts/install_$tool.sh) or set FIDDLE_ONLY=1"
+            return 1
+        fi
+    done
 
     $predict --result_path ./result/fiddle_$name.csv
-    if [ -d "$ext/buddy" ]; then
-        $predict --buddy_path "$ext/buddy" --result_path ./result/fiddle_buddy_$name.csv
-    fi
-    if [ -d "$ext/buddy" ] && [ -d "$ext/sirius" ]; then
-        $predict --buddy_path "$ext/buddy" --sirius_path "$ext/sirius" \
-            --result_path ./result/fiddle_buddy_sirius_$name.csv
-    fi
+    $predict --buddy_path "$ext/buddy" --result_path ./result/fiddle_buddy_$name.csv
+    $predict --buddy_path "$ext/buddy" --sirius_path "$ext/sirius" \
+        --result_path ./result/fiddle_buddy_sirius_$name.csv
 }

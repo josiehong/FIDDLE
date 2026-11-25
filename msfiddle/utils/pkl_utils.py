@@ -34,6 +34,18 @@ def is_stepped_collision_energy(ce_str):
 _CE_NUMBER = re.compile(r"\d+(?:\.\d+)?")
 
 
+def precursor_mz_key(encoder):
+    """The spectrum field the model reads its precursor m/z from, in training
+    and in prediction alike: PRECURSOR_MZ, or SIMULATED_PRECURSOR_MZ with the
+    encoding's use_simulated_precursor_mz set. PRECURSOR_MZ is the measured
+    value; the data filter replaces it for the libraries whose value is
+    computed from the structure (simulate_precursor_ppm in their config
+    section: NIST20 and NIST23)."""
+    if encoder.get("use_simulated_precursor_mz", False):
+        return "simulated_precursor_mz"
+    return "precursor_mz"
+
+
 def mean_collision_energy(ce_str):
     """The mean of the energies in a stepped collision energy string, as a
     single-energy string parse_collision_energy reads ('20,40,60' -> '40.0',
@@ -204,12 +216,13 @@ def spec2arr_single(spectrum, encoder):
         return None
 
     charge = int(encoder["type2charge"][spectrum["params"]["precursor_type"]])
+    precursor_mz = float(spectrum["params"][precursor_mz_key(encoder)])
 
     # spec array
     good_spec, mz_array, int_array, spec_arr = generate_ms(
         x=spectrum["m/z array"],
         y=spectrum["intensity array"],
-        precursor_mz=float(spectrum["params"]["theoretical_precursor_mz"]),
+        precursor_mz=precursor_mz,
         resolution=encoder["resolution"],
         max_mz=encoder["max_mz"],
         charge=charge,
@@ -231,7 +244,7 @@ def spec2arr_single(spectrum, encoder):
     )
     ce, nce = parse_collision_energy(
         ce_str=ce_str,
-        precursor_mz=float(spectrum["params"]["theoretical_precursor_mz"]),
+        precursor_mz=precursor_mz,
         charge=abs(charge),
     )
     if ce == None and nce == None:
@@ -243,7 +256,7 @@ def spec2arr_single(spectrum, encoder):
         return None
     env_arr = np.array(
         [
-            float(spectrum["params"]["theoretical_precursor_mz"]),
+            precursor_mz,
             nce,
             encoder["precursor_type"][adjust_precursor_type],
         ]

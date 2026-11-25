@@ -1,5 +1,4 @@
 import argparse
-import multiprocessing
 from tqdm import tqdm
 import os
 
@@ -101,13 +100,10 @@ def train_step(
     device,
     batch_size,
     weight,
-    scaler=None,
     grad_accum_steps=1,
 ):
     f_criterion = lambda pred, y: formula_criterion(pred, y, weight)
     n_batches = len(loader)
-
-    use_amp = scaler is not None and scaler.is_enabled()
 
     mae = []
     mass_mae = []
@@ -154,50 +150,36 @@ def train_step(
             # members through one concatenated batch computes exactly the same
             # function as two passes, at better GPU occupancy.
             n1 = x.shape[0]
-            with torch.autocast(
-                device_type="cuda" if use_amp else "cpu", enabled=use_amp
-            ):
-                z_all, f_all, m_all, an_all, hc_all = model(
-                    torch.cat([x, x2], dim=0), torch.cat([env, env2], dim=0)
-                )
-                z1, z2 = z_all[:n1], z_all[n1:]
-                pred_f, pred_f2 = f_all[:n1], f_all[n1:]
-                pred_mass, pred_mass2 = m_all[:n1], m_all[n1:]
-                pred_atomnum, pred_atomnum2 = an_all[:n1], an_all[n1:]
-                pred_hcnum, pred_hcnum2 = hc_all[:n1], hc_all[n1:]
+            z_all, f_all, m_all, an_all, hc_all = model(
+                torch.cat([x, x2], dim=0), torch.cat([env, env2], dim=0)
+            )
+            z1, z2 = z_all[:n1], z_all[n1:]
+            pred_f, pred_f2 = f_all[:n1], f_all[n1:]
+            pred_mass, pred_mass2 = m_all[:n1], m_all[n1:]
+            pred_atomnum, pred_atomnum2 = an_all[:n1], an_all[n1:]
+            pred_hcnum, pred_hcnum2 = hc_all[:n1], hc_all[n1:]
 
-                loss = (
-                    mse_criterion(mass, pred_mass) * 0.01
-                    + mse_criterion(atomnum, pred_atomnum)
-                    + mse_criterion(hcnum, pred_hcnum) * 10
-                    + f_criterion(pred_f, y)
-                    + mse_criterion(mass2, pred_mass2) * 0.01
-                    + mse_criterion(atomnum2, pred_atomnum2)
-                    + mse_criterion(hcnum2, pred_hcnum2) * 10
-                    + f_criterion(pred_f2, y2)
-                    + cl_criterion(
-                        F.normalize(z1, dim=1), F.normalize(z2, dim=1), label
-                    )
-                )
+            loss = (
+                mse_criterion(mass, pred_mass) * 0.01
+                + mse_criterion(atomnum, pred_atomnum)
+                + mse_criterion(hcnum, pred_hcnum) * 10
+                + f_criterion(pred_f, y)
+                + mse_criterion(mass2, pred_mass2) * 0.01
+                + mse_criterion(atomnum2, pred_atomnum2)
+                + mse_criterion(hcnum2, pred_hcnum2) * 10
+                + f_criterion(pred_f2, y2)
+                + cl_criterion(F.normalize(z1, dim=1), F.normalize(z2, dim=1), label)
+            )
 
-            if use_amp:
-                scaler.scale(loss / group_size).backward()
-            else:
-                (loss / group_size).backward()
+            (loss / group_size).backward()
 
             if last_in_group:
-                if use_amp:
-                    scaler.unscale_(optimizer)  # so the clip sees true gradients
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    grad_norm = torch.nn.utils.clip_grad_norm_(
-                        model.parameters(), max_norm=1.0
-                    )
-                    # Skip a step with NaN/inf gradients, as GradScaler does
-                    if torch.isfinite(grad_norm):
-                        optimizer.step()
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    model.parameters(), max_norm=1.0
+                )
+                # Skip a step with NaN/inf gradients
+                if torch.isfinite(grad_norm):
+                    optimizer.step()
 
                 # Update the learning rate during warm-up phase (counted in
                 # optimizer steps). After warm-up phase, the learning rate
@@ -283,7 +265,10 @@ if __name__ == "__main__":
     # Training settings
     parser = argparse.ArgumentParser(description="Mass Spectra to formula (train)")
     parser.add_argument(
-        "--train_data", type=str, required=True, help="Path to data (.pkl)"
+        "--train_data",
+        type=str,
+        required=True,
+        help="Training data (.pkl), with its <name>_pairs.pkl next to it",
     )
     parser.add_argument(
         "--val_data",
@@ -327,23 +312,18 @@ if __name__ == "__main__":
         "--no_cuda", action="store_true", default=False, help="Disables CUDA training"
     )
     parser.add_argument(
-        "--amp",
-        action="store_true",
-        default=False,
-        help="Mixed-precision training (autocast fp16 + GradScaler); CUDA only. "
-        "On an H100 it was 6x slower than the default TF32 for this model",
-    )
-    parser.add_argument(
         "--batch_size",
         type=int,
         default=0,
-        help="Pairs per step, overriding the config's train.batch_size",
+        help="Pairs per loader batch (micro-batch), overriding the config's "
+        "train.batch_size",
     )
     parser.add_argument(
         "--grad_accum_steps",
         type=int,
         default=0,
-        help="Steps per optimizer step, overriding the config's train.grad_accum_steps",
+        help="Loader batches per optimizer step, overriding the config's "
+        "train.grad_accum_steps",
     )
     args = parser.parse_args()
 
@@ -366,12 +346,6 @@ if __name__ == "__main__":
         if torch.cuda.is_available() and not args.no_cuda
         else torch.device("cpu")
     )
-    use_amp = args.amp and torch.cuda.is_available() and not args.no_cuda
-    if args.amp and not use_amp:
-        print("AMP requested but CUDA unavailable — training in full precision")
-    amp_scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
-    if use_amp:
-        print("Mixed-precision training enabled (autocast fp16 + GradScaler)")
     print(f"Device(s): {args.device}")
 
     # predifined tensors:
@@ -382,11 +356,12 @@ if __name__ == "__main__":
     # 1. Data. Fork the workers so they share the in-RAM data copy-on-write:
     # Python 3.14 starts them with forkserver on Linux, which pickles the whole
     # data set to each worker at every epoch (slow, and a copy per worker).
-    # Persistent workers are started once instead of every epoch.
+    # Persistent workers are started once instead of every epoch. Only on
+    # Linux: fork is unsafe on macOS, which keeps its default (spawn).
     loader_mp = {}
     if config["train"]["num_workers"] > 0:
         loader_mp["persistent_workers"] = True
-        if "fork" in multiprocessing.get_all_start_methods():
+        if sys.platform.startswith("linux"):
             loader_mp["multiprocessing_context"] = "fork"
     train_set = MS2FDataset_CL(
         args.train_data,
@@ -403,8 +378,8 @@ if __name__ == "__main__":
         **loader_mp,
     )
     # Optimizer step = grad_accum_steps loader batches, so the effective
-    # batch is batch_size * grad_accum_steps (e.g. 256 x 2 on 11GB GPUs
-    # reproduces batch 512).
+    # batch is batch_size * grad_accum_steps (e.g. 256 x 2 = 512, split over
+    # two 11GB GPUs; 512 x 1 on one 80GB GPU).
     grad_accum_steps = config["train"].get("grad_accum_steps", 1)
     effective_batch_size = config["train"]["batch_size"] * grad_accum_steps
     optimizer_steps_per_epoch = -(-len(train_loader) // grad_accum_steps)
@@ -449,7 +424,7 @@ if __name__ == "__main__":
     )
     # Early stopping keeps runs short (tens of epochs), so StepLR(step_size=100) never
     # fired and the LR stayed pinned at its initial value. Use ReduceLROnPlateau so the
-    # LR halves when validation mass error plateaus, before early stop triggers.
+    # LR halves when the validation formula MAE (atom counts) plateaus, before early stop triggers.
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=config["train"]["patience"]
     )
@@ -528,7 +503,6 @@ if __name__ == "__main__":
                 device_1st,
                 batch_size=config["train"]["batch_size"],
                 weight=weight,
-                scaler=amp_scaler,
                 grad_accum_steps=grad_accum_steps,
             )
         )

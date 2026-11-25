@@ -1,6 +1,6 @@
 r"""Package trained checkpoints as release zips for msfiddle-download-models.
 
-Each training checkpoint check_point/fiddle_<model>_<tag>.pt is reduced to the
+Each training checkpoint check_point/fiddle_<model>_<instrument>_<tag>.pt is reduced to the
 weights inference needs (TCN: model_state_dict without the DataParallel
 "module." prefix; rescore: formula encoder + rescore head), plus the epoch and
 best validation metrics for provenance. Optimizer and scheduler state are
@@ -15,11 +15,11 @@ the TCN; older ones get it here. Each zip is reloaded and compared against
 its sources before the script reports success.
 
 Usage:
-  python scripts/package_release_checkpoints.py --tag 102026_muon \
-      --out_dir ./release_v2.3.0
+  python scripts/package_release_checkpoints.py --tag v2.5_muon \
+      --out_dir ./release_v2.5.0
   # one instrument at a time, e.g. on the server that trained it
-  python scripts/package_release_checkpoints.py --tag 102026_muon \
-      --out_dir ./release_v2.3.0 --instruments timstof
+  python scripts/package_release_checkpoints.py --tag v2.5_muon \
+      --out_dir ./release_v2.5.0 --instruments timstof
 """
 
 import argparse
@@ -124,8 +124,8 @@ def main():
     ap.add_argument(
         "--tag",
         default="",
-        help="suffix of the training checkpoints, e.g. 102026_muon to read "
-        "fiddle_tcn_qtof_102026_muon.pt; the released files drop it",
+        help="suffix of the training checkpoints, e.g. v2.5_muon to read "
+        "fiddle_tcn_qtof_v2.5_muon.pt; the released files drop it",
     )
     ap.add_argument("--checkpoint_dir", default="./check_point")
     ap.add_argument("--out_dir", required=True, help="where the zips are written")

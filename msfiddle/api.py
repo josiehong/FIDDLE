@@ -36,6 +36,7 @@ from .utils.pkl_utils import (
     generate_ms,
     is_stepped_collision_energy,
     parse_collision_energy,
+    precursor_mz_key,
     resolve_collision_energy,
     unify_precursor_type,
 )
@@ -91,6 +92,55 @@ class _SpectrumCheck:
     @classmethod
     def rejected(cls, index, id, reason, message, value=""):
         return cls(index, id, "rejected", reason, message, value)
+
+
+def _resolve_duplicate_titles(results, titles):
+    """Keep the last valid spectrum of each repeated TITLE, as predicted, and
+    reject its other valid copies as duplicate_id. Copies rejected for another
+    reason keep that reason."""
+    counts: dict[str, int] = {}
+    last_valid: dict[str, int] = {}
+    for idx, title in enumerate(titles):
+        counts[title] = counts.get(title, 0) + 1
+    for encoded, check in results:
+        if encoded is not None:
+            last_valid[check.id] = check.index
+    resolved = []
+    for encoded, check in results:
+        n = counts[check.id]
+        if encoded is None or n == 1:
+            resolved.append((encoded, check))
+        elif last_valid[check.id] != check.index:
+            resolved.append(
+                (
+                    None,
+                    _SpectrumCheck.rejected(
+                        check.index,
+                        check.id,
+                        "duplicate_id",
+                        f"TITLE {check.id!r} is repeated; a later spectrum "
+                        "with it is predicted",
+                    ),
+                )
+            )
+        else:
+            message = (
+                f"TITLE {check.id!r} is shared by {n} spectra; only this one "
+                "is predicted"
+            )
+            resolved.append(
+                (
+                    encoded,
+                    _SpectrumCheck(
+                        check.index,
+                        check.id,
+                        "warning",
+                        ";".join(filter(None, [check.reason, "duplicate_id"])),
+                        "; ".join(filter(None, [check.message, message])),
+                    ),
+                )
+            )
+    return resolved
 
 
 @dataclass
@@ -487,25 +537,23 @@ class MsFiddlePredictor:
             print(len(spectra), "spectra loaded from", str(path))
 
         encoder = self.config["encoding"]
-        precursor_mz_key = (
-            "simulated_precursor_mz"
-            if encoder["use_simulated_precursor_mz"]
-            else "precursor_mz"
-        )
-        required = ("title", precursor_mz_key, "precursor_type", "collision_energy")
+        mz_key = precursor_mz_key(encoder)
+        required = ("title", mz_key, "precursor_type", "collision_energy")
         stepped_mode = encoder.get("stepped_collision_energy", "drop")
         titles = [str(s.get("params", {}).get("title", "")) for s in spectra]
-        title_counts: dict[str, int] = {}
-        last_index: dict[str, int] = {}
-        for idx, title in enumerate(titles):
-            title_counts[title] = title_counts.get(title, 0) + 1
-            last_index[title] = idx
 
+        # Check every spectrum on its own first; a repeated TITLE is resolved
+        # below, from the copies that pass
         results = []
         for idx, spectrum in enumerate(spectra):
             params = spectrum.get("params", {})
             spec_id = titles[idx]
-            missing = [key for key in required if key not in params]
+            # An empty TITLE counts as missing: results are keyed by it
+            missing = [
+                key
+                for key in required
+                if key not in params or (key == "title" and not spec_id.strip())
+            ]
             if missing:
                 results.append(
                     (
@@ -516,20 +564,6 @@ class MsFiddlePredictor:
                             "missing_metadata",
                             "Missing MGF field(s): "
                             + ", ".join(key.upper() for key in missing),
-                        ),
-                    )
-                )
-                continue
-            if last_index[spec_id] != idx:
-                results.append(
-                    (
-                        None,
-                        _SpectrumCheck.rejected(
-                            idx,
-                            spec_id,
-                            "duplicate_id",
-                            f"TITLE {spec_id!r} is repeated; only its last "
-                            "spectrum is predicted",
                         ),
                     )
                 )
@@ -554,7 +588,7 @@ class MsFiddlePredictor:
                 encoded = self._encode_spectrum(
                     mz_array=spectrum.get("m/z array", []),
                     intensity_array=spectrum.get("intensity array", []),
-                    precursor_mz=params[precursor_mz_key],
+                    precursor_mz=params[mz_key],
                     adduct=params["precursor_type"],
                     collision_energy=ce,
                     spec_id=spec_id,
@@ -582,12 +616,6 @@ class MsFiddlePredictor:
                     f"Stepped collision energy {str(ce)!r} encoded at its mean "
                     f"({encoded.collision_energy})"
                 )
-            if title_counts[spec_id] > 1:
-                warning_codes.append("duplicate_id")
-                warning_messages.append(
-                    f"TITLE {spec_id!r} is shared by {title_counts[spec_id]} "
-                    "spectra; only this last one is predicted"
-                )
             check = _SpectrumCheck(
                 idx,
                 spec_id,
@@ -596,7 +624,7 @@ class MsFiddlePredictor:
                 "; ".join(warning_messages),
             )
             results.append((encoded, check))
-        return results
+        return _resolve_duplicate_titles(results, titles)
 
     def _load_mgf_spectra(
         self, test_data_path: str | os.PathLike[str]
@@ -612,6 +640,11 @@ class MsFiddlePredictor:
             key=lambda spectrum: first_index[spectrum.id],
         )
         rejected = [check for _, check in results if check.status == "rejected"]
+        # The file index of the spectrum predicted for each TITLE, so that
+        # evaluation reads the truth of the same copy (load_eval_inputs)
+        self._kept_index = {
+            check.id: check.index for spectrum, check in results if spectrum is not None
+        }
 
         stepped = [c for c in rejected if c.reason == "stepped_collision_energy"]
         if stepped:

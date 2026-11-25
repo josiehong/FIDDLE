@@ -106,9 +106,8 @@ from, into ``tools/``. Then run the same script without ``--fiddle_only``:
 
 It runs BUDDY and SIRIUS through ``scripts/run_buddy_sirius.py``, writes
 ``result/<method>_<benchmark>_eval.csv`` for the methods ``fiddle``,
-``fiddle_buddy`` and ``fiddle_buddy_sirius``, and draws the top row of the
-figure to ``result/benchmarks_all.png``. Results from another SIRIUS version
-can differ.
+``fiddle_buddy`` and ``fiddle_buddy_sirius``. Results from another SIRIUS
+version can differ.
 
 **Unseen compounds.** After the all-compounds run:
 

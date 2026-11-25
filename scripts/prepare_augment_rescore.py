@@ -13,11 +13,11 @@ Prepare rescore training and validation pairs.
 
 Usage:
     python scripts/prepare_augment_rescore.py \\
-        --train_data ./data/cl_pkl_102026/qtof_maxmin_train.pkl \\
-        --val_data ./data/cl_pkl_102026/qtof_maxmin_val.pkl \\
+        --train_data ./data/cl_pkl_v2.5/qtof_maxmin_train.pkl \\
+        --val_data ./data/cl_pkl_v2.5/qtof_maxmin_val.pkl \\
         --config_path ./msfiddle/config/fiddle_tcn_qtof.yml \\
-        --resume_path ./check_point/fiddle_tcn_qtof_102026_muon.pt \\
-        --rescore_dir ./data/rescore_102026_muon \\
+        --resume_path ./check_point/fiddle_tcn_qtof_v2.5_muon.pt \\
+        --rescore_dir ./data/rescore_v2.5_muon \\
         --pos_cap 10 --neg_per_pos 8 --tolerance 50 --device 0
 """
 
@@ -87,7 +87,7 @@ def _refine_worker(args):
 
 
 # ---------------------------------------------------------------------------
-# TCN inference helpers (from prepare_rescore.py)
+# TCN inference helpers
 # ---------------------------------------------------------------------------
 
 
@@ -256,7 +256,7 @@ def prepare_rescore_records(data_path, model, device, config, num_workers=8):
 
 
 # ---------------------------------------------------------------------------
-# Augmentation helpers (from augment_rescore.py)
+# Augmentation helpers
 # ---------------------------------------------------------------------------
 
 
@@ -394,7 +394,8 @@ def main():
         "--tolerance",
         type=float,
         default=None,
-        help="Override mass tolerance from config (ppm or Da)",
+        help="Precursor m/z tolerance for matching cross-spectrum negatives (ppm or "
+        "Da, per post_processing.ppm_mode); default: post_processing.mass_tolerance",
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(

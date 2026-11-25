@@ -139,8 +139,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_path",
         type=str,
-        default="./msfiddle/config/fiddle.yml",
-        help="Path to configuration",
+        default="",
+        help="Optional configuration whose top-level noise_std sets the noise "
+        "standard deviation (default 0.1)",
     )
 
     args = parser.parse_args()
@@ -152,12 +153,12 @@ if __name__ == "__main__":
     config = {}
     if os.path.exists(args.config_path):
         config = load_config(args.config_path)
-    else:
+    elif args.config_path:
         print(
             f"Warning: Config file {args.config_path} not found. Using default settings."
         )
 
-    # Get noise standard deviation from config or use default
+    # Noise standard deviation: 0.1 unless the configuration sets noise_std
     noise_std = config.get("noise_std", 0.1)
 
     # Load MGF data using pyteomics

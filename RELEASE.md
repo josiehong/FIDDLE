@@ -7,7 +7,7 @@ Follow these steps every time you want to publish a new `msfiddle` version to Py
 In `setup.py`, bump the version number:
 
 ```python
-version="2.3.0",  # e.g. 2.2.1 → 2.3.0
+version="2.5.0",  # e.g. 2.4.0 → 2.5.0
 ```
 
 `setup.py` is the single source of truth — `msfiddle.__version__` is derived
@@ -29,7 +29,7 @@ are the exception; both use the `v2.0.0` assets.
 Move the `[Unreleased]` items into a new versioned entry at the top of `CHANGELOG.md`:
 
 ```markdown
-## [2.3.0] - YYYY-MM-DD
+## [2.5.0] - YYYY-MM-DD
 ### Added
 - ...
 ### Changed
@@ -42,7 +42,7 @@ Move the `[Unreleased]` items into a new versioned entry at the top of `CHANGELO
 
 ```bash
 git add setup.py CHANGELOG.md
-git commit -m "Release v2.3.0"
+git commit -m "Release v2.5.0"
 git push origin main
 ```
 
@@ -50,21 +50,29 @@ git push origin main
 
 Go to this repo on GitHub → **Releases** → **Draft a new release**:
 
-1. Click **"Choose a tag"** → type `v2.3.0` → **"Create new tag: v2.3.0 on publish"**
-2. Set title to `v2.3.0`
-3. Paste the CHANGELOG entry into the description
+1. Click **"Choose a tag"** → type `v2.5.0` → **"Create new tag: v2.5.0 on publish"**
+2. Set title to `v2.5.0`
+3. Paste the release notes (below) into the description
 4. Click **Publish release**
 
-Any `v*` tag triggers the PyPI publish workflow, so only tag when you intend to release the package.
+For the description, write the release notes to `release_v2.5.0/RELEASE_NOTES.md` (next to the checkpoint zips of step 6; `release_v*/` is not committed): a summary of the CHANGELOG entry for users, with the upgrade commands and the benchmark results, ending with a `**Full Changelog**: https://github.com/josiehong/FIDDLE/compare/v2.4.0...v2.5.0` link.
+
+Any `v*` tag triggers the PyPI publish workflow, so only tag when you intend to release the package. For a minor release, attach the checkpoint zips (step 6) to the release before publishing it: the new version is on PyPI a minute later, and `msfiddle-download-models` fails until the zips are there. From the command line, `gh release create` attaches them in the same step:
+
+```bash
+gh release create v2.5.0 release_v2.5.0/fiddle_{qtof,orbitrap,timstof}.zip \
+    --target main --title "v2.5.0" --notes-file release_v2.5.0/RELEASE_NOTES.md
+```
 
 ## 5. Verify
 
 - Check the **Actions** tab in the repo to confirm the workflow succeeded
 - Check [pypi.org/project/msfiddle](https://pypi.org/project/msfiddle/) to confirm the new version is live
+- Check that Read the Docs built `latest` and `stable` from the release commit (project → **Builds**), and that [the stable docs](https://msfiddle.readthedocs.io/en/stable/) show the new version. Pushes trigger the builds through a webhook, set up once in the Read the Docs project under **Settings → Integrations** (GitHub incoming webhook); GitHub lists it under the repository's **Settings → Webhooks**, with its recent deliveries. Without it, build both versions by hand with **Build version**.
 - Test the new release locally:
 
 ```bash
-pip install msfiddle==2.3.0
+pip install msfiddle==2.5.0
 ```
 
 ## 6. Checkpoints (every minor release)
@@ -78,7 +86,7 @@ Each holds the instrument's TCN and rescore model (`fiddle_tcn_<instrument>.pt` 
 Build them from the training checkpoints with:
 
 ```bash
-python scripts/package_release_checkpoints.py --tag 102026_muon --out_dir ./release_v2.3.0
+python scripts/package_release_checkpoints.py --tag v2.5_muon --out_dir ./release_v2.5.0
 ```
 
 `--tag` is the suffix of `check_point/fiddle_<model>_<instrument>_<tag>.pt`; `--instruments` packages some of them, for example on the server that trained them. The script keeps only the weights inference needs, checks that each rescore model was trained with the TCN it is packaged with (by a hash of the TCN's weights), and checks each zip against its sources. If the model weights did not change, upload the previous release's zips again under the new tag.
@@ -86,7 +94,7 @@ python scripts/package_release_checkpoints.py --tag 102026_muon --out_dir ./rele
 Then check the download path from a clean install:
 
 ```bash
-pip install msfiddle==2.3.0
+pip install msfiddle==2.5.0
 msfiddle-download-models
 msfiddle --demo --result_path ./output_demo.csv --no_cuda
 ```
@@ -96,11 +104,10 @@ msfiddle --demo --result_path ./output_demo.csv --no_cuda
 With the new checkpoints unpacked as `check_point/fiddle_{tcn,rescore}_<instrument>_v<x.y.0>.pt`, and BUDDY and SIRIUS installed (see `docs/benchmarks.rst`):
 
 ```bash
-MODEL_TAG=v2.4.0 bash running_scripts/experiments_test_benchmark.sh
-MODEL_TAG=v2.4.0 DATA_TAG=<data tag> MANIFEST=./data/benchmark/unseen_v2.4.0.csv \
+MODEL_TAG=v2.5.0 bash running_scripts/experiments_test_benchmark.sh
+MODEL_TAG=v2.5.0 DATA_TAG=v2.5 MANIFEST=./data/benchmark/unseen_v2.5.0.csv \
     bash running_scripts/experiments_test_benchmark_unseen.sh --rebuild_manifest
 cp result/benchmarks.png docs/_static/benchmarks.png
 ```
 
 Run the unseen script where the training data are (`data/cl_pkl_<data tag>/`): `--rebuild_manifest` splits by them and writes the release's manifest of unseen compounds. Commit it (`data/benchmark/unseen_v<x.y.0>.csv`) with the figure. Without the flag, the script splits by an existing manifest. The scripts write only to `result/` and `data/`, so running them never changes the documentation.
-
