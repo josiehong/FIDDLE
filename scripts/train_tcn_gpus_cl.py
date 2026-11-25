@@ -1,5 +1,4 @@
 import argparse
-import multiprocessing
 from tqdm import tqdm
 import os
 
@@ -357,11 +356,12 @@ if __name__ == "__main__":
     # 1. Data. Fork the workers so they share the in-RAM data copy-on-write:
     # Python 3.14 starts them with forkserver on Linux, which pickles the whole
     # data set to each worker at every epoch (slow, and a copy per worker).
-    # Persistent workers are started once instead of every epoch.
+    # Persistent workers are started once instead of every epoch. Only on
+    # Linux: fork is unsafe on macOS, which keeps its default (spawn).
     loader_mp = {}
     if config["train"]["num_workers"] > 0:
         loader_mp["persistent_workers"] = True
-        if "fork" in multiprocessing.get_all_start_methods():
+        if sys.platform.startswith("linux"):
             loader_mp["multiprocessing_context"] = "fork"
     train_set = MS2FDataset_CL(
         args.train_data,

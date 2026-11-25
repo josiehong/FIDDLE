@@ -71,6 +71,11 @@ pipeline() {
         echo "$tcn was trained on the $(cat "$split_mark") split, not $split; set another DATA_TAG"
         return 1
     fi
+    # A run with no mark has an unknown split: never stamp it as this one
+    if [ ! -s "$split_mark" ] && { [ -s "$tcn" ] || [ -s "${tcn%.pt}_last.pt" ]; }; then
+        echo "$tcn has no split record ($split_mark); set another DATA_TAG"
+        return 1
+    fi
     echo "$split" > "$split_mark"
 
     # 1. Data (train_pairs.pkl is written last)
