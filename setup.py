@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="msfiddle",
-    version="2.4.0",
+    version="2.5.0",
     author="Yuhui Hong",
     author_email="josieexception@outlook.com",
     description="A package for predicting chemical formulas from tandem mass spectra",

@@ -4,9 +4,9 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.5.0] - 2026-11-25
 
-New Q-TOF, Orbitrap and timsTOF models, trained on the measured precursor m/z (simulated for NIST20 and NIST23, as in the paper) and on MaxMin splits for all three instruments (`running_scripts/train_release_v2.5.sh`). On the public benchmarks, FIDDLE's top-1 is 91.2% on CASMI 2016 (92.4% with the v2.4.0 models), 95.0% on CASMI 2017 (87.5%) and 89.0% on EMBL-MCF 2.0 (89.6%); with BUDDY and SIRIUS, 94.0%, 92.5% and 93.0%. On unseen compounds FIDDLE alone gives 77.1%, 94.4% and 80.3%. The documentation's benchmark page has the full figure.
+New Q-TOF, Orbitrap and timsTOF models, trained on the measured precursor m/z (simulated for NIST20 and NIST23, as in the paper) and on MaxMin splits for all three instruments (`running_scripts/train_release_v2.5.sh`). `msfiddle-download-models` installs them from the v2.5.0 release into `~/.msfiddle/check_point/v2.5.0`. On the public benchmarks, FIDDLE's top-1 is 91.2% on CASMI 2016 (92.4% with the v2.4.0 models), 95.0% on CASMI 2017 (87.5%) and 89.0% on EMBL-MCF 2.0 (89.6%); with BUDDY and SIRIUS, 94.0%, 92.5% and 93.0%. On unseen compounds FIDDLE alone gives 77.1%, 94.4% and 80.3%. The documentation's benchmark page has the full figure.
 
 ### Added
 
