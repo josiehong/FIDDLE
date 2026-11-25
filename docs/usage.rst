@@ -82,10 +82,10 @@ exactly the rejected spectra. The reasons are:
      - Rejected because
    * - ``missing_metadata``
      - ``TITLE``, ``PRECURSOR_MZ``, ``PRECURSOR_TYPE`` or ``COLLISION_ENERGY``
-       is missing
+       is missing, or ``TITLE`` is empty
    * - ``duplicate_id``
-     - another spectrum later in the file has the same ``TITLE``; only the
-       last one is predicted
+     - a later usable spectrum has the same ``TITLE``; only the last usable
+       one is predicted
    * - ``invalid_precursor_mz``
      - the precursor m/z is not a positive number
    * - ``unsupported_adduct``
@@ -106,8 +106,8 @@ exactly the rejected spectra. The reasons are:
        intensities are equal
 
 Usable spectra can carry warnings: ``stepped_collision_energy_averaged``
-(encoded at the mean energy, timsTOF only) and ``duplicate_id`` (the last of a
-repeated ``TITLE``). ``validate`` exits with status 1 when the file cannot be
+(encoded at the mean energy, timsTOF only) and ``duplicate_id`` (the last usable
+spectrum of a repeated ``TITLE``). ``validate`` exits with status 1 when the file cannot be
 read or no spectrum is usable. ``msfiddle.validate_mgf`` returns the report as
 a DataFrame.
 

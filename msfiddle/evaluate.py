@@ -80,8 +80,8 @@ def _truth_from_params(params: dict) -> Optional[tuple]:
 def load_truth(path: str | os.PathLike[str]) -> dict[str, tuple]:
     """Map each MGF spectrum title to (formula vector, compound key).
 
-    A repeated title takes its last spectrum's truth, as prediction keeps that
-    spectrum.
+    A repeated title takes its last spectrum's truth (prediction keeps the
+    last usable spectrum of a title, normally of the same compound).
     """
     return _truth_from_records(_read_mgf(path))
 

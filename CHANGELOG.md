@@ -24,6 +24,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Training encoded every spectrum with its theoretical precursor m/z, whatever `use_simulated_precursor_mz` said, while prediction reads `PRECURSOR_MZ`. The TCN's mass input, the precursor-peak removal and the eV-to-NCE conversion therefore saw the exact mass in training and a measured one at test time, and the rescorer learned from candidate lists centred on the exact mass. Training now reads the same field as prediction: `PRECURSOR_MZ`, which is measured, or simulated for NIST20 and NIST23; or `SIMULATED_PRECURSOR_MZ` with `use_simulated_precursor_mz: True`. The v2.4.0 models were trained before this fix, so the simulation of 2.4.0 reached only the test sets; the `.pkl` files need rebuilding and the models retraining.
+- `train_release_v2.5.sh` stamped a TCN run that had no split record with the current split and reused it; it now stops instead. The TCN's data workers are forked only on Linux, since forking is unsafe on macOS.
+- A repeated `TITLE` whose last spectrum is unusable was not predicted at all, while `validate` said its last spectrum would be. The last usable spectrum of a `TITLE` is now predicted. An empty `TITLE` is rejected as `missing_metadata`, as evaluation already skipped it.
+- The simulated NIST precursor error was seeded by title alone, so spectra sharing a title drew the same error; the seed now includes each spectrum's position in the library.
+- `msfiddle validate` blamed the MGF file for a bad `--config_path`; it now names the config. `predict --eval` exits with a one-line error, not a traceback, when the MGF's truth values cannot be read. `experiments_test_benchmark.sh` rejects unknown arguments, so a typo such as `--fiddle-only` no longer runs BUDDY and SIRIUS.
 
 ## [2.4.0] - 2026-11-21
 

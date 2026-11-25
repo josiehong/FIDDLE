@@ -13,9 +13,12 @@
 set -e
 source running_scripts/compare.sh
 
-if [ "$1" = "--fiddle_only" ]; then
-    export FIDDLE_ONLY=1
-fi
+for arg in "$@"; do
+    case $arg in
+        --fiddle_only) export FIDDLE_ONLY=1 ;;
+        *) echo "Unknown argument: $arg"; exit 1 ;;
+    esac
+done
 methods=""
 if [ -n "$FIDDLE_ONLY" ]; then
     methods="--methods fiddle"

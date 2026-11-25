@@ -221,8 +221,13 @@ def _predict(args, parser):
 def _evaluate(res_df, truth_path, args, parser):
     from .evaluate import load_eval_inputs, topk_accuracy
 
-    inputs = load_eval_inputs(truth_path)
     stem = os.path.splitext(args.result_path)[0]
+    try:
+        inputs = load_eval_inputs(truth_path)
+    except ValueError as exc:  # e.g. an unparseable truth value in the MGF
+        parser.exit(
+            status=1, message=f"Could not read the truth in {truth_path}: {exc}\n"
+        )
     try:
         result = topk_accuracy(res_df, inputs.truth)
     except ValueError as exc:
@@ -262,14 +267,19 @@ def _save_eval_details(res_df, inputs, args, stem):
 
 
 def _validate(args, parser):
-    from .api import summarize_validation, validate_mgf
+    from .api import MsFiddlePredictor, summarize_validation
 
+    # Load the config and read the MGF in separate steps, so an error names
+    # the file it came from
     try:
-        report = validate_mgf(
-            args.test_data,
-            instrument_type=args.instrument_type,
-            config_path=args.config_path,
+        predictor = MsFiddlePredictor(
+            instrument_type=args.instrument_type, config_path=args.config_path
         )
+    except Exception as exc:  # a missing or invalid config
+        config = args.config_path or f"of {args.instrument_type}"
+        parser.exit(status=1, message=f"Could not load the config {config}: {exc}\n")
+    try:
+        report = predictor.validate_mgf(args.test_data)
     except Exception as exc:  # a missing or unparseable MGF file
         parser.exit(status=1, message=f"Could not read {args.test_data}: {exc}\n")
     print(summarize_validation(report))
