@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/export_split_manifest.py` writes the timsTOF compound split of a data build (split, InChIKey, spectrum count, source libraries; no spectra), for the release. The TCN and the rescorer share one split, so the list covers both stages, and test rows from `enveda-np-examples` are the natural-product holdout. The Q-TOF and Orbitrap splits include NIST data and are not exported.
+
 ### Changed
 
 - timsTOF trains on the MaxMin split like Q-TOF and Orbitrap, instead of the scaffold split, so all three test sets are drawn the same way. MaxMin picking makes its data step slower: about 25 minutes for the 181k CASMI 2026 compounds on one fast core, growing with the square of the count. `SPLIT=scaffold` still selects the scaffold split.

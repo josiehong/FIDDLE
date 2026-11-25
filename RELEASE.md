@@ -110,3 +110,11 @@ cp result/benchmarks.png docs/_static/benchmarks.png
 
 Run the unseen script where the training data are (`data/cl_pkl_<data tag>/`): `--rebuild_manifest` splits by them and writes the release's manifest of unseen compounds. Commit it (`data/benchmark/unseen_v<x.y.0>.csv`) with the figure. Without the flag, the script splits by an existing manifest. The scripts write only to `result/` and `data/`, so running them never changes the documentation.
 
+Also export the timsTOF compound split there and attach it to the GitHub release (about 5 MB, too large for git). Only the timsTOF split is public; the Q-TOF and Orbitrap splits include NIST data:
+
+```bash
+python scripts/export_split_manifest.py --pkl_dir ./data/cl_pkl_v2.5 \
+    --out ./timstof_split_v2.5.0.csv.gz
+gh release upload v2.5.0 timstof_split_v2.5.0.csv.gz
+```
+
